@@ -1,0 +1,19 @@
+# Python 3.12
+
+# HTTP
+requests>=2.32
+
+# Data validation
+pydantic>=2.7
+
+# Testing
+pytest>=8.2
+pytest-cov>=5.0
+
+# Linting / formatting (dev)
+ruff>=0.4
+
+# Future phases (commented out until needed)
+# fastapi>=0.111
+# uvicorn>=0.29
+# streamlit>=1.35

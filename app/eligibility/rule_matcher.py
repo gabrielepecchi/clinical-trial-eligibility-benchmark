@@ -1,0 +1,905 @@
+"""Simple rule-based baseline matcher for patient-trial eligibility."""
+
+import re
+
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+def _text(value) -> str:
+    """Coerce a value to a lowercase stripped string for pattern matching."""
+    if isinstance(value, list):
+        return " ".join(str(v) for v in value).lower()
+    return str(value).lower()
+
+
+def _any_match(patterns: list[str], text: str) -> bool:
+    return any(re.search(p, text) for p in patterns)
+
+
+def _looks_like_stage_not_age(text: str) -> bool:
+    """Return True when a criterion likely describes disease stage, not age."""
+    stage_terms = [
+        "hoehn",
+        "yahr",
+        "stage",
+        "stages",
+        "hn y",
+        "h&y",
+        "h & y",
+        "updrs",
+        "disease stage",
+        "severity stage",
+    ]
+    return any(term in text for term in stage_terms)
+
+
+def _extract_age_range(criteria_list: list[str]) -> tuple[int | None, int | None]:
+    """Return (min_age, max_age) parsed from inclusion criteria, or (None, None)."""
+    min_age: int | None = None
+    max_age: int | None = None
+
+    for criterion in criteria_list:
+        c = criterion.lower()
+
+        if _looks_like_stage_not_age(c):
+            continue
+
+        m = re.search(
+            r"\b(?:age|ages|aged)\s+(\d{1,3})\s*(?:to|-|–)\s*(\d{1,3})"
+            r"(?:\s*(?:years?|yrs?|y/o|old|of age))?\b",
+            c,
+        )
+        if m:
+            low = int(m.group(1))
+            high = int(m.group(2))
+            if low >= 10 or high >= 10:
+                min_age = low
+                max_age = high
+                break
+
+        m = re.search(
+            r"\b(\d{1,3})\s*(?:to|-|–)\s*(\d{1,3})\s*(?:years?|yrs?)\s*(?:of age)?\b",
+            c,
+        )
+        if m:
+            low = int(m.group(1))
+            high = int(m.group(2))
+            if low >= 10 or high >= 10:
+                min_age = low
+                max_age = high
+                break
+
+        m = re.search(r"\b(?:age|ages|aged)\s+(\d{1,3})(?:\s+years?)?\s+or\s+older\b", c)
+        if m:
+            value = int(m.group(1))
+            if value >= 10:
+                min_age = value
+                break
+
+        m = re.search(r"\b(?:age|ages|aged)\s*[≥>=]+\s*(\d{1,3})\b", c)
+        if m:
+            value = int(m.group(1))
+            if value >= 10:
+                min_age = value
+                break
+
+        m = re.search(r"\b(?:age|ages|aged)\s+(\d{1,3})(?:\s+years?)?\s+or\s+younger\b", c)
+        if m:
+            value = int(m.group(1))
+            if value >= 10:
+                max_age = value
+                break
+
+        m = re.search(r"\b(?:age|ages|aged)\s*[≤<=]+\s*(\d{1,3})\b", c)
+        if m:
+            value = int(m.group(1))
+            if value >= 10:
+                max_age = value
+                break
+
+    return min_age, max_age
+
+
+def _score_from_features(text: str, patterns: list[str]) -> list[str]:
+    """Return the subset of patterns that match text."""
+    return [p for p in patterns if re.search(p, text)]
+
+
+# ---------------------------------------------------------------------------
+# Rule sets
+# ---------------------------------------------------------------------------
+
+_DBS_PATTERNS = [
+    r"\bdbs\b",
+    r"deep brain stimulation",
+    r"subthalamic nucleus",
+    r"stn\b",
+]
+
+_COGNITIVE_EXCLUSION_PATTERNS = [
+    r"mmse",
+    r"moca",
+    r"cognitive impairment",
+    r"dementia",
+    r"memory",
+]
+
+_UNCLEAR_MED_PATTERNS = [
+    r"dose.*unclear",
+    r"frequency.*unclear",
+    r"unclear.*dose",
+    r"unclear.*frequency",
+    r"self.reported.*medication",
+    r"no.*pharmacy records",
+    r"uncertain.*levodopa",
+    r"uncertain.*compliance",
+    r"dose and frequency unclear",
+]
+
+_PARKINSON_PATTERNS = [
+    r"parkinson",
+    r"\bpd\b",
+]
+
+_STABLE_MED_PATTERNS = [
+    r"stable.*levodopa",
+    r"stable.*medication",
+    r"stable.*regimen",
+]
+
+_MMSE_THRESHOLD_PATTERN = re.compile(r"mmse\s*[<≤]\s*(\d+)", re.IGNORECASE)
+_MOCA_THRESHOLD_PATTERN = re.compile(r"moca\s*[<≤]\s*(\d+)", re.IGNORECASE)
+_MMSE_VALUE_PATTERN = re.compile(r"mmse\s*(?:score)?\s*(\d+)", re.IGNORECASE)
+_MOCA_VALUE_PATTERN = re.compile(r"moca\s*(?:score)?\s*(\d+)", re.IGNORECASE)
+
+_HY_RANGE_PATTERN = re.compile(
+    r"hoehn\s+and\s+yahr\s+stage\s+(\d+)\s*(?:to|-|–)\s*(\d+)", re.IGNORECASE
+)
+_HY_VALUE_PATTERN = re.compile(r"hoehn\s+and\s+yahr\s+stage\s+(\d+)", re.IGNORECASE)
+
+# New pattern sets for extended unclear logic
+
+_TRIAL_MED_SPECIFIC_PATTERNS = [
+    r"levodopa",
+    r"drug.*exposure",
+    r"medication.*regimen",
+    r"stable.*med",
+    r"rotigotine",
+    r"botulinum.*toxin",
+    r"\bcomt\b",
+    r"comt inhibitor",
+    r"dopamine.*agonist",
+    r"amantadine",
+    r"rasagiline",
+    r"entacapone",
+    r"opicapone",
+    r"apomorphine",
+    r"drug.*naive",
+    r"medication.*free",
+    r"on.*levodopa",
+    r"prior.*medication",
+]
+
+_PATIENT_UNCLEAR_MED_PATTERNS = [
+    r"dose.*unclear",
+    r"frequency.*unclear",
+    r"unclear.*dose",
+    r"unclear.*frequency",
+    r"self.reported.*medication",
+    r"no.*pharmacy records",
+    r"uncertain.*levodopa",
+    r"uncertain.*compliance",
+    r"dose and frequency unclear",
+    r"medication.*unclear",
+    r"unclear.*medication",
+    r"unknown.*medication",
+    r"medication.*unknown",
+    r"missing.*medication",
+    r"medication.*not.*recorded",
+    r"no.*medication.*record",
+    r"medication.*details.*unavailable",
+    r"incomplete.*medication",
+]
+
+_TRIAL_STAGE_SEVERITY_PATTERNS = [
+    r"hoehn\s+and\s+yahr",
+    r"\bh&y\b",
+    r"\bhy\b\s*stage",
+    r"\bupdrs\b",
+    r"disease stage",
+    r"disease.*severity",
+    r"severity.*stage",
+    r"freezing of gait",
+    r"\bfog\b",
+    r"\bfog\s",
+    r"advanced\s+pd",
+    r"advanced\s+parkinson",
+    r"early\s+pd",
+    r"early\s+parkinson",
+    r"motor fluctuation",
+    r"wearing.off",
+    r"\blcig\b",
+    r"intestinal gel",
+    r"dbs candidacy",
+    r"deep brain stimulation candidacy",
+    r"disease duration",
+]
+
+_PATIENT_UNCLEAR_STAGE_PATTERNS = [
+    r"disease_stage.*unclear",
+    r"unclear.*disease_stage",
+    r"disease stage.*unclear",
+    r"unclear.*disease stage",
+    r"stage.*unclear",
+    r"unclear.*stage",
+    r"severity.*unclear",
+    r"unclear.*severity",
+    r"unknown.*stage",
+    r"stage.*unknown",
+    r"missing.*duration",
+    r"duration.*missing",
+    r"duration.*unknown",
+    r"unknown.*duration",
+    r"duration.*unclear",
+    r"unclear.*duration",
+    r"h&y.*unknown",
+    r"unknown.*h&y",
+    r"hy.*unclear",
+    r"unclear.*hy",
+    r"updrs.*unknown",
+    r"unknown.*updrs",
+    r"missing.*severity",
+    r"severity.*not.*recorded",
+    r"no.*h.*y.*score",
+    r"hoehn.*yahr.*unknown",
+    r"hoehn.*yahr.*unclear",
+    r"hoehn.*yahr.*not.*recorded",
+    r"hoehn.*yahr.*missing",
+]
+
+_ATYPICAL_PARKINSON_PATTERNS = [
+    r"unclear.*parkinsonism",
+    r"parkinsonism.*unclear",
+    r"suspected.*parkinsonism",
+    r"parkinsonism.*suspected",
+    r"atypical.*parkinsonism",
+    r"parkinsonism.*atypical",
+    r"secondary.*parkinsonism",
+    r"parkinsonism.*secondary",
+    r"multiple system atrophy",
+    r"\bmsa\b",
+    r"poor.*levodopa.*response",
+    r"levodopa.*poor.*response",
+    r"levodopa.unresponsive",
+    r"vascular.*parkinsonism",
+    r"drug.induced.*parkinsonism",
+    r"parkinson.*plus",
+    r"progressive supranuclear",
+    r"\bpsp\b",
+    r"corticobasal",
+    r"\bcbd\b",
+    r"dementia with lewy",
+    r"\bdlb\b",
+]
+
+_IDIOPATHIC_PD_REQUIRED_PATTERNS = [
+    r"idiopathic.*parkinson",
+    r"parkinson.*idiopathic",
+    r"confirmed.*parkinson",
+    r"parkinson.*confirmed",
+    r"diagnosis.*parkinson.*disease",
+    r"established.*parkinson",
+    r"uk.*brain.*bank",
+    r"brain.*bank.*criteria",
+    r"lewy.*body.*confirmed",
+]
+
+_ACTIVE_CANCER_PATTERNS = [
+    r"active.*cancer",
+    r"cancer.*active",
+    r"active.*oncology",
+    r"current.*chemotherapy",
+    r"chemotherapy.*current",
+    r"ongoing.*chemotherapy",
+    r"current.*radiotherapy",
+    r"active.*malignancy",
+    r"malignancy.*active",
+    r"active.*tumor",
+    r"active.*tumour",
+    r"undergoing.*cancer.*treatment",
+    r"cancer.*treatment.*ongoing",
+]
+
+_TRIAL_SAFETY_SENSITIVE_PATTERNS = [
+    r"cardiovascular",
+    r"cardiac",
+    r"hepatic",
+    r"renal",
+    r"kidney",
+    r"liver",
+    r"blood pressure",
+    r"adverse.*event",
+    r"safety",
+    r"tolerability",
+    r"comorbidities",
+    r"serious.*illness",
+    r"life.threatening",
+    r"malignancy",
+    r"immunosuppress",
+    r"contraindication",
+]
+
+_RECENT_TRIAL_PATTERNS = [
+    r"recent.*interventional.*trial",
+    r"recent.*clinical.*trial",
+    r"prior.*clinical.*trial",
+    r"interventional.*study.*participation",
+    r"enrolled.*in.*trial",
+    r"enrolled.*in.*study",
+    r"participated.*in.*trial",
+    r"participated.*in.*study",
+    r"recent.*study.*participation",
+    r"concurrent.*trial",
+    r"concurrent.*study",
+    r"investigational.*drug.*recent",
+    r"recent.*investigational",
+    r"currently.*enrolled",
+]
+
+_TRIAL_WASHOUT_PATTERNS = [
+    r"washout",
+    r"prior.*trial",
+    r"concurrent.*trial",
+    r"interventional.*study",
+    r"investigational.*drug",
+    r"study.*participation",
+    r"enrolled.*in.*another",
+    r"prior.*participation",
+]
+
+_PATIENT_COMPLEX_COMORBIDITY_PATTERNS = [
+    r"\bfrail",
+    r"frailty",
+    r"recurrent.*falls",
+    r"frequent.*falls",
+    r"fall.*risk",
+    r"orthostatic.*hypotension",
+    r"postural.*hypotension",
+    r"autonomic.*dysfunction",
+    r"autonomic.*failure",
+    r"\bpacemaker\b",
+    r"\bimplanted.*device\b",
+    r"\bdevice.*implant\b",
+    r"cardiac.*device",
+    r"deep brain stimulation",
+    r"\bdbs\b",
+    r"cognitive.*impairment",
+    r"mild.*cognitive",
+    r"\bmci\b",
+    r"depression",
+    r"\bdepressed\b",
+    r"rem.*sleep.*behavior",
+    r"\brbd\b",
+    r"rem.*behavior.*disorder",
+]
+
+_TRIAL_COMPLEX_FOCUS_PATTERNS = [
+    r"device.*trial",
+    r"stimulation.*trial",
+    r"stimulation.*study",
+    r"\btms\b",
+    r"\brtms\b",
+    r"\btdcs\b",
+    r"\bdbs\b",
+    r"implant.*study",
+    r"mri.*study",
+    r"mri.*compatible",
+    r"imaging.*study",
+    r"neuroimaging",
+    r"rehabilitation",
+    r"physiotherapy",
+    r"physical.*therapy",
+    r"exercise.*trial",
+    r"exercise.*study",
+    r"gait.*study",
+    r"gait.*trial",
+    r"freezing.*gait",
+    r"balance.*study",
+    r"fall.*prevention",
+    r"fall.*risk",
+    r"neuropsychiatric",
+    r"cognitive.*trial",
+    r"cognitive.*study",
+    r"cognitive.*assessment",
+    r"protocol.*compliance",
+    r"compliance.*protocol",
+    r"adherence",
+    r"neuropsychological",
+]
+
+
+# ---------------------------------------------------------------------------
+# Rule checks
+# ---------------------------------------------------------------------------
+
+def _check_age(patient: dict, trial: dict) -> tuple[str | None, str | None, str | None]:
+    """Return (status, matched_fact, blocking_criterion)."""
+    patient_age = patient.get("age")
+    inclusion = trial.get("inclusion_criteria", [])
+    min_age, max_age = _extract_age_range(inclusion)
+
+    if min_age is None and max_age is None:
+        return None, None, None
+
+    if patient_age is None:
+        return "unclear", None, "age criterion present but patient age unknown"
+
+    age_range_str = (
+        f"age {min_age}-{max_age}" if min_age is not None and max_age is not None
+        else f"age >= {min_age}" if min_age is not None
+        else f"age <= {max_age}"
+    )
+
+    too_young = min_age is not None and patient_age < min_age
+    too_old = max_age is not None and patient_age > max_age
+
+    if too_young or too_old:
+        return (
+            "not_eligible",
+            f"patient age {patient_age}",
+            f"trial requires {age_range_str}",
+        )
+
+    return "ok", f"patient age {patient_age} within {age_range_str}", None
+
+
+def _check_dbs(patient: dict, trial: dict) -> tuple[str | None, str | None]:
+    """Return (blocking_criterion, matched_fact) if DBS is a problem, else (None, None)."""
+    exclusion_text = _text(trial.get("exclusion_criteria", []))
+    has_dbs_exclusion = _any_match(_DBS_PATTERNS, exclusion_text)
+    if not has_dbs_exclusion:
+        return None, None
+
+    patient_text = _text(
+        patient.get("key_features", [])
+        + patient.get("medications", [])
+        + patient.get("exclusions", [])
+    )
+    patient_has_dbs = _any_match(_DBS_PATTERNS, patient_text)
+    if patient_has_dbs:
+        return "deep brain stimulation (DBS) implant is an exclusion criterion", "DBS implant present"
+
+    return None, None
+
+
+def _check_cognitive(patient: dict, trial: dict) -> tuple[str | None, str | None]:
+    """Return (blocking_criterion, matched_fact) if cognitive score disqualifies patient."""
+    exclusion_list = trial.get("exclusion_criteria", [])
+    patient_features = _text(patient.get("key_features", []))
+
+    for criterion in exclusion_list:
+        m = _MMSE_THRESHOLD_PATTERN.search(criterion)
+        if m:
+            threshold = int(m.group(1))
+            vm = _MMSE_VALUE_PATTERN.search(patient_features)
+            if vm:
+                patient_score = int(vm.group(1))
+                if patient_score < threshold:
+                    return (
+                        f"cognitive exclusion: MMSE < {threshold}",
+                        f"patient MMSE score {patient_score}",
+                    )
+            else:
+                cog_text = _text(patient.get("exclusions", []) + [patient.get("diagnosis", "")])
+                if _any_match(_COGNITIVE_EXCLUSION_PATTERNS, cog_text):
+                    return (
+                        f"cognitive exclusion: MMSE < {threshold}",
+                        "cognitive impairment noted but MMSE score not available",
+                    )
+
+        m = _MOCA_THRESHOLD_PATTERN.search(criterion)
+        if m:
+            threshold = int(m.group(1))
+            vm = _MOCA_VALUE_PATTERN.search(patient_features)
+            if vm:
+                patient_score = int(vm.group(1))
+                if patient_score < threshold:
+                    return (
+                        f"cognitive exclusion: MoCA < {threshold}",
+                        f"patient MoCA score {patient_score}",
+                    )
+
+    return None, None
+
+
+def _check_hy_stage(patient: dict, trial: dict) -> tuple[str | None, str | None]:
+    """Return (blocking_criterion, matched_fact) if H&Y stage is out of range."""
+    inclusion_list = trial.get("inclusion_criteria", [])
+    patient_text = _text(patient.get("key_features", []))
+
+    pvm = _HY_VALUE_PATTERN.search(patient_text)
+    patient_stage = int(pvm.group(1)) if pvm else None
+
+    for criterion in inclusion_list:
+        m = _HY_RANGE_PATTERN.search(criterion)
+        if m:
+            hy_min = int(m.group(1))
+            hy_max = int(m.group(2))
+            if patient_stage is None:
+                return None, None
+            if not (hy_min <= patient_stage <= hy_max):
+                return (
+                    f"Hoehn and Yahr stage {hy_min} to {hy_max} required",
+                    f"patient Hoehn and Yahr stage {patient_stage}",
+                )
+
+    return None, None
+
+
+def _check_parkinson_diagnosis(patient: dict, trial: dict) -> tuple[str | None, str | None]:
+    """Return (blocking_criterion, None) if Parkinson diagnosis is required but missing."""
+    inclusion_text = _text(trial.get("inclusion_criteria", []))
+    if not _any_match(_PARKINSON_PATTERNS, inclusion_text):
+        return None, None
+
+    patient_diagnosis_text = _text(patient.get("diagnosis", []))
+    if _any_match(_PARKINSON_PATTERNS, patient_diagnosis_text):
+        return None, None
+
+    return "Parkinson disease diagnosis required", None
+
+
+def _check_medication_stability(patient: dict, trial: dict) -> tuple[str | None, str | None]:
+    """Return (uncertain_criterion, matched_fact) if medication stability is unclear."""
+    inclusion_text = _text(trial.get("inclusion_criteria", []))
+    if not _any_match(_STABLE_MED_PATTERNS, inclusion_text):
+        return None, None
+
+    patient_med_text = _text(patient.get("medications", []) + patient.get("key_features", []))
+    if _any_match(_UNCLEAR_MED_PATTERNS, patient_med_text):
+        return (
+            "stable medication regimen required but cannot be confirmed",
+            "medication dose, frequency, or compliance unclear",
+        )
+
+    return None, None
+
+
+# ---------------------------------------------------------------------------
+# Extended unclear checks
+# ---------------------------------------------------------------------------
+
+def _check_medication_details_unclear(
+    patient: dict, trial: dict
+) -> tuple[str | None, str | None]:
+    """Return uncertain criterion if trial requires specific drug details but patient data is unclear."""
+    inclusion_text = _text(trial.get("inclusion_criteria", []))
+    exclusion_text = _text(trial.get("exclusion_criteria", []))
+    trial_text = inclusion_text + " " + exclusion_text
+
+    if not _any_match(_TRIAL_MED_SPECIFIC_PATTERNS, trial_text):
+        return None, None
+
+    patient_med_text = _text(
+        patient.get("medications", [])
+        + patient.get("key_features", [])
+        + [patient.get("summary", "")]
+    )
+
+    if _any_match(_PATIENT_UNCLEAR_MED_PATTERNS, patient_med_text):
+        return (
+            "trial requires specific medication details but patient medication data is unclear or missing",
+            "medication details unclear or missing",
+        )
+
+    return None, None
+
+
+def _check_disease_stage_unclear(
+    patient: dict, trial: dict
+) -> tuple[str | None, str | None]:
+    """Return uncertain criterion if trial requires stage/severity info but patient data is unclear."""
+    inclusion_text = _text(trial.get("inclusion_criteria", []))
+    exclusion_text = _text(trial.get("exclusion_criteria", []))
+    trial_text = inclusion_text + " " + exclusion_text
+
+    if not _any_match(_TRIAL_STAGE_SEVERITY_PATTERNS, trial_text):
+        return None, None
+
+    patient_all_text = _text(
+        patient.get("key_features", [])
+        + [patient.get("summary", "")]
+        + [str(patient.get("disease_stage", ""))]
+        + [str(patient.get("disease_duration", ""))]
+    )
+
+    if _any_match(_PATIENT_UNCLEAR_STAGE_PATTERNS, patient_all_text):
+        return (
+            "trial requires disease stage or severity information but patient data is unclear or missing",
+            "disease stage, severity, or duration unclear or missing",
+        )
+
+    # Also check if disease_stage field is explicitly "unclear"
+    disease_stage = str(patient.get("disease_stage", "")).lower()
+    if disease_stage in ("unclear", "unknown", "missing", "not recorded", ""):
+        # Only flag if stage/severity info is genuinely relevant to the trial
+        return (
+            "trial requires disease stage or severity information but patient data is unclear or missing",
+            "disease stage unclear or not recorded",
+        )
+
+    return None, None
+
+
+def _check_atypical_parkinsonism(
+    patient: dict, trial: dict
+) -> tuple[str | None, str | None, str | None]:
+    """Return (status, uncertain_criterion, blocking_criterion) for atypical/unclear parkinsonism.
+
+    status: 'not_eligible' | 'unclear' | None
+    """
+    patient_diagnosis_text = _text(patient.get("diagnosis", []))
+
+    if not _any_match(_ATYPICAL_PARKINSON_PATTERNS, patient_diagnosis_text):
+        return None, None, None
+
+    inclusion_text = _text(trial.get("inclusion_criteria", []))
+
+    if _any_match(_IDIOPATHIC_PD_REQUIRED_PATTERNS, inclusion_text):
+        return (
+            "not_eligible",
+            None,
+            "trial requires idiopathic Parkinson disease; patient has atypical or unclear parkinsonism",
+        )
+
+    if _any_match(_PARKINSON_PATTERNS, inclusion_text):
+        return (
+            "unclear",
+            "patient has atypical or unclear parkinsonism; trial may require confirmed idiopathic Parkinson disease",
+            None,
+        )
+
+    return None, None, None
+
+
+def _check_active_cancer(
+    patient: dict, trial: dict
+) -> tuple[str | None, str | None]:
+    """Return uncertain criterion if patient has active cancer treatment and trial is non-oncology."""
+    patient_all_text = _text(
+        patient.get("key_features", [])
+        + patient.get("medications", [])
+        + patient.get("exclusions", [])
+        + [patient.get("summary", "")]
+        + [patient.get("diagnosis", "")]
+    )
+
+    if not _any_match(_ACTIVE_CANCER_PATTERNS, patient_all_text):
+        return None, None
+
+    # Check if trial itself is oncology-focused (then cancer is expected and not a red flag)
+    inclusion_text = _text(trial.get("inclusion_criteria", []))
+    exclusion_text = _text(trial.get("exclusion_criteria", []))
+    trial_text = inclusion_text + " " + exclusion_text
+
+    oncology_patterns = [r"oncology", r"cancer.*trial", r"tumor.*trial", r"chemotherapy.*eligible"]
+    if _any_match(oncology_patterns, trial_text):
+        return None, None
+
+    # Check if cancer is explicitly excluded (then existing blocking rule handles it)
+    cancer_exclusion_patterns = [r"no.*active.*cancer", r"cancer.*exclusion", r"malignancy.*exclusion"]
+    if _any_match(cancer_exclusion_patterns, exclusion_text):
+        return None, None
+
+    # If safety-sensitive criteria are present, flag as unclear
+    if _any_match(_TRIAL_SAFETY_SENSITIVE_PATTERNS, trial_text):
+        return (
+            "patient has active cancer treatment; eligibility for non-oncology trial with safety-sensitive criteria is unclear",
+            "active cancer treatment noted",
+        )
+
+    return None, None
+
+
+def _check_recent_trial_participation(
+    patient: dict, trial: dict
+) -> tuple[str | None, str | None]:
+    """Return uncertain criterion if patient has recent trial participation and trial has washout/prior trial criteria."""
+    trial_text = _text(
+        trial.get("inclusion_criteria", []) + trial.get("exclusion_criteria", [])
+    )
+
+    if not _any_match(_TRIAL_WASHOUT_PATTERNS, trial_text):
+        return None, None
+
+    patient_all_text = _text(
+        patient.get("key_features", [])
+        + patient.get("exclusions", [])
+        + [patient.get("summary", "")]
+    )
+
+    if _any_match(_RECENT_TRIAL_PATTERNS, patient_all_text):
+        return (
+            "trial has washout or prior study requirements; patient has recent or concurrent trial participation",
+            "recent or concurrent trial participation noted",
+        )
+
+    return None, None
+
+
+def _check_comorbidity_protocol_risk(
+    patient: dict, trial: dict
+) -> tuple[str | None, str | None]:
+    """Return uncertain criterion if patient has complex comorbidities relevant to a protocol-sensitive trial."""
+    patient_all_text = _text(
+        patient.get("key_features", [])
+        + patient.get("medications", [])
+        + patient.get("exclusions", [])
+        + [patient.get("summary", "")]
+        + [patient.get("diagnosis", "")]
+    )
+
+    if not _any_match(_PATIENT_COMPLEX_COMORBIDITY_PATTERNS, patient_all_text):
+        return None, None
+
+    trial_text = _text(
+        trial.get("inclusion_criteria", []) + trial.get("exclusion_criteria", [])
+    )
+
+    if not _any_match(_TRIAL_COMPLEX_FOCUS_PATTERNS, trial_text):
+        return None, None
+
+    return (
+        "patient has comorbidity or condition that may affect protocol compliance or safety in this trial type",
+        "complex comorbidity noted in context of device/stimulation/imaging/rehabilitation/cognitive/gait-focused trial",
+    )
+
+
+# ---------------------------------------------------------------------------
+# Main matcher
+# ---------------------------------------------------------------------------
+
+def match_patient_to_trial(patient: dict, trial: dict) -> dict:
+    """Match a patient dict to a trial dict using simple deterministic rules.
+
+    Args:
+        patient: A patient profile dictionary.
+        trial:   A trial dictionary.
+
+    Returns:
+        A dictionary with keys:
+            prediction         – 'eligible' | 'not_eligible' | 'unclear'
+            confidence         – numeric score between 0.0 and 1.0
+            matched_facts      – list of patient facts that satisfy inclusion criteria
+            blocking_criteria  – list of criteria that disqualify the patient
+            uncertain_criteria – list of criteria that could not be assessed
+            explanation        – human-readable summary string
+    """
+    matched_facts: list[str] = []
+    blocking_criteria: list[str] = []
+    uncertain_criteria: list[str] = []
+
+    # --- Age ---
+    age_status, age_fact, age_block = _check_age(patient, trial)
+    if age_status == "not_eligible":
+        blocking_criteria.append(age_block)
+    elif age_status == "unclear":
+        uncertain_criteria.append(age_block)
+    elif age_status == "ok" and age_fact:
+        matched_facts.append(age_fact)
+
+    # --- DBS ---
+    dbs_block, dbs_fact = _check_dbs(patient, trial)
+    if dbs_block:
+        blocking_criteria.append(dbs_block)
+        matched_facts.append(dbs_fact)
+
+    # --- Cognitive / MMSE / MoCA ---
+    cog_block, cog_fact = _check_cognitive(patient, trial)
+    if cog_block:
+        blocking_criteria.append(cog_block)
+        if cog_fact:
+            matched_facts.append(cog_fact)
+
+    # --- Hoehn and Yahr stage ---
+    hy_block, hy_fact = _check_hy_stage(patient, trial)
+    if hy_block:
+        blocking_criteria.append(hy_block)
+        if hy_fact:
+            matched_facts.append(hy_fact)
+
+    # --- Atypical parkinsonism (before general PD check) ---
+    atyp_status, atyp_uncertain, atyp_block = _check_atypical_parkinsonism(patient, trial)
+    if atyp_status == "not_eligible" and atyp_block:
+        blocking_criteria.append(atyp_block)
+    elif atyp_status == "unclear" and atyp_uncertain:
+        uncertain_criteria.append(atyp_uncertain)
+    else:
+        # --- Parkinson diagnosis (standard check, skipped if atypical already flagged) ---
+        pd_block, _ = _check_parkinson_diagnosis(patient, trial)
+        if pd_block:
+            blocking_criteria.append(pd_block)
+        else:
+            patient_diag_text = _text(patient.get("diagnosis", []))
+            if _any_match(_PARKINSON_PATTERNS, patient_diag_text):
+                matched_facts.append("Parkinson disease diagnosis confirmed")
+
+    # --- Medication stability ---
+    med_uncertain, med_fact = _check_medication_stability(patient, trial)
+    if med_uncertain:
+        uncertain_criteria.append(med_uncertain)
+        if med_fact:
+            matched_facts.append(med_fact)
+
+    # --- Extended: medication details unclear ---
+    med_detail_uncertain, med_detail_fact = _check_medication_details_unclear(patient, trial)
+    if med_detail_uncertain and med_detail_uncertain not in uncertain_criteria:
+        uncertain_criteria.append(med_detail_uncertain)
+        if med_detail_fact:
+            matched_facts.append(med_detail_fact)
+
+    # --- Extended: disease stage/severity unclear ---
+    stage_uncertain, stage_fact = _check_disease_stage_unclear(patient, trial)
+    if stage_uncertain:
+        uncertain_criteria.append(stage_uncertain)
+        if stage_fact:
+            matched_facts.append(stage_fact)
+
+    # --- Extended: active cancer in non-oncology trial ---
+    cancer_uncertain, cancer_fact = _check_active_cancer(patient, trial)
+    if cancer_uncertain:
+        uncertain_criteria.append(cancer_uncertain)
+        if cancer_fact:
+            matched_facts.append(cancer_fact)
+
+    # --- Extended: recent trial participation with washout requirements ---
+    trial_part_uncertain, trial_part_fact = _check_recent_trial_participation(patient, trial)
+    if trial_part_uncertain:
+        uncertain_criteria.append(trial_part_uncertain)
+        if trial_part_fact:
+            matched_facts.append(trial_part_fact)
+
+    # --- Extended: comorbidity risk in protocol-sensitive trial ---
+    comorbid_uncertain, comorbid_fact = _check_comorbidity_protocol_risk(patient, trial)
+    if comorbid_uncertain:
+        uncertain_criteria.append(comorbid_uncertain)
+        if comorbid_fact:
+            matched_facts.append(comorbid_fact)
+
+    # --- Determine prediction ---
+    if blocking_criteria:
+        prediction = "not_eligible"
+        confidence = 0.90
+        explanation = (
+            "Patient does not meet eligibility requirements. "
+            "Blocking criteria: " + "; ".join(blocking_criteria) + "."
+        )
+    elif uncertain_criteria:
+        prediction = "unclear"
+        confidence = 0.40
+        explanation = (
+            "Eligibility cannot be determined due to missing or unverifiable information. "
+            "Uncertain criteria: " + "; ".join(uncertain_criteria) + "."
+        )
+    else:
+        prediction = "eligible"
+        confidence = 0.75 if matched_facts else 0.60
+        explanation = (
+            "No blocking or uncertain criteria identified. "
+            + (
+                "Matched facts: " + "; ".join(matched_facts) + "."
+                if matched_facts
+                else "No specific matched facts recorded."
+            )
+        )
+
+    return {
+        "prediction": prediction,
+        "confidence": confidence,
+        "matched_facts": matched_facts,
+        "blocking_criteria": blocking_criteria,
+        "uncertain_criteria": uncertain_criteria,
+        "explanation": explanation,
+    }
