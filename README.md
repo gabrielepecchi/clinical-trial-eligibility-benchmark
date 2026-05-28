@@ -2,6 +2,45 @@
 
 A local benchmark for evaluating patient-to-trial eligibility matching using synthetic patients and public Parkinson disease clinical trial data from ClinicalTrials.gov.
 
+---
+
+## Project Overview
+
+This project builds and evaluates a full AI reasoning pipeline for clinical trial eligibility matching. It fetches real eligibility criteria from the public ClinicalTrials.gov API, generates synthetic patient profiles locally, and runs a structured reasoning pipeline to classify each patient as **Eligible**, **Ineligible**, or **Uncertain** against trial criteria. Results are evaluated with accuracy and macro F1, and failures are analyzed against a structured error taxonomy.
+
+All execution is local. All patients are fully synthetic. Trial data is public. Labels are LLM-reviewed draft benchmark labels — not clinical gold truth.
+
+## What It Demonstrates
+
+- **Benchmark design** — end-to-end pipeline from raw public data to scored evaluation results, with reproducible local execution
+- **AI evaluation** — structured measurement of model reasoning quality using accuracy, macro F1, and per-class scores across 150 labeled pairs
+- **Eligibility reasoning** — multi-criterion classification with explicit handling of inclusion/exclusion logic and the Uncertain label
+- **Error analysis** — taxonomy-driven investigation of failure modes including negation errors, threshold misreads, temporal gaps, and hallucinated criteria
+- **Label quality control** — consistent labeling rules, reviewer guidance, and principled Uncertain assignment for ambiguous or data-incomplete cases
+- **Synthetic data discipline** — controlled patient generation that isolates reasoning quality from data noise, with no real patient data at any stage
+
+## Why This Matters
+
+Clinical trial eligibility criteria are written in complex natural language with nested logic, numerical thresholds, and implicit domain knowledge. This makes eligibility matching a genuinely hard structured reasoning task — and a strong testbed for evaluating where and why AI pipelines fail. This project is a diagnostic tool for understanding model behavior, not a leaderboard entry.
+
+---
+
+## Benchmark Documentation
+
+| File | Purpose |
+|---|---|
+| [`BENCHMARK_CARD.md`](BENCHMARK_CARD.md) | Task definition, dataset, metrics, known failure modes, and current results |
+| [`ERROR_TAXONOMY.md`](ERROR_TAXONOMY.md) | Categorized breakdown of reasoning failure modes with examples |
+| [`CURATED_EXAMPLES.md`](CURATED_EXAMPLES.md) | Hand-selected easy, ambiguous, and hard cases illustrating the reasoning challenge |
+| [`BASELINES.md`](BASELINES.md) | Majority-class, keyword, and simple LLM baselines for interpreting pipeline scores |
+| [`PIPELINE_FLOW.md`](PIPELINE_FLOW.md) | Stage-by-stage walkthrough of the full benchmark pipeline |
+| [`LABELING_GUIDE.md`](LABELING_GUIDE.md) | Reviewer guide for assigning and validating draft eligibility labels |
+| [`PROJECT_SPEC.md`](PROJECT_SPEC.md) | Project scope, data sources, labels, matching logic, metrics, and limitations |
+| [`REPO_STRUCTURE.md`](REPO_STRUCTURE.md) | Detailed repository tree and file organization |
+| [`IMPLEMENTATION_PLAN.md`](IMPLEMENTATION_PLAN.md) | Completed phases, current status, test count, and future work |
+
+---
+
 ## Task
 
 Given a synthetic patient profile and the eligibility criteria text of a clinical trial, predict whether the patient is **eligible**, **not eligible**, or **unclear**.
