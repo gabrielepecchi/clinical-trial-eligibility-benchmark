@@ -23,21 +23,29 @@ All execution is local. All patients are fully synthetic. Trial data is public. 
 
 Clinical trial eligibility criteria are written in complex natural language with nested logic, numerical thresholds, and implicit domain knowledge. This makes eligibility matching a genuinely hard structured reasoning task — and a strong testbed for evaluating where and why AI pipelines fail. This project is a diagnostic tool for understanding model behavior, not a leaderboard entry.
 
+## Common Failure Modes
+
+- **Numeric threshold errors** — wrong direction, wrong unit, or off-by-one at an exact boundary value
+- **Negation / exclusion clause errors** — misreading "no history of" or "must not have" as a positive match
+- **Temporal constraint errors** — ignoring washout periods, recency requirements, or minimum diagnosis duration
+- **Underspecified comorbidity or medication history** — asserting Eligible or Ineligible when a required value is absent from the profile
+- **Multi-step criteria interaction errors** — failing when correct eligibility requires chaining two or more reasoning steps rather than a direct attribute lookup
+
 ---
 
 ## Benchmark Documentation
 
 | File | Purpose |
 |---|---|
-| [`BENCHMARK_CARD.md`](BENCHMARK_CARD.md) | Task definition, dataset, metrics, known failure modes, and current results |
-| [`ERROR_TAXONOMY.md`](ERROR_TAXONOMY.md) | Categorized breakdown of reasoning failure modes with examples |
-| [`CURATED_EXAMPLES.md`](CURATED_EXAMPLES.md) | Hand-selected easy, ambiguous, and hard cases illustrating the reasoning challenge |
-| [`BASELINES.md`](BASELINES.md) | Majority-class, keyword, and simple LLM baselines for interpreting pipeline scores |
-| [`PIPELINE_FLOW.md`](PIPELINE_FLOW.md) | Stage-by-stage walkthrough of the full benchmark pipeline |
-| [`LABELING_GUIDE.md`](LABELING_GUIDE.md) | Reviewer guide for assigning and validating draft eligibility labels |
-| [`PROJECT_SPEC.md`](PROJECT_SPEC.md) | Project scope, data sources, labels, matching logic, metrics, and limitations |
-| [`REPO_STRUCTURE.md`](REPO_STRUCTURE.md) | Detailed repository tree and file organization |
-| [`IMPLEMENTATION_PLAN.md`](IMPLEMENTATION_PLAN.md) | Completed phases, current status, test count, and future work |
+| [`BENCHMARK_CARD.md`](docs/BENCHMARK_CARD.md) | Task definition, dataset, metrics, known failure modes, and current results |
+| [`ERROR_TAXONOMY.md`](docs/ERROR_TAXONOMY.md) | Categorized breakdown of reasoning failure modes with examples |
+| [`CURATED_EXAMPLES.md`](docs/CURATED_EXAMPLES.md) | Hand-selected easy, ambiguous, and hard cases illustrating the reasoning challenge |
+| [`BASELINES.md`](docs/BASELINES.md) | Majority-class, keyword, and simple LLM baselines for interpreting pipeline scores |
+| [`PIPELINE_FLOW.md`](docs/PIPELINE_FLOW.md) | Stage-by-stage walkthrough of the full benchmark pipeline |
+| [`LABELING_GUIDE.md`](docs/LABELING_GUIDE.md) | Reviewer guide for assigning and validating draft eligibility labels |
+| [`PROJECT_SPEC.md`](docs/PROJECT_SPEC.md) | Project scope, data sources, labels, matching logic, metrics, and limitations |
+| [`REPO_STRUCTURE.md`](docs/REPO_STRUCTURE.md) | Detailed repository tree and file organization |
+| [`IMPLEMENTATION_PLAN.md`](docs/IMPLEMENTATION_PLAN.md) | Completed phases, current status, test count, and future work |
 
 ---
 
@@ -88,6 +96,12 @@ Label: `unclear` — arrhythmia type is unspecified; eligibility cannot be deter
 - Unclear F1: 0.397
 
 These results reflect the genuine difficulty of eligibility reasoning from free-text criteria. Criteria are often verbose, ambiguous, or require multi-step inference. Modest scores indicate room for improvement in clinical NLP, not a flaw in the benchmark design.
+
+## How to Read the Results
+
+- **Macro F1 of ~0.44** signals that the task is genuinely difficult across all three labels — no single label dominates and the model cannot succeed by defaulting to a majority class
+- **Unclear cases matter** — the Uncertain label exists because missing or ambiguous information should not be guessed; a model that over-commits on unclear cases is failing in a meaningful way
+- **Future improvements should focus on** parser coverage for complex free-text criteria, uncertainty handling for incomplete patient profiles, and systematic reduction of the failure modes identified in the error taxonomy
 
 ## Key takeaway
 
