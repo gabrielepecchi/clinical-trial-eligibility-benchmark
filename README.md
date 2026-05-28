@@ -2,12 +2,57 @@
 
 A local benchmark for evaluating patient-to-trial eligibility matching using synthetic patients and public Parkinson disease clinical trial data from ClinicalTrials.gov.
 
-## Purpose
+## Task
 
-- Download and parse public clinical trial eligibility criteria from ClinicalTrials.gov
-- Generate synthetic patient profiles
-- Score eligibility matching logic against known expected outcomes
-- Benchmark matching accuracy with reproducible test cases
+Given a synthetic patient profile and the eligibility criteria text of a clinical trial, predict whether the patient is **eligible**, **not eligible**, or **unclear**.
+
+This is a structured clinical reasoning task. Eligibility criteria are written in complex natural language, often with nested logic, numerical thresholds, and implicit domain knowledge. Performance on this benchmark reflects how well a model handles that reasoning — not a clinical deployment.
+
+## Data
+
+- **Trials**: Public Parkinson disease trials from ClinicalTrials.gov. Eligibility criteria are extracted as structured text.
+- **Patients**: Fully synthetic profiles generated locally. No real patient data is used.
+- **Labels**: LLM-reviewed draft labels (`labels_llm_reviewed.json`). These are a best-effort benchmark baseline, not clinical gold truth.
+
+### Label types
+
+| Label | Meaning |
+|---|---|
+| `eligible` | Patient meets all inclusion criteria and no exclusion criteria |
+| `not_eligible` | Patient fails at least one hard exclusion or inclusion criterion |
+| `unclear` | Criteria are ambiguous or patient data is insufficient to decide |
+
+### Example pairs
+
+**Example 1 — not eligible**
+Patient: 45-year-old with Parkinson disease, currently taking a MAO-B inhibitor.
+Trial criterion: "No concurrent MAO-B inhibitor use."
+Label: `not_eligible` — explicit exclusion criterion matched.
+
+**Example 2 — eligible**
+Patient: 62-year-old with idiopathic Parkinson disease, UPDRS III score 28, no deep brain stimulation history.
+Trial criterion: "Diagnosis of idiopathic PD, UPDRS III 20–40, no prior DBS."
+Label: `eligible` — all stated criteria satisfied.
+
+**Example 3 — unclear**
+Patient: 58-year-old with Parkinson disease, history of "cardiac arrhythmia" (type unspecified).
+Trial criterion: "No clinically significant cardiac disease."
+Label: `unclear` — arrhythmia type is unspecified; eligibility cannot be determined from the available data.
+
+## Current benchmark results (LLM-reviewed labels)
+
+- Evaluated pairs: 150
+- Accuracy: 0.440
+- Macro F1: 0.439
+- Eligible F1: 0.484
+- Not-eligible F1: 0.436
+- Unclear F1: 0.397
+
+These results reflect the genuine difficulty of eligibility reasoning from free-text criteria. Criteria are often verbose, ambiguous, or require multi-step inference. Modest scores indicate room for improvement in clinical NLP, not a flaw in the benchmark design.
+
+## Key takeaway
+
+This project demonstrates end-to-end local benchmark construction: ClinicalTrials.gov data download and eligibility extraction, synthetic patient generation, draft label creation with LLM review, benchmark evaluation, and structured error analysis — without any real patient data.
 
 ## Limitations
 
@@ -46,15 +91,6 @@ The full pipeline produces the following files:
 | LLM-reviewed draft labels | `data/processed/labels_llm_reviewed.json` |
 | Benchmark results | `data/processed/results_llm_reviewed.json` |
 | Error analysis | `data/processed/error_analysis_llm_reviewed.json` |
-
-## Current benchmark results (LLM-reviewed labels)
-
-- Evaluated pairs: 150
-- Accuracy: 0.440
-- Macro F1: 0.439
-- Eligible F1: 0.484
-- Not-eligible F1: 0.436
-- Unclear F1: 0.397
 
 ## Running the pipeline
 
