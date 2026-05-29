@@ -1030,6 +1030,23 @@ def match_patient_to_trial(patient: dict, trial: dict) -> dict:
     if med_uncertain or med_detail_uncertain:
         missing_information.append("medication_details")
 
+    # medication_stability_duration: trial requires duration, patient doesn't satisfy it
+    inclusion_list = trial.get("inclusion_criteria", [])
+    patient_med_text = _text(patient.get("medications", []) + patient.get("key_features", []))
+    for criterion in inclusion_list:
+        req = _required_weeks(criterion)
+        if req is None:
+            continue
+        patient_weeks = _patient_stable_weeks(patient_med_text)
+        changed_ago = _patient_changed_weeks_ago(patient_med_text)
+        satisfied = (
+            patient_weeks is not None and patient_weeks >= req
+            and (changed_ago is None or changed_ago >= req)
+        )
+        if not satisfied and "medication_stability_duration" not in missing_information:
+            missing_information.append("medication_stability_duration")
+        break
+
     if stage_uncertain:
         missing_information.append("disease_stage_or_duration")
 
@@ -1058,6 +1075,8 @@ def match_patient_to_trial(patient: dict, trial: dict) -> dict:
         "explanation": explanation,
         "missing_information": missing_information,
     }
+
+
 def match_patient_to_trial_criteria(
     patient: dict, trial: dict
 ) -> list[CriterionMatchResult]:
