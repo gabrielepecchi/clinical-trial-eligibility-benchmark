@@ -1005,6 +1005,21 @@ def match_patient_to_trial(patient: dict, trial: dict) -> dict:
                 if "cognitive_score" not in missing_information:
                     missing_information.append("cognitive_score")
 
+    # medication_stability_duration: trial requires stability duration but patient data is missing or insufficient
+    inclusion_list = trial.get("inclusion_criteria", [])
+    patient_med_text = _text(patient.get("medications", []) + patient.get("key_features", []))
+    for criterion in inclusion_list:
+        req = _required_weeks(criterion)
+        if req is None:
+            continue
+        patient_weeks = _patient_stable_weeks(patient_med_text)
+        changed_ago = _patient_changed_weeks_ago(patient_med_text)
+        if patient_weeks is not None and patient_weeks >= req:
+            break  # satisfied — do not add label
+        if "medication_stability_duration" not in missing_information:
+            missing_information.append("medication_stability_duration")
+        break
+
     return {
         "prediction": prediction,
         "confidence": confidence,

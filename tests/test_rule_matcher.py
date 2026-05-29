@@ -619,3 +619,28 @@ def test_stable_1_month_criterion_not_met_or_unknown_for_3_month_requirement():
     patient = make_patient(key_features=["medication regimen stable for 1 month"])
     results = match_patient_to_trial_criteria(patient, _trial("Stable medication regimen for at least 3 months"))
     assert results[0].decision in {CriterionDecision.not_met, CriterionDecision.unknown}
+
+
+# ---------------------------------------------------------------------------
+# missing_information — medication stability duration
+# ---------------------------------------------------------------------------
+
+def test_no_stability_duration_adds_medication_stability_duration_label():
+    patient = make_patient(key_features=[])
+    trial = _trial("Stable medication regimen for at least 4 weeks")
+    result = match_patient_to_trial(patient, trial)
+    assert "medication_stability_duration" in result["missing_information"]
+
+
+def test_stable_1_month_fails_3_month_requirement_adds_medication_stability_duration_label():
+    patient = make_patient(key_features=["medication regimen stable for 1 month"])
+    trial = _trial("Stable medication regimen for at least 3 months")
+    result = match_patient_to_trial(patient, trial)
+    assert "medication_stability_duration" in result["missing_information"]
+
+
+def test_stable_6_weeks_meets_4_week_requirement_no_medication_stability_duration_label():
+    patient = make_patient(key_features=["medication regimen stable for 6 weeks"])
+    trial = _trial("Stable medication regimen for at least 4 weeks")
+    result = match_patient_to_trial(patient, trial)
+    assert "medication_stability_duration" not in result["missing_information"]
