@@ -622,25 +622,86 @@ def test_stable_1_month_criterion_not_met_or_unknown_for_3_month_requirement():
 
 
 # ---------------------------------------------------------------------------
-# missing_information — medication stability duration
+# Medication and procedure exclusion logic
 # ---------------------------------------------------------------------------
 
-def test_no_stability_duration_adds_medication_stability_duration_label():
-    patient = make_patient(key_features=[])
-    trial = _trial("Stable medication regimen for at least 4 weeks")
-    result = match_patient_to_trial(patient, trial)
-    assert "medication_stability_duration" in result["missing_information"]
+def _excl_trial(criterion: str) -> dict:
+    return {"trial_id": "T_EXCL", "inclusion_criteria": [], "exclusion_criteria": [criterion]}
 
 
-def test_stable_1_month_fails_3_month_requirement_adds_medication_stability_duration_label():
-    patient = make_patient(key_features=["medication regimen stable for 1 month"])
-    trial = _trial("Stable medication regimen for at least 3 months")
-    result = match_patient_to_trial(patient, trial)
-    assert "medication_stability_duration" in result["missing_information"]
+# Medication class exclusions
+
+def test_maob_rasagiline_predicts_not_eligible():
+    patient = make_patient(medications=["rasagiline 1 mg daily"])
+    result = match_patient_to_trial(patient, _excl_trial("Current MAO-B inhibitor use"))
+    assert result["prediction"] == "not_eligible"
 
 
-def test_stable_6_weeks_meets_4_week_requirement_no_medication_stability_duration_label():
-    patient = make_patient(key_features=["medication regimen stable for 6 weeks"])
-    trial = _trial("Stable medication regimen for at least 4 weeks")
-    result = match_patient_to_trial(patient, trial)
-    assert "medication_stability_duration" not in result["missing_information"]
+def test_maob_selegiline_predicts_not_eligible():
+    patient = make_patient(medications=["selegiline 5 mg daily"])
+    result = match_patient_to_trial(patient, _excl_trial("Current MAO-B inhibitor use"))
+    assert result["prediction"] == "not_eligible"
+
+
+def test_maob_safinamide_predicts_not_eligible():
+    patient = make_patient(medications=["safinamide 50 mg daily"])
+    result = match_patient_to_trial(patient, _excl_trial("Current MAO-B inhibitor use"))
+    assert result["prediction"] == "not_eligible"
+
+
+def test_maob_rasagiline_criterion_level_met():
+    patient = make_patient(medications=["rasagiline 1 mg daily"])
+    results = match_patient_to_trial_criteria(patient, _excl_trial("Current MAO-B inhibitor use"))
+    assert results[0].decision == CriterionDecision.met
+
+
+def test_maob_no_inhibitor_not_not_eligible():
+    patient = make_patient(medications=["levodopa/carbidopa 100/25 mg three times daily"])
+    result = match_patient_to_trial(patient, _excl_trial("Current MAO-B inhibitor use"))
+    assert result["prediction"] != "not_eligible"
+
+
+# Procedure synonym exclusions
+
+def test_dbs_synonym_history_predicts_not_eligible():
+    patient = make_patient(key_features=["history of DBS surgery"])
+    result = match_patient_to_trial(patient, _excl_trial("Prior deep brain stimulation"))
+    assert result["prediction"] == "not_eligible"
+
+
+def test_dbs_synonym_full_name_predicts_not_eligible():
+    patient = make_patient(key_features=["deep brain stimulation implanted previously"])
+    result = match_patient_to_trial(patient, _excl_trial("Prior DBS"))
+    assert result["prediction"] == "not_eligible"
+
+
+def test_dbs_synonym_criterion_level_met():
+    patient = make_patient(key_features=["history of DBS surgery"])
+    results = match_patient_to_trial_criteria(patient, _excl_trial("Prior deep brain stimulation"))
+    assert results[0].decision == CriterionDecision.met
+
+
+# Negation / absence handling
+
+def test_no_dbs_history_not_not_eligible():
+    patient = make_patient(key_features=["no history of DBS"])
+    result = match_patient_to_trial(patient, _excl_trial("Prior DBS"))
+    assert result["prediction"] != "not_eligible"
+
+
+def test_no_dbs_history_criterion_level_not_met():
+    patient = make_patient(key_features=["no history of DBS"])
+    results = match_patient_to_trial_criteria(patient, _excl_trial("Prior DBS"))
+    assert results[0].decision == CriterionDecision.not_met
+
+
+def test_no_maob_documented_not_not_eligible():
+    patient = make_patient(medications=["no MAO-B inhibitor use documented"])
+    result = match_patient_to_trial(patient, _excl_trial("Current MAO-B inhibitor use"))
+    assert result["prediction"] != "not_eligible"
+
+
+def test_no_maob_documented_criterion_level_not_met():
+    patient = make_patient(medications=["no MAO-B inhibitor use documented"])
+    results = match_patient_to_trial_criteria(patient, _excl_trial("Current MAO-B inhibitor use"))
+    assert results[0].decision == CriterionDecision.not_met

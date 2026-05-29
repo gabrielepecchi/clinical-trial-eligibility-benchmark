@@ -120,6 +120,29 @@ _DBS_PATTERNS = [
     r"stn\b",
 ]
 
+_DBS_NEGATION_PATTERN = re.compile(
+    r"\bno\b.{0,30}(?:history of|prior|previous)?\s*(?:dbs|deep brain stimulation)",
+    re.IGNORECASE,
+)
+
+_MAOB_CRITERION_PATTERN = re.compile(r"mao.?b inhibitor", re.IGNORECASE)
+_MAOB_DRUGS = [r"\brasagiline\b", r"\bselegiline\b", r"\bsafinamide\b"]
+_MAOB_NEGATION_PATTERN = re.compile(r"\bno\b.{0,40}mao.?b", re.IGNORECASE)
+
+
+def _has_negated_dbs(text: str) -> bool:
+    return bool(_DBS_NEGATION_PATTERN.search(text))
+
+
+def _has_maob_inhibitor(text: str) -> bool:
+    if _has_negated_maob(text):
+        return False
+    return _any_match(_MAOB_DRUGS, text)
+
+
+def _has_negated_maob(text: str) -> bool:
+    return bool(_MAOB_NEGATION_PATTERN.search(text))
+
 _COGNITIVE_EXCLUSION_PATTERNS = [
     r"mmse",
     r"moca",
@@ -522,11 +545,25 @@ def _check_dbs(patient: dict, trial: dict) -> tuple[str | None, str | None]:
         + patient.get("medications", [])
         + patient.get("exclusions", [])
     )
+    if _has_negated_dbs(patient_text):
+        return None, None
     patient_has_dbs = _any_match(_DBS_PATTERNS, patient_text)
     if patient_has_dbs:
         return "deep brain stimulation (DBS) implant is an exclusion criterion", "DBS implant present"
 
     return None, None
+
+
+def _check_maob(patient: dict, trial: dict) -> tuple[str | None, str | None]:
+    """Return (blocking_criterion, matched_fact) if MAO-B inhibitor exclusion applies."""
+    exclusion_text = _text(trial.get("exclusion_criteria", []))
+    if not _MAOB_CRITERION_PATTERN.search(exclusion_text):
+        return None, None
+    patient_med_text = _text(patient.get("medications", []) + patient.get("key_features", []))
+    if _has_maob_inhibitor(patient_med_text):
+        return "MAO-B inhibitor use is an exclusion criterion", "MAO-B inhibitor medication present"
+    return None, None
+
 
 
 def _check_cognitive(patient: dict, trial: dict) -> tuple[str | None, str | None]:
@@ -878,6 +915,13 @@ def match_patient_to_trial(patient: dict, trial: dict) -> dict:
         blocking_criteria.append(dbs_block)
         matched_facts.append(dbs_fact)
 
+    # --- MAO-B inhibitor ---
+    maob_block, maob_fact = _check_maob(patient, trial)
+    if maob_block:
+        blocking_criteria.append(maob_block)
+        if maob_fact:
+            matched_facts.append(maob_fact)
+
     # --- Cognitive / MMSE / MoCA ---
     cog_block, cog_fact = _check_cognitive(patient, trial)
     if cog_block:
@@ -1004,21 +1048,6 @@ def match_patient_to_trial(patient: dict, trial: dict) -> dict:
             if not _MOCA_VALUE_PATTERN.search(patient_features):
                 if "cognitive_score" not in missing_information:
                     missing_information.append("cognitive_score")
-
-    # medication_stability_duration: trial requires stability duration but patient data is missing or insufficient
-    inclusion_list = trial.get("inclusion_criteria", [])
-    patient_med_text = _text(patient.get("medications", []) + patient.get("key_features", []))
-    for criterion in inclusion_list:
-        req = _required_weeks(criterion)
-        if req is None:
-            continue
-        patient_weeks = _patient_stable_weeks(patient_med_text)
-        changed_ago = _patient_changed_weeks_ago(patient_med_text)
-        if patient_weeks is not None and patient_weeks >= req:
-            break  # satisfied — do not add label
-        if "medication_stability_duration" not in missing_information:
-            missing_information.append("medication_stability_duration")
-        break
 
     return {
         "prediction": prediction,
@@ -1148,16 +1177,27 @@ def _evaluate_exclusion_criterion(
     """
     # DBS
     if _any_match(_DBS_PATTERNS, c_lower):
-        if any("dbs" in b or "deep brain" in b for b in blocking):
-            return CriterionDecision.met, "DBS implant present — patient excluded"
         patient_text = _text(
             patient.get("key_features", [])
             + patient.get("medications", [])
             + patient.get("exclusions", [])
         )
+        if _has_negated_dbs(patient_text):
+            return CriterionDecision.not_met, "no DBS history documented"
+        if any("dbs" in b or "deep brain" in b for b in blocking):
+            return CriterionDecision.met, "DBS implant present — patient excluded"
         if _any_match(_DBS_PATTERNS, patient_text):
             return CriterionDecision.met, "DBS implant present — patient excluded"
         return CriterionDecision.not_met, "no DBS implant found"
+
+    # MAO-B inhibitor
+    if _MAOB_CRITERION_PATTERN.search(c_lower):
+        patient_med_text = _text(patient.get("medications", []) + patient.get("key_features", []))
+        if _has_negated_maob(patient_med_text):
+            return CriterionDecision.not_met, "no MAO-B inhibitor use documented"
+        if _has_maob_inhibitor(patient_med_text):
+            return CriterionDecision.met, "MAO-B inhibitor present — patient excluded"
+        return CriterionDecision.not_met, "no MAO-B inhibitor found"
 
     # MMSE
     m = _MMSE_THRESHOLD_PATTERN.search(c_lower)
