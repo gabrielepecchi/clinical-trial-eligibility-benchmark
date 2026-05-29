@@ -76,6 +76,7 @@ def main() -> None:
             "blocking_criteria": result["blocking_criteria"],
             "uncertain_criteria": result["uncertain_criteria"],
             "explanation": result["explanation"],
+            "missing_information": result.get("missing_information", []),
             "criterion_results": criterion_results,
         })
 
