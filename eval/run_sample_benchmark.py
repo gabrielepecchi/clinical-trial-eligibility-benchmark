@@ -3,7 +3,7 @@
 import json
 from pathlib import Path
 
-from app.eligibility.rule_matcher import match_patient_to_trial
+from app.eligibility.rule_matcher import match_patient_to_trial, match_patient_to_trial_criteria
 from eval.evaluate import compute_metrics
 
 # ---------------------------------------------------------------------------
@@ -53,6 +53,16 @@ def main() -> None:
         result = match_patient_to_trial(patient, trial)
         predicted_label = result["prediction"]
 
+        criterion_results = [
+            {
+                "criterion_text": cr.criterion_text,
+                "criterion_type": cr.criterion_type.value,
+                "decision": cr.decision.value,
+                "reason": cr.reason,
+            }
+            for cr in match_patient_to_trial_criteria(patient, trial)
+        ]
+
         gold_labels.append(gold_label)
         predictions.append(predicted_label)
 
@@ -66,6 +76,7 @@ def main() -> None:
             "blocking_criteria": result["blocking_criteria"],
             "uncertain_criteria": result["uncertain_criteria"],
             "explanation": result["explanation"],
+            "criterion_results": criterion_results,
         })
 
     # Compute metrics
