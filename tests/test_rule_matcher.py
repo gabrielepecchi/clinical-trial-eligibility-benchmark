@@ -585,3 +585,37 @@ def test_age_gte_criterion_met_at_lower_bound():
 def test_age_lte_criterion_not_met_above_upper_bound():
     results = match_patient_to_trial_criteria(make_patient(age=81), _trial("Age <= 80"))
     assert results[0].decision == CriterionDecision.not_met
+
+
+# ---------------------------------------------------------------------------
+# Temporal medication stability
+# ---------------------------------------------------------------------------
+
+def test_stable_6_weeks_meets_4_week_requirement():
+    patient = make_patient(key_features=["medication regimen stable for 6 weeks"])
+    trial = _trial("Stable medication regimen for at least 4 weeks")
+    assert match_patient_to_trial(patient, trial)["prediction"] == "eligible"
+
+
+def test_changed_2_weeks_ago_fails_4_week_requirement():
+    patient = make_patient(key_features=["medication regimen changed 2 weeks ago"])
+    trial = _trial("Stable medication regimen for at least 4 weeks")
+    assert match_patient_to_trial(patient, trial)["prediction"] in {"not_eligible", "unclear"}
+
+
+def test_stable_1_month_fails_3_month_requirement():
+    patient = make_patient(key_features=["medication regimen stable for 1 month"])
+    trial = _trial("Stable medication regimen for at least 3 months")
+    assert match_patient_to_trial(patient, trial)["prediction"] in {"not_eligible", "unclear"}
+
+
+def test_stable_6_weeks_criterion_met_for_4_week_requirement():
+    patient = make_patient(key_features=["medication regimen stable for 6 weeks"])
+    results = match_patient_to_trial_criteria(patient, _trial("Stable medication regimen for at least 4 weeks"))
+    assert results[0].decision == CriterionDecision.met
+
+
+def test_stable_1_month_criterion_not_met_or_unknown_for_3_month_requirement():
+    patient = make_patient(key_features=["medication regimen stable for 1 month"])
+    results = match_patient_to_trial_criteria(patient, _trial("Stable medication regimen for at least 3 months"))
+    assert results[0].decision in {CriterionDecision.not_met, CriterionDecision.unknown}

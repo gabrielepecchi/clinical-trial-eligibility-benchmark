@@ -156,6 +156,21 @@ _MOCA_THRESHOLD_PATTERN = re.compile(r"moca\s*[<≤]\s*(\d+)", re.IGNORECASE)
 _MMSE_VALUE_PATTERN = re.compile(r"mmse\s*(?:score)?\s*(\d+)", re.IGNORECASE)
 _MOCA_VALUE_PATTERN = re.compile(r"moca\s*(?:score)?\s*(\d+)", re.IGNORECASE)
 
+_STABILITY_CRITERION_PATTERN = re.compile(
+    r"stable\s+medication\s+(?:regimen|therapy)\s+for\s+at\s+least\s+(\d+)\s+(weeks?|months?)",
+    re.IGNORECASE,
+)
+_PATIENT_STABLE_DURATION_PATTERN = re.compile(
+    r"(?:stable|unchanged|consistent).*?(\d+)\s+(weeks?|months?)"
+    r"|(\d+)\s+(weeks?|months?).*?(?:stable|unchanged|consistent)",
+    re.IGNORECASE,
+)
+_PATIENT_CHANGED_PATTERN = re.compile(
+    r"(?:changed|adjusted|modified|switched|altered).*?(\d+)\s+(weeks?|months?)\s+ago"
+    r"|(\d+)\s+(weeks?|months?)\s+ago.*?(?:changed|adjusted|modified|switched|altered)",
+    re.IGNORECASE,
+)
+
 _HY_RANGE_PATTERN = re.compile(
     r"hoehn\s+and\s+yahr\s+stage\s+(\d+)\s*(?:to|-|–)\s*(\d+)", re.IGNORECASE
 )
@@ -423,6 +438,44 @@ _TRIAL_COMPLEX_FOCUS_PATTERNS = [
 
 
 # ---------------------------------------------------------------------------
+# Duration helpers
+# ---------------------------------------------------------------------------
+
+def _to_weeks(amount: int, unit: str) -> int:
+    """Convert a duration amount+unit to whole weeks (months = 4 weeks)."""
+    return amount * 4 if unit.lower().startswith("month") else amount
+
+
+def _required_weeks(criterion: str) -> int | None:
+    """Return the required stability duration in weeks, or None if not specified."""
+    m = _STABILITY_CRITERION_PATTERN.search(criterion)
+    if not m:
+        return None
+    return _to_weeks(int(m.group(1)), m.group(2))
+
+
+def _patient_stable_weeks(patient_med_text: str) -> int | None:
+    """Return how many weeks the patient's medication has been stable, or None."""
+    m = _PATIENT_STABLE_DURATION_PATTERN.search(patient_med_text)
+    if not m:
+        return None
+    # Groups 1+2 or 3+4 depending on which branch matched
+    if m.group(1) is not None:
+        return _to_weeks(int(m.group(1)), m.group(2))
+    return _to_weeks(int(m.group(3)), m.group(4))
+
+
+def _patient_changed_weeks_ago(patient_med_text: str) -> int | None:
+    """Return how many weeks ago the medication was changed, or None."""
+    m = _PATIENT_CHANGED_PATTERN.search(patient_med_text)
+    if not m:
+        return None
+    if m.group(1) is not None:
+        return _to_weeks(int(m.group(1)), m.group(2))
+    return _to_weeks(int(m.group(3)), m.group(4))
+
+
+# ---------------------------------------------------------------------------
 # Rule checks
 # ---------------------------------------------------------------------------
 
@@ -554,8 +607,9 @@ def _check_parkinson_diagnosis(patient: dict, trial: dict) -> tuple[str | None, 
 
 
 def _check_medication_stability(patient: dict, trial: dict) -> tuple[str | None, str | None]:
-    """Return (uncertain_criterion, matched_fact) if medication stability is unclear."""
-    inclusion_text = _text(trial.get("inclusion_criteria", []))
+    """Return (uncertain_criterion, matched_fact) if medication stability is unclear or insufficient."""
+    inclusion_list = trial.get("inclusion_criteria", [])
+    inclusion_text = _text(inclusion_list)
     if not _any_match(_STABLE_MED_PATTERNS, inclusion_text):
         return None, None
 
@@ -565,6 +619,31 @@ def _check_medication_stability(patient: dict, trial: dict) -> tuple[str | None,
             "stable medication regimen required but cannot be confirmed",
             "medication dose, frequency, or compliance unclear",
         )
+
+    # Numeric duration check
+    for criterion in inclusion_list:
+        req = _required_weeks(criterion)
+        if req is None:
+            continue
+        changed_ago = _patient_changed_weeks_ago(patient_med_text)
+        if changed_ago is not None and changed_ago < req:
+            return (
+                f"stable medication regimen for at least {req} week(s) required; "
+                f"medication changed {changed_ago} week(s) ago",
+                f"medication changed {changed_ago} week(s) ago (required: {req} weeks stable)",
+            )
+        patient_weeks = _patient_stable_weeks(patient_med_text)
+        if patient_weeks is not None and patient_weeks < req:
+            return (
+                f"stable medication regimen for at least {req} week(s) required; "
+                f"patient stable for only {patient_weeks} week(s)",
+                f"medication stable {patient_weeks} week(s) (required: {req} weeks)",
+            )
+        if patient_weeks is None and changed_ago is None:
+            return (
+                f"stable medication regimen for at least {req} week(s) required but duration not documented",
+                "medication stability duration not documented",
+            )
 
     return None, None
 
@@ -1017,6 +1096,18 @@ def _evaluate_inclusion_criterion(
         med_text = _text(patient.get("medications", []) + patient.get("key_features", []))
         if _any_match(_UNCLEAR_MED_PATTERNS, med_text):
             return CriterionDecision.unknown, "medication details unclear"
+        # Numeric duration check
+        req = _required_weeks(c_lower)
+        if req is not None:
+            changed_ago = _patient_changed_weeks_ago(med_text)
+            if changed_ago is not None and changed_ago < req:
+                return CriterionDecision.not_met, f"medication changed {changed_ago} week(s) ago; {req} weeks stable required"
+            patient_weeks = _patient_stable_weeks(med_text)
+            if patient_weeks is not None:
+                if patient_weeks >= req:
+                    return CriterionDecision.met, f"medication stable {patient_weeks} week(s) (required: {req})"
+                return CriterionDecision.not_met, f"medication stable only {patient_weeks} week(s); {req} weeks required"
+            return CriterionDecision.unknown, "medication stability duration not documented"
         if _any_match([r"levodopa", r"medication"], med_text):
             return CriterionDecision.met, "medication recorded"
         return CriterionDecision.unknown, "cannot confirm medication stability"
