@@ -478,3 +478,44 @@ def test_no_duplicate_cognitive_score_label():
     )
     result = match_patient_to_trial(patient, trial)
     assert result["missing_information"].count("cognitive_score") == 1
+
+
+# ---------------------------------------------------------------------------
+# Age boundary tests — "Age 40 to 80 years"
+# ---------------------------------------------------------------------------
+
+AGE_ONLY_TRIAL = {
+    "trial_id": "T_AGE_BOUNDARY",
+    "inclusion_criteria": ["Age 40 to 80 years"],
+    "exclusion_criteria": [],
+}
+
+
+def test_age_40_is_eligible():
+    result = match_patient_to_trial(make_patient(age=40), AGE_ONLY_TRIAL)
+    assert result["prediction"] == "eligible"
+
+
+def test_age_80_is_eligible():
+    result = match_patient_to_trial(make_patient(age=80), AGE_ONLY_TRIAL)
+    assert result["prediction"] == "eligible"
+
+
+def test_age_39_is_not_eligible():
+    result = match_patient_to_trial(make_patient(age=39), AGE_ONLY_TRIAL)
+    assert result["prediction"] == "not_eligible"
+
+
+def test_age_81_is_not_eligible():
+    result = match_patient_to_trial(make_patient(age=81), AGE_ONLY_TRIAL)
+    assert result["prediction"] == "not_eligible"
+
+
+def test_age_40_criterion_is_met():
+    results = match_patient_to_trial_criteria(make_patient(age=40), AGE_ONLY_TRIAL)
+    assert results[0].decision == CriterionDecision.met
+
+
+def test_age_39_criterion_is_not_met():
+    results = match_patient_to_trial_criteria(make_patient(age=39), AGE_ONLY_TRIAL)
+    assert results[0].decision == CriterionDecision.not_met
