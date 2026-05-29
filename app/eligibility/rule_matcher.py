@@ -778,6 +778,7 @@ def match_patient_to_trial(patient: dict, trial: dict) -> dict:
             blocking_criteria  – list of criteria that disqualify the patient
             uncertain_criteria – list of criteria that could not be assessed
             explanation        – human-readable summary string
+            missing_information – list of missing data categories (e.g. 'age', 'cognitive_score')
     """
     matched_facts: list[str] = []
     blocking_criteria: list[str] = []
@@ -897,6 +898,34 @@ def match_patient_to_trial(patient: dict, trial: dict) -> dict:
             )
         )
 
+    # --- Build missing_information checklist ---
+    missing_information: list[str] = []
+
+    if age_status == "unclear":
+        missing_information.append("age")
+
+    if med_uncertain or med_detail_uncertain:
+        missing_information.append("medication_details")
+
+    if stage_uncertain:
+        missing_information.append("disease_stage_or_duration")
+
+    if trial_part_uncertain:
+        missing_information.append("trial_participation_history")
+
+    # cognitive_score: MMSE/MoCA required but score absent
+    exclusion_list = trial.get("exclusion_criteria", [])
+    patient_features = _text(patient.get("key_features", []))
+    for criterion in exclusion_list:
+        if _MMSE_THRESHOLD_PATTERN.search(criterion):
+            if not _MMSE_VALUE_PATTERN.search(patient_features):
+                if "cognitive_score" not in missing_information:
+                    missing_information.append("cognitive_score")
+        if _MOCA_THRESHOLD_PATTERN.search(criterion):
+            if not _MOCA_VALUE_PATTERN.search(patient_features):
+                if "cognitive_score" not in missing_information:
+                    missing_information.append("cognitive_score")
+
     return {
         "prediction": prediction,
         "confidence": confidence,
@@ -904,9 +933,8 @@ def match_patient_to_trial(patient: dict, trial: dict) -> dict:
         "blocking_criteria": blocking_criteria,
         "uncertain_criteria": uncertain_criteria,
         "explanation": explanation,
+        "missing_information": missing_information,
     }
-
-
 def match_patient_to_trial_criteria(
     patient: dict, trial: dict
 ) -> list[CriterionMatchResult]:
