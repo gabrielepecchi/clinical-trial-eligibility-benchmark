@@ -401,3 +401,80 @@ def test_missing_mmse_score_returns_unknown():
     )
     results = match_patient_to_trial_criteria(patient, trial)
     assert results[0].decision == CriterionDecision.unknown
+
+
+# ---------------------------------------------------------------------------
+# missing_information
+# ---------------------------------------------------------------------------
+
+def test_missing_information_key_present():
+    result = match_patient_to_trial(make_patient(), make_trial())
+    assert "missing_information" in result
+
+
+def test_missing_information_is_list():
+    result = match_patient_to_trial(make_patient(), make_trial())
+    assert isinstance(result["missing_information"], list)
+
+
+def test_missing_age_adds_age_label():
+    patient = make_patient(age=None)
+    trial = make_trial(inclusion_criteria=["Age 40 to 80 years"], exclusion_criteria=[])
+    result = match_patient_to_trial(patient, trial)
+    assert "age" in result["missing_information"]
+
+
+def test_unclear_medication_adds_medication_details_label():
+    patient = make_patient(
+        medications=["levodopa/carbidopa — dose and frequency unclear"],
+        key_features=["self-reported medication use", "no pharmacy records available"],
+    )
+    trial = make_trial(
+        inclusion_criteria=["Currently on stable levodopa therapy for at least 3 months"],
+        exclusion_criteria=[],
+    )
+    result = match_patient_to_trial(patient, trial)
+    assert "medication_details" in result["missing_information"]
+
+
+def test_unclear_disease_stage_adds_label():
+    patient = make_patient(key_features=["disease stage unclear"])
+    trial = make_trial(
+        inclusion_criteria=["Hoehn and Yahr stage 1 to 3"],
+        exclusion_criteria=[],
+    )
+    result = match_patient_to_trial(patient, trial)
+    assert "disease_stage_or_duration" in result["missing_information"]
+
+
+def test_missing_moca_score_adds_cognitive_score_label():
+    patient = make_patient(key_features=[])
+    trial = make_trial(
+        inclusion_criteria=["Age 40 to 80 years"],
+        exclusion_criteria=["Dementia diagnosis (MoCA < 21)"],
+    )
+    result = match_patient_to_trial(patient, trial)
+    assert "cognitive_score" in result["missing_information"]
+
+
+def test_missing_mmse_score_adds_cognitive_score_label():
+    patient = make_patient(key_features=[])
+    trial = make_trial(
+        inclusion_criteria=["Age 40 to 80 years"],
+        exclusion_criteria=["Severe cognitive impairment (MMSE < 24)"],
+    )
+    result = match_patient_to_trial(patient, trial)
+    assert "cognitive_score" in result["missing_information"]
+
+
+def test_no_duplicate_cognitive_score_label():
+    patient = make_patient(key_features=[])
+    trial = make_trial(
+        inclusion_criteria=[],
+        exclusion_criteria=[
+            "Severe cognitive impairment (MMSE < 24)",
+            "Dementia diagnosis (MoCA < 21)",
+        ],
+    )
+    result = match_patient_to_trial(patient, trial)
+    assert result["missing_information"].count("cognitive_score") == 1
