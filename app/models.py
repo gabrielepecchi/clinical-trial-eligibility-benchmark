@@ -41,3 +41,24 @@ class EligibilityLabel(BaseModel):
     patient_id: str
     label: EligibilityLabelValue
     notes: Optional[str] = None
+
+
+class CriterionType(str, Enum):
+    inclusion = "inclusion"
+    exclusion = "exclusion"
+    unknown = "unknown"
+
+
+class CriterionDecision(str, Enum):
+    met = "met"
+    not_met = "not_met"
+    unknown = "unknown"
+
+
+class CriterionMatchResult(BaseModel):
+    """Result of evaluating a single criterion against a patient."""
+
+    criterion_text: str
+    criterion_type: CriterionType
+    decision: CriterionDecision
+    reason: str = ""

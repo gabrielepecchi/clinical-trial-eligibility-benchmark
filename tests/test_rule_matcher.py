@@ -1,6 +1,7 @@
 """Unit tests for rule_matcher.py."""
 
-from rule_matcher import match_patient_to_trial
+from rule_matcher import match_patient_to_trial, match_patient_to_trial_criteria
+from models import CriterionDecision, CriterionType
 
 # ---------------------------------------------------------------------------
 # Shared fixtures
@@ -313,3 +314,90 @@ def test_unclear_has_uncertain_criterion():
     )
     result = match_patient_to_trial(patient, trial)
     assert len(result["uncertain_criteria"]) >= 1
+
+
+# ---------------------------------------------------------------------------
+# Criterion-level matcher
+# ---------------------------------------------------------------------------
+
+VALID_DECISIONS = {CriterionDecision.met, CriterionDecision.not_met, CriterionDecision.unknown}
+
+
+def test_criteria_count_matches_trial_criteria():
+    trial = make_trial(
+        inclusion_criteria=["Age 40 to 80 years", "Confirmed Parkinson disease diagnosis"],
+        exclusion_criteria=["Deep brain stimulation (DBS) implant"],
+    )
+    results = match_patient_to_trial_criteria(make_patient(), trial)
+    assert len(results) == 3
+
+
+def test_criteria_types_match_trial_sections():
+    trial = make_trial(
+        inclusion_criteria=["Age 40 to 80 years"],
+        exclusion_criteria=["Deep brain stimulation (DBS) implant"],
+    )
+    results = match_patient_to_trial_criteria(make_patient(), trial)
+    types = [r.criterion_type for r in results]
+    assert types[0] == CriterionType.inclusion
+    assert types[1] == CriterionType.exclusion
+
+
+def test_all_decisions_are_valid():
+    trial = make_trial(
+        inclusion_criteria=["Age 40 to 80 years", "Confirmed Parkinson disease diagnosis"],
+        exclusion_criteria=["Deep brain stimulation (DBS) implant"],
+    )
+    results = match_patient_to_trial_criteria(make_patient(), trial)
+    for r in results:
+        assert r.decision in VALID_DECISIONS
+
+
+def test_age_inclusion_met_when_in_range():
+    patient = make_patient(age=60)
+    trial = make_trial(inclusion_criteria=["Age 40 to 80 years"], exclusion_criteria=[])
+    results = match_patient_to_trial_criteria(patient, trial)
+    age_result = results[0]
+    assert age_result.decision == CriterionDecision.met
+
+
+def test_age_inclusion_not_met_when_out_of_range():
+    patient = make_patient(age=30)
+    trial = make_trial(inclusion_criteria=["Age 40 to 80 years"], exclusion_criteria=[])
+    results = match_patient_to_trial_criteria(patient, trial)
+    age_result = results[0]
+    assert age_result.decision == CriterionDecision.not_met
+
+
+def test_dbs_exclusion_met_when_patient_has_dbs():
+    patient = make_patient(
+        key_features=["bilateral STN DBS implanted 3 years ago"],
+        exclusions=["prior DBS surgery"],
+    )
+    trial = make_trial(
+        inclusion_criteria=[],
+        exclusion_criteria=["Deep brain stimulation (DBS) implant"],
+    )
+    results = match_patient_to_trial_criteria(patient, trial)
+    dbs_result = results[0]
+    assert dbs_result.decision == CriterionDecision.met
+
+
+def test_missing_moca_score_returns_unknown():
+    patient = make_patient(key_features=[])
+    trial = make_trial(
+        inclusion_criteria=[],
+        exclusion_criteria=["Dementia diagnosis (MoCA < 21)"],
+    )
+    results = match_patient_to_trial_criteria(patient, trial)
+    assert results[0].decision == CriterionDecision.unknown
+
+
+def test_missing_mmse_score_returns_unknown():
+    patient = make_patient(key_features=[])
+    trial = make_trial(
+        inclusion_criteria=[],
+        exclusion_criteria=["Severe cognitive impairment (MMSE < 24)"],
+    )
+    results = match_patient_to_trial_criteria(patient, trial)
+    assert results[0].decision == CriterionDecision.unknown

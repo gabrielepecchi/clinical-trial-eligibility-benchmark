@@ -2,6 +2,8 @@
 
 import re
 
+from models import CriterionDecision, CriterionMatchResult, CriterionType
+
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -903,3 +905,156 @@ def match_patient_to_trial(patient: dict, trial: dict) -> dict:
         "uncertain_criteria": uncertain_criteria,
         "explanation": explanation,
     }
+
+
+def match_patient_to_trial_criteria(
+    patient: dict, trial: dict
+) -> list[CriterionMatchResult]:
+    """Evaluate each trial criterion individually against a patient.
+
+    Args:
+        patient: A patient profile dictionary.
+        trial:   A trial dictionary.
+
+    Returns:
+        One CriterionMatchResult per inclusion and exclusion criterion.
+    """
+    summary = match_patient_to_trial(patient, trial)
+    blocking = [b.lower() for b in summary["blocking_criteria"]]
+    uncertain = [u.lower() for u in summary["uncertain_criteria"]]
+
+    results: list[CriterionMatchResult] = []
+
+    for criterion in trial.get("inclusion_criteria", []):
+        c_lower = criterion.lower()
+        decision, reason = _evaluate_inclusion_criterion(
+            c_lower, patient, blocking, uncertain
+        )
+        results.append(
+            CriterionMatchResult(
+                criterion_text=criterion,
+                criterion_type=CriterionType.inclusion,
+                decision=decision,
+                reason=reason,
+            )
+        )
+
+    for criterion in trial.get("exclusion_criteria", []):
+        c_lower = criterion.lower()
+        decision, reason = _evaluate_exclusion_criterion(
+            c_lower, patient, blocking, uncertain
+        )
+        results.append(
+            CriterionMatchResult(
+                criterion_text=criterion,
+                criterion_type=CriterionType.exclusion,
+                decision=decision,
+                reason=reason,
+            )
+        )
+
+    return results
+
+
+def _evaluate_inclusion_criterion(
+    c_lower: str, patient: dict, blocking: list[str], uncertain: list[str]
+) -> tuple[CriterionDecision, str]:
+    """Return (decision, reason) for a single inclusion criterion."""
+    # Age criterion
+    if re.search(r"\bage\b", c_lower) and not _looks_like_stage_not_age(c_lower):
+        min_age, max_age = _extract_age_range([c_lower])
+        patient_age = patient.get("age")
+        if min_age is not None or max_age is not None:
+            if patient_age is None:
+                return CriterionDecision.unknown, "patient age not available"
+            too_young = min_age is not None and patient_age < min_age
+            too_old = max_age is not None and patient_age > max_age
+            if too_young or too_old:
+                return CriterionDecision.not_met, f"patient age {patient_age} out of range"
+            return CriterionDecision.met, f"patient age {patient_age} in range"
+
+    # Parkinson diagnosis
+    if _any_match(_PARKINSON_PATTERNS, c_lower):
+        diag_text = _text(patient.get("diagnosis", []))
+        if _any_match(_PARKINSON_PATTERNS, diag_text):
+            return CriterionDecision.met, "Parkinson disease diagnosis confirmed"
+        if any("parkinson" in b for b in blocking):
+            return CriterionDecision.not_met, "Parkinson disease diagnosis not found"
+        return CriterionDecision.unknown, "diagnosis status unclear"
+
+    # Stable medication
+    if _any_match(_STABLE_MED_PATTERNS, c_lower):
+        if any("stable medication" in u or "medication" in u for u in uncertain):
+            return CriterionDecision.unknown, "medication stability cannot be confirmed"
+        med_text = _text(patient.get("medications", []) + patient.get("key_features", []))
+        if _any_match(_UNCLEAR_MED_PATTERNS, med_text):
+            return CriterionDecision.unknown, "medication details unclear"
+        if _any_match([r"levodopa", r"medication"], med_text):
+            return CriterionDecision.met, "medication recorded"
+        return CriterionDecision.unknown, "cannot confirm medication stability"
+
+    # H&Y stage
+    if _any_match([r"hoehn\s+and\s+yahr", r"\bh&y\b", r"\bhy\b\s*stage"], c_lower):
+        if any("hoehn and yahr" in b or "h&y" in b for b in blocking):
+            return CriterionDecision.not_met, "H&Y stage out of required range"
+        patient_text = _text(patient.get("key_features", []))
+        if _HY_VALUE_PATTERN.search(patient_text):
+            return CriterionDecision.met, "H&Y stage within range"
+        return CriterionDecision.unknown, "H&Y stage not available"
+
+    return CriterionDecision.unknown, "cannot evaluate from available data"
+
+
+def _evaluate_exclusion_criterion(
+    c_lower: str, patient: dict, blocking: list[str], uncertain: list[str]
+) -> tuple[CriterionDecision, str]:
+    """Return (decision, reason) for a single exclusion criterion.
+
+    For exclusions: met = criterion applies (patient IS excluded), not_met = criterion does not apply.
+    """
+    # DBS
+    if _any_match(_DBS_PATTERNS, c_lower):
+        if any("dbs" in b or "deep brain" in b for b in blocking):
+            return CriterionDecision.met, "DBS implant present — patient excluded"
+        patient_text = _text(
+            patient.get("key_features", [])
+            + patient.get("medications", [])
+            + patient.get("exclusions", [])
+        )
+        if _any_match(_DBS_PATTERNS, patient_text):
+            return CriterionDecision.met, "DBS implant present — patient excluded"
+        return CriterionDecision.not_met, "no DBS implant found"
+
+    # MMSE
+    m = _MMSE_THRESHOLD_PATTERN.search(c_lower)
+    if m:
+        threshold = int(m.group(1))
+        patient_features = _text(patient.get("key_features", []))
+        vm = _MMSE_VALUE_PATTERN.search(patient_features)
+        if vm:
+            score = int(vm.group(1))
+            if score < threshold:
+                return CriterionDecision.met, f"MMSE {score} below threshold {threshold} — excluded"
+            return CriterionDecision.not_met, f"MMSE {score} meets threshold"
+        return CriterionDecision.unknown, "MMSE score not available"
+
+    # MoCA
+    m = _MOCA_THRESHOLD_PATTERN.search(c_lower)
+    if m:
+        threshold = int(m.group(1))
+        patient_features = _text(patient.get("key_features", []))
+        vm = _MOCA_VALUE_PATTERN.search(patient_features)
+        if vm:
+            score = int(vm.group(1))
+            if score < threshold:
+                return CriterionDecision.met, f"MoCA {score} below threshold {threshold} — excluded"
+            return CriterionDecision.not_met, f"MoCA {score} meets threshold"
+        return CriterionDecision.unknown, "MoCA score not available"
+
+    # Cognitive impairment (general)
+    if _any_match(_COGNITIVE_EXCLUSION_PATTERNS, c_lower):
+        if any("mmse" in b or "moca" in b or "cognitive" in b for b in blocking):
+            return CriterionDecision.met, "cognitive impairment noted — excluded"
+        return CriterionDecision.unknown, "cognitive status unclear"
+
+    return CriterionDecision.unknown, "cannot evaluate from available data"
