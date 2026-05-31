@@ -1281,3 +1281,113 @@ def test_not_not_eligible_mild_cognitive_impairment_dbs_imaging():
     )
 
 
+# ---------------------------------------------------------------------------
+# New regression tests — pass 5
+# ---------------------------------------------------------------------------
+
+def test_not_not_eligible_fog_patient_treadmill_agility_trial():
+    """FoG/gait impairment patient in treadmill/agility PD motor trial should not be blocked."""
+    patient = make_patient(
+        age=67,
+        diagnosis=["Parkinson disease"],
+        key_features=["freezing of gait", "gait impairment", "motor dysfunction"],
+        medications=["levodopa/carbidopa"],
+        exclusions=[],
+    )
+    trial = make_trial(
+        title="Treadmill versus agility training in Parkinson disease motor dysfunction",
+        inclusion_criteria=[
+            "Age 40 to 80 years",
+            "Confirmed Parkinson disease diagnosis",
+            "Gait impairment or motor dysfunction present",
+        ],
+        exclusion_criteria=[],
+    )
+    result = match_patient_to_trial(patient, trial)
+    assert result["prediction"] != "not_eligible" or not any(
+        kw in c.lower()
+        for c in result["blocking_criteria"]
+        for kw in ("frail", "fall", "exercise")
+    ), (
+        f"Frailty blocker should not fire for FoG/gait patient in motor trial. "
+        f"prediction={result['prediction']}, blocking_criteria={result['blocking_criteria']}"
+    )
+
+
+def test_not_eligible_frailty_recurrent_falls_treadmill_trial():
+    """Frail patient with recurrent falls in treadmill/agility trial -> not_eligible."""
+    patient = make_patient(
+        age=78,
+        diagnosis=["Parkinson disease"],
+        key_features=["frailty noted", "recurrent falls"],
+        medications=[],
+        exclusions=[],
+    )
+    trial = make_trial(
+        inclusion_criteria=[
+            "Age 40 to 80 years",
+            "Confirmed Parkinson disease diagnosis",
+            "Able to perform treadmill walking exercise protocol",
+        ],
+        exclusion_criteria=[],
+    )
+    result = match_patient_to_trial(patient, trial)
+    assert result["prediction"] == "not_eligible", (
+        f"Expected 'not_eligible' for frail/falls patient in treadmill trial, "
+        f"got '{result['prediction']}'. blocking_criteria={result['blocking_criteria']}"
+    )
+
+
+def test_not_not_eligible_early_onset_pd_cognitive_exclusion():
+    """Early-onset PD patient with no cognitive impairment documented should not be blocked by cognitive exclusion."""
+    patient = make_patient(
+        age=45,
+        diagnosis=["Parkinson disease"],
+        key_features=["early-onset Parkinson disease", "levodopa responsive"],
+        medications=["levodopa/carbidopa"],
+        exclusions=[],
+    )
+    trial = make_trial(
+        inclusion_criteria=[
+            "Age 18 to 70 years",
+            "Confirmed Parkinson disease diagnosis",
+        ],
+        exclusion_criteria=[
+            "Dementia or cognitive impairment",
+        ],
+    )
+    result = match_patient_to_trial(patient, trial)
+    assert result["prediction"] != "not_eligible" or not any(
+        kw in c.lower()
+        for c in result["blocking_criteria"]
+        for kw in ("cognitive exclusion", "dementia", "cognitive impairment")
+    ), (
+        f"Cognitive blocker should not fire for early-onset PD with no documented impairment. "
+        f"prediction={result['prediction']}, blocking_criteria={result['blocking_criteria']}"
+    )
+
+
+def test_not_eligible_moca_below_threshold_cognitive():
+    """Patient with documented MoCA below threshold -> not_eligible."""
+    patient = make_patient(
+        age=68,
+        diagnosis=["Parkinson disease"],
+        key_features=["MoCA score 17"],
+        medications=[],
+        exclusions=[],
+    )
+    trial = make_trial(
+        inclusion_criteria=[
+            "Age 40 to 80 years",
+            "Confirmed Parkinson disease diagnosis",
+        ],
+        exclusion_criteria=[
+            "Dementia diagnosis (MoCA < 21)",
+        ],
+    )
+    result = match_patient_to_trial(patient, trial)
+    assert result["prediction"] == "not_eligible", (
+        f"Expected 'not_eligible' for MoCA 17 < 21 threshold, "
+        f"got '{result['prediction']}'. blocking_criteria={result['blocking_criteria']}"
+    )
+    assert any("moca" in c.lower() for c in result["blocking_criteria"])

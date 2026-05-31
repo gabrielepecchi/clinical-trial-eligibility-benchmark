@@ -674,12 +674,14 @@ _TRIAL_HIGH_DEMAND_EXERCISE_PATTERNS = [
 ]
 
 _PATIENT_FRAILTY_FALL_PATTERNS = [
-    r"\bfrail",
-    r"frailty",
+    r"\bfrail\b",
+    r"\bfrailty\b",
     r"recurrent.*falls",
     r"frequent.*falls",
-    r"fall.*risk",
     r"high.*fall.*risk",
+    r"wheelchair.*(?:bound|restricted|dependent)",
+    r"unable.*to.*walk",
+    r"cannot.*walk",
 ]
 
 _UNVERIFIABLE_INCLUSION_PATTERNS = [
@@ -1258,7 +1260,7 @@ def _check_cognitive_inclusion_minimum(
                         f"cognitive inclusion minimum: MMSE >= {required} required; patient MMSE {score}",
                         f"patient MMSE {score} below required {required}",
                     )
-            elif _any_match([r"\bdementia\b", r"cognitive impairment", r"low mmse", r"impaired cognition"], patient_features):
+            elif _any_match([r"\bdementia\b", r"(?:significant|moderate|severe).*cognitive", r"cognitive impairment(?!\s+(?:mild|early))", r"low mmse", r"impaired cognition"], patient_features):
                 return (
                     f"cognitive inclusion minimum: MMSE >= {required} required; patient has documented cognitive impairment",
                     "cognitive impairment documented; MMSE score not available",
@@ -1277,7 +1279,7 @@ def _check_cognitive_inclusion_minimum(
                         f"cognitive inclusion minimum: MoCA >= {required} required; patient MoCA {score}",
                         f"patient MoCA {score} below required {required}",
                     )
-            elif _any_match([r"\bdementia\b", r"cognitive impairment", r"low moca", r"impaired cognition"], patient_features):
+            elif _any_match([r"\bdementia\b", r"(?:significant|moderate|severe).*cognitive", r"cognitive impairment(?!\s+(?:mild|early))", r"low moca", r"impaired cognition"], patient_features):
                 return (
                     f"cognitive inclusion minimum: MoCA >= {required} required; patient has documented cognitive impairment",
                     "cognitive impairment documented; MoCA score not available",
@@ -1288,7 +1290,8 @@ def _check_cognitive_inclusion_minimum(
         if _any_match(_TRIAL_COGNITIVE_INCLUSION_MIN_PATTERNS, c):
             _CLEAR_IMPAIRMENT_PATTERNS = [
                 r"\bdementia\b",
-                r"cognitive impairment",
+                r"(?:significant|moderate|severe|major|clear).*cognitive(?:\s+impairment)?",
+                r"cognitive impairment(?!\s+(?:mild|early|possible|suspected))",
                 r"low moca",
                 r"low mmse",
                 r"impaired cognition",
@@ -1441,9 +1444,34 @@ def _check_oncology_required(patient: dict, trial: dict) -> tuple[str | None, st
     """Block when trial requires advanced/metastatic solid tumor or specific cancer diagnosis
     and patient has no cancer documented."""
     inclusion_list = trial.get("inclusion_criteria", [])
-    has_requirement = any(
-        _any_match(_TRIAL_ONCOLOGY_REQUIRED_PATTERNS, c.lower()) for c in inclusion_list
-    )
+
+    # Patterns that look like oncology but are actually screening/biopsy/colonoscopy context — skip.
+    _ONCOLOGY_EXCLUSION_CONTEXT_PATTERNS = [
+        r"colonoscop",
+        r"colonic.*biopsy",
+        r"biopsy.*colon",
+        r"rectosigmoidoscop",
+        r"colorectal.*screening",
+        r"colorectal.*risk",
+        r"at risk.*(?:colorectal|colon|rectal).*cancer",
+        r"bowel.*screening",
+        r"stool.*sample",
+        r"alpha.synuclein.*biopsy",
+        r"biopsy.*alpha.synuclein",
+        r"tissue.*biopsy",
+        r"biopsy.*parkinson",
+        r"parkinson.*biopsy",
+    ]
+
+    has_requirement = False
+    for c in inclusion_list:
+        cl = c.lower()
+        if _any_match(_ONCOLOGY_EXCLUSION_CONTEXT_PATTERNS, cl):
+            continue
+        if _any_match(_TRIAL_ONCOLOGY_REQUIRED_PATTERNS, cl):
+            has_requirement = True
+            break
+
     if not has_requirement:
         return None, None
 
