@@ -287,6 +287,32 @@ def format_error_severity_summary(s: dict) -> str:
     return "\n".join(lines)
 
 
+_LABEL_ORDER = ["eligible", "not_eligible", "unclear"]
+
+
+def build_confusion_matrix(gold_labels: list[str], predictions: list[str]) -> dict[str, dict[str, int]]:
+    """Return a nested dict: matrix[true_label][predicted_label] = count."""
+    matrix: dict[str, dict[str, int]] = {
+        label: {other: 0 for other in _LABEL_ORDER} for label in _LABEL_ORDER
+    }
+    for gold, pred in zip(gold_labels, predictions):
+        if gold in matrix and pred in matrix[gold]:
+            matrix[gold][pred] += 1
+    return matrix
+
+
+def format_confusion_matrix(matrix: dict[str, dict[str, int]]) -> str:
+    """Format confusion matrix as a readable terminal table."""
+    col_w = 15
+    header = " " * (col_w + 2) + "".join(f"{'pred_' + l:>{col_w}}" for l in _LABEL_ORDER)
+    lines = ["\n=== Confusion Matrix ===", header]
+    for true_label in _LABEL_ORDER:
+        row_label = f"true_{true_label}"
+        counts = "".join(f"{matrix[true_label][pred]:>{col_w}}" for pred in _LABEL_ORDER)
+        lines.append(f"{row_label:<{col_w + 2}}{counts}")
+    return "\n".join(lines)
+
+
 def build_error_severity_summary(prediction_records: list[dict]) -> dict:
     """Compute error severity counts and rates."""
     total = len(prediction_records)
@@ -437,6 +463,9 @@ def main() -> None:
     print("\nPer-class F1:")
     for label, values in metrics["per_class"].items():
         print(f"  {label:<15} {values['f1']:.3f}")
+
+    cm = build_confusion_matrix(gold_labels, predictions)
+    print(format_confusion_matrix(cm))
 
     print(f"\nResults saved to {RESULTS_FILE}")
     print(f"Predictions CSV saved to {RESULTS_CSV_FILE}")
