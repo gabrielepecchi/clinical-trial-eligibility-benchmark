@@ -2,12 +2,15 @@
 
 import csv
 import json
-from collections import Counter
+from collections import Counter, defaultdict
 from pathlib import Path
 
 RESULTS_FILE = Path("data/processed/results_llm_reviewed.json")
 OUTPUT_FILE = Path("data/processed/error_analysis_llm_reviewed.json")
 ERROR_CSV_FILE = Path("data/processed/error_analysis_llm_reviewed.csv")
+CRITERION_LEVEL_FILE = Path("data/processed/criterion_level_results.csv")
+CRITERION_TYPE_JSON = Path("data/processed/criterion_type_summary.json")
+CRITERION_TYPE_CSV = Path("data/processed/criterion_type_summary.csv")
 
 
 _CSV_FIELDNAMES = [
@@ -148,6 +151,71 @@ def build_error_record(record: dict) -> dict:
     }
 
 
+def aggregate_criterion_type_summary(csv_path: Path) -> list[dict]:
+    """Read criterion_level_results.csv and aggregate metrics by criterion_type.
+
+    Returns a list of dicts, one per criterion_type, sorted by criterion_type.
+    Each dict contains:
+        criterion_type, total_criteria, correct_criteria, criterion_accuracy,
+        decision_met, decision_not_met, decision_unknown
+    """
+    if not csv_path.exists():
+        return []
+
+    # Accumulators keyed by criterion_type
+    totals: dict[str, int] = defaultdict(int)
+    correct: dict[str, int] = defaultdict(int)
+    decision_counts: dict[str, Counter] = defaultdict(Counter)
+
+    with csv_path.open(newline="", encoding="utf-8") as f:
+        reader = csv.DictReader(f)
+        for row in reader:
+            ctype = (row.get("criterion_type") or "unknown").strip()
+            gold_decision = (row.get("gold_decision") or "").strip().lower()
+            pred_decision = (row.get("decision") or row.get("predicted_decision") or "").strip().lower()
+
+            totals[ctype] += 1
+            if gold_decision and pred_decision and gold_decision == pred_decision:
+                correct[ctype] += 1
+
+            # Count distribution of predicted decisions
+            if pred_decision:
+                decision_counts[ctype][pred_decision] += 1
+
+    rows = []
+    for ctype in sorted(totals.keys()):
+        total = totals[ctype]
+        corr = correct[ctype]
+        accuracy = corr / total if total > 0 else 0.0
+        dc = decision_counts[ctype]
+        rows.append({
+            "criterion_type": ctype,
+            "total_criteria": total,
+            "correct_criteria": corr,
+            "criterion_accuracy": round(accuracy, 4),
+            "decision_met": dc.get("met", 0),
+            "decision_not_met": dc.get("not_met", 0),
+            "decision_unknown": dc.get("unknown", 0),
+        })
+    return rows
+
+
+_CRITERION_TYPE_CSV_FIELDS = [
+    "criterion_type", "total_criteria", "correct_criteria", "criterion_accuracy",
+    "decision_met", "decision_not_met", "decision_unknown",
+]
+
+
+def write_criterion_type_summary(rows: list[dict]) -> None:
+    """Write criterion_type_summary.json and criterion_type_summary.csv."""
+    CRITERION_TYPE_JSON.write_text(json.dumps(rows, indent=2), encoding="utf-8")
+
+    with CRITERION_TYPE_CSV.open("w", newline="", encoding="utf-8") as f:
+        writer = csv.DictWriter(f, fieldnames=_CRITERION_TYPE_CSV_FIELDS, extrasaction="ignore")
+        writer.writeheader()
+        writer.writerows(rows)
+
+
 def main() -> None:
     results = json.loads(RESULTS_FILE.read_text(encoding="utf-8"))
     predictions = results.get("predictions", [])
@@ -189,6 +257,23 @@ def main() -> None:
 
     print(f"\nSaved detailed errors to {OUTPUT_FILE}")
     print(f"Error CSV saved to {ERROR_CSV_FILE}")
+
+    # ── Criterion-type aggregation (Task 19) ──────────────────────────────────
+    criterion_summary = aggregate_criterion_type_summary(CRITERION_LEVEL_FILE)
+    if criterion_summary:
+        write_criterion_type_summary(criterion_summary)
+        print(f"\nCriterion-type summary ({len(criterion_summary)} types):")
+        for row in criterion_summary:
+            print(
+                f"  {row['criterion_type']:<20} "
+                f"total={row['total_criteria']:>4}  "
+                f"correct={row['correct_criteria']:>4}  "
+                f"accuracy={row['criterion_accuracy']:.3f}"
+            )
+        print(f"Criterion type summary JSON saved to {CRITERION_TYPE_JSON}")
+        print(f"Criterion type summary CSV saved to {CRITERION_TYPE_CSV}")
+    else:
+        print(f"\nCriterion-type summary: skipped ({CRITERION_LEVEL_FILE} not found or empty)")
 
 
 if __name__ == "__main__":

@@ -981,3 +981,112 @@ def test_main_generates_html_report(tmp_path, monkeypatch):
     assert "Criterion-Level Examples" in html
     assert "href='#global-metrics'" in html or 'href="#global-metrics"' in html
     assert "generated locally" in html
+
+
+# ── aggregate_criterion_type_summary ──────────────────────────────────────────
+
+import csv as _csv
+from eval.summarize_llm_reviewed_errors import aggregate_criterion_type_summary
+
+
+def _write_criterion_csv(path, rows):
+    """Helper: write a minimal criterion_level_results.csv for testing."""
+    if not rows:
+        path.write_text("criterion_type,gold_decision,decision\n", encoding="utf-8")
+        return
+    fields = list(rows[0].keys())
+    with path.open("w", newline="", encoding="utf-8") as f:
+        writer = _csv.DictWriter(f, fieldnames=fields)
+        writer.writeheader()
+        writer.writerows(rows)
+
+
+def test_aggregate_criterion_type_summary_basic(tmp_path):
+    csv_path = tmp_path / "criterion_level_results.csv"
+    _write_criterion_csv(csv_path, [
+        {"criterion_type": "inclusion", "gold_decision": "met", "decision": "met"},
+        {"criterion_type": "inclusion", "gold_decision": "met", "decision": "not_met"},
+        {"criterion_type": "exclusion", "gold_decision": "not_met", "decision": "not_met"},
+    ])
+    result = aggregate_criterion_type_summary(csv_path)
+    types = {r["criterion_type"]: r for r in result}
+    assert "inclusion" in types
+    assert "exclusion" in types
+    assert types["inclusion"]["total_criteria"] == 2
+    assert types["exclusion"]["total_criteria"] == 1
+
+
+def test_aggregate_criterion_type_summary_correct_count(tmp_path):
+    csv_path = tmp_path / "criterion_level_results.csv"
+    _write_criterion_csv(csv_path, [
+        {"criterion_type": "inclusion", "gold_decision": "met", "decision": "met"},
+        {"criterion_type": "inclusion", "gold_decision": "met", "decision": "not_met"},
+        {"criterion_type": "inclusion", "gold_decision": "not_met", "decision": "not_met"},
+    ])
+    result = aggregate_criterion_type_summary(csv_path)
+    inc = next(r for r in result if r["criterion_type"] == "inclusion")
+    assert inc["correct_criteria"] == 2
+    assert inc["total_criteria"] == 3
+
+
+def test_aggregate_criterion_type_summary_accuracy(tmp_path):
+    csv_path = tmp_path / "criterion_level_results.csv"
+    _write_criterion_csv(csv_path, [
+        {"criterion_type": "age", "gold_decision": "met", "decision": "met"},
+        {"criterion_type": "age", "gold_decision": "met", "decision": "met"},
+        {"criterion_type": "age", "gold_decision": "met", "decision": "not_met"},
+        {"criterion_type": "age", "gold_decision": "met", "decision": "not_met"},
+    ])
+    result = aggregate_criterion_type_summary(csv_path)
+    age = next(r for r in result if r["criterion_type"] == "age")
+    assert age["criterion_accuracy"] == 0.5
+
+
+def test_aggregate_criterion_type_summary_decision_counts(tmp_path):
+    csv_path = tmp_path / "criterion_level_results.csv"
+    _write_criterion_csv(csv_path, [
+        {"criterion_type": "medication", "gold_decision": "met", "decision": "met"},
+        {"criterion_type": "medication", "gold_decision": "not_met", "decision": "not_met"},
+        {"criterion_type": "medication", "gold_decision": "met", "decision": "unknown"},
+    ])
+    result = aggregate_criterion_type_summary(csv_path)
+    med = next(r for r in result if r["criterion_type"] == "medication")
+    assert med["decision_met"] == 1
+    assert med["decision_not_met"] == 1
+    assert med["decision_unknown"] == 1
+
+
+def test_aggregate_criterion_type_summary_missing_file(tmp_path):
+    result = aggregate_criterion_type_summary(tmp_path / "nonexistent.csv")
+    assert result == []
+
+
+def test_aggregate_criterion_type_summary_sorted(tmp_path):
+    csv_path = tmp_path / "criterion_level_results.csv"
+    _write_criterion_csv(csv_path, [
+        {"criterion_type": "temporal", "gold_decision": "met", "decision": "met"},
+        {"criterion_type": "age", "gold_decision": "met", "decision": "met"},
+        {"criterion_type": "medication", "gold_decision": "not_met", "decision": "not_met"},
+    ])
+    result = aggregate_criterion_type_summary(csv_path)
+    types = [r["criterion_type"] for r in result]
+    assert types == sorted(types)
+
+
+def test_criterion_type_summary_renders_real_fields():
+    rows = [{
+        "criterion_type": "inclusion",
+        "total_criteria": 10,
+        "correct_criteria": 8,
+        "criterion_accuracy": 0.8,
+        "decision_met": 6,
+        "decision_not_met": 3,
+        "decision_unknown": 1,
+    }]
+    html = render_criterion_type_summary(rows)
+    assert "criterion_accuracy" in html
+    assert "total_criteria" in html
+    assert "correct_criteria" in html
+    assert "decision_met" in html
+    assert "0.800" in html
+    assert ">10<" in html
