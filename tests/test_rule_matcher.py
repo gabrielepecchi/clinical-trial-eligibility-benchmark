@@ -2270,11 +2270,11 @@ def test_advanced_pd_patient_not_blocked_by_advanced_pd_rule():
 
 
 # ---------------------------------------------------------------------------
-# Regression — exact T002-style wording with unicode ≥ and Hoehn & Yahr
+# Regression — composite advanced severity wording with unicode ≥ and Hoehn & Yahr
 # ---------------------------------------------------------------------------
 
-def test_not_eligible_early_onset_pd_t002_exact_wording():
-    """Early-onset PD (H&Y stage 1); trial uses exact T002-style wording with ≥ and Hoehn & Yahr."""
+def test_not_eligible_early_onset_pd_composite_advanced_severity_wording():
+    """Early-onset PD (H&Y stage 1); trial uses composite advanced severity wording with ≥ and Hoehn & Yahr."""
     patient = make_patient(
         age=45,
         diagnosis=["Parkinson disease"],
@@ -2298,7 +2298,7 @@ def test_not_eligible_early_onset_pd_t002_exact_wording():
     )
     result = match_patient_to_trial(patient, trial)
     assert result["prediction"] == "not_eligible", (
-        f"Expected 'not_eligible' for early-onset PD (H&Y 1) in T002-exact-wording severity trial, "
+        f"Expected 'not_eligible' for early-onset PD (H&Y 1) in composite advanced severity wording trial, "
         f"got '{result['prediction']}'. blocking_criteria={result['blocking_criteria']}"
     )
     assert any(
@@ -2310,7 +2310,7 @@ def test_not_eligible_early_onset_pd_t002_exact_wording():
     )
 
 
-def test_not_not_eligible_early_onset_pd_t002_wording_simple_pd_trial():
+def test_not_not_eligible_early_onset_pd_advanced_severity_wording_simple_pd_trial():
     """Same early-onset PD patient + trial only requires confirmed PD and age 45-70 -> not blocked."""
     patient = make_patient(
         age=45,
@@ -2340,7 +2340,7 @@ def test_not_not_eligible_early_onset_pd_t002_wording_simple_pd_trial():
     )
 
 
-def test_not_not_eligible_early_onset_pd_t002_wording_very_early_trial():
+def test_not_not_eligible_early_onset_pd_advanced_severity_wording_very_early_trial():
     """Same early-onset PD patient + trial targeting very early PD -> not blocked."""
     patient = make_patient(
         age=45,
@@ -2368,7 +2368,7 @@ def test_not_not_eligible_early_onset_pd_t002_wording_very_early_trial():
     )
 
 
-def test_not_not_eligible_early_onset_pd_t002_wording_bone_gait_trial():
+def test_not_not_eligible_early_onset_pd_advanced_severity_wording_bone_gait_trial():
     """Same early-onset PD patient + bone density / gait cueing trial without severity criteria -> not blocked."""
     patient = make_patient(
         age=45,
@@ -2397,8 +2397,8 @@ def test_not_not_eligible_early_onset_pd_t002_wording_bone_gait_trial():
     )
 
 
-def test_advanced_pd_patient_t002_severity_trial_not_blocked_by_advanced_pd_rule():
-    """Advanced PD patient with motor fluctuations/OFF time/LCIG/DBS + T002-style severity trial -> not blocked."""
+def test_advanced_pd_patient_composite_severity_trial_not_blocked_by_advanced_pd_rule():
+    """Advanced PD patient with motor fluctuations/OFF time/LCIG/DBS + composite advanced severity trial -> not blocked."""
     patient = make_patient(
         age=65,
         diagnosis=["Parkinson disease"],
@@ -2463,4 +2463,224 @@ def test_not_eligible_early_onset_pd_when_trial_requires_composite_advanced_seve
     ), (
         f"Blocking criterion must mention advanced/severe/severity/hoehn/updrs/off time. "
         f"blocking_criteria={result['blocking_criteria']}"
+    )
+
+
+# ---------------------------------------------------------------------------
+# Comorbidity exemption — FoG / gait in gait/rehab/balance/exercise trial
+# ---------------------------------------------------------------------------
+
+def test_fog_patient_gait_trial_no_generic_comorbidity_uncertain():
+    """FoG/gait impairment should not trigger generic comorbidity uncertain in a gait/rehab trial."""
+    patient = make_patient(
+        age=65,
+        diagnosis=["Parkinson disease"],
+        key_features=["freezing of gait", "gait impairment", "shuffling gait"],
+    )
+    trial = make_trial(
+        inclusion_criteria=[
+            "Age 40 to 80 years",
+            "Parkinson disease diagnosis",
+            "Gait rehabilitation study assessing cueing and balance interventions",
+        ],
+        exclusion_criteria=[],
+    )
+    result = match_patient_to_trial(patient, trial)
+    assert not any(
+        "comorbidity" in c.lower() for c in result["uncertain_criteria"]
+    ), (
+        f"Generic comorbidity uncertain must not fire for FoG patient in gait trial. "
+        f"uncertain_criteria={result['uncertain_criteria']}"
+    )
+
+
+def test_fog_patient_balance_trial_no_generic_comorbidity_uncertain():
+    patient = make_patient(
+        age=65,
+        diagnosis=["Parkinson disease"],
+        key_features=["freezing of gait", "fall risk", "balance impairment"],
+    )
+    trial = make_trial(
+        inclusion_criteria=[
+            "Parkinson disease diagnosis",
+            "Balance and fall prevention exercise program",
+        ],
+        exclusion_criteria=[],
+    )
+    result = match_patient_to_trial(patient, trial)
+    assert not any(
+        "comorbidity" in c.lower() for c in result["uncertain_criteria"]
+    ), (
+        f"Generic comorbidity uncertain must not fire for FoG patient in balance trial. "
+        f"uncertain_criteria={result['uncertain_criteria']}"
+    )
+
+
+# ---------------------------------------------------------------------------
+# Comorbidity exemption — Depression/RBD/autonomic in non-motor/QoL/phenotype trial
+# ---------------------------------------------------------------------------
+
+def test_depression_patient_nonmotor_trial_no_generic_comorbidity_uncertain():
+    """Depression should not trigger generic comorbidity uncertain in a non-motor PD study."""
+    patient = make_patient(
+        age=62,
+        diagnosis=["Parkinson disease"],
+        key_features=["depression", "non-motor symptoms"],
+    )
+    trial = make_trial(
+        inclusion_criteria=[
+            "Parkinson disease diagnosis",
+            "Non-motor symptom and quality of life observational study",
+        ],
+        exclusion_criteria=[],
+    )
+    result = match_patient_to_trial(patient, trial)
+    assert not any(
+        "comorbidity" in c.lower() for c in result["uncertain_criteria"]
+    ), (
+        f"Generic comorbidity uncertain must not fire for depression patient in non-motor trial. "
+        f"uncertain_criteria={result['uncertain_criteria']}"
+    )
+
+
+def test_rbd_patient_neuropsychiatric_trial_no_generic_comorbidity_uncertain():
+    patient = make_patient(
+        age=68,
+        diagnosis=["Parkinson disease"],
+        key_features=["REM sleep behavior disorder", "RBD"],
+    )
+    trial = make_trial(
+        inclusion_criteria=[
+            "Parkinson disease diagnosis",
+            "Neuropsychiatric and sleep phenotype study",
+        ],
+        exclusion_criteria=[],
+    )
+    result = match_patient_to_trial(patient, trial)
+    assert not any(
+        "comorbidity" in c.lower() for c in result["uncertain_criteria"]
+    ), (
+        f"Generic comorbidity uncertain must not fire for RBD patient in neuropsychiatric trial. "
+        f"uncertain_criteria={result['uncertain_criteria']}"
+    )
+
+
+def test_autonomic_dysfunction_qol_trial_no_generic_comorbidity_uncertain():
+    patient = make_patient(
+        age=70,
+        diagnosis=["Parkinson disease"],
+        key_features=["autonomic dysfunction", "orthostatic hypotension"],
+    )
+    trial = make_trial(
+        inclusion_criteria=[
+            "Parkinson disease diagnosis",
+            "Quality of life and PD phenotype biomarker observational study",
+        ],
+        exclusion_criteria=[],
+    )
+    result = match_patient_to_trial(patient, trial)
+    assert not any(
+        "comorbidity" in c.lower() for c in result["uncertain_criteria"]
+    ), (
+        f"Generic comorbidity uncertain must not fire for autonomic dysfunction in QoL trial. "
+        f"uncertain_criteria={result['uncertain_criteria']}"
+    )
+
+
+# ---------------------------------------------------------------------------
+# Comorbidity exemption — DBS implant in DBS outcomes/effects study
+# ---------------------------------------------------------------------------
+
+def test_dbs_patient_dbs_outcomes_trial_no_generic_comorbidity_uncertain():
+    """DBS-implanted patient should not trigger generic comorbidity uncertain in a DBS outcomes study."""
+    patient = make_patient(
+        age=67,
+        diagnosis=["Parkinson disease"],
+        key_features=["bilateral STN DBS implanted", "DBS programming ongoing"],
+    )
+    trial = make_trial(
+        inclusion_criteria=[
+            "Parkinson disease diagnosis",
+            "Patients who have undergone DBS surgery",
+            "DBS effects and programming outcomes study",
+        ],
+        exclusion_criteria=[],
+    )
+    result = match_patient_to_trial(patient, trial)
+    assert not any(
+        "comorbidity" in c.lower() for c in result["uncertain_criteria"]
+    ), (
+        f"Generic comorbidity uncertain must not fire for DBS patient in DBS outcomes trial. "
+        f"uncertain_criteria={result['uncertain_criteria']}"
+    )
+
+
+# ---------------------------------------------------------------------------
+# Pacemaker + tACS/transcranial stimulation still blocks
+# ---------------------------------------------------------------------------
+
+def test_pacemaker_tacs_trial_not_eligible():
+    """Pacemaker patient must be not_eligible for a tACS/transcranial stimulation trial."""
+    patient = make_patient(
+        age=65,
+        diagnosis=["Parkinson disease"],
+        key_features=["implanted cardiac pacemaker"],
+    )
+    trial = make_trial(
+        inclusion_criteria=["Parkinson disease diagnosis"],
+        exclusion_criteria=[],
+        interventions=["transcranial alternating current stimulation (tACS)"],
+        title="Transcranial Alternating Current Stimulation for Parkinson Disease",
+    )
+    result = match_patient_to_trial(patient, trial)
+    assert result["prediction"] == "not_eligible", (
+        f"Pacemaker patient must be not_eligible for tACS trial. "
+        f"prediction={result['prediction']}, blocking_criteria={result['blocking_criteria']}"
+    )
+
+
+def test_pacemaker_tdcs_trial_not_eligible():
+    patient = make_patient(
+        age=65,
+        diagnosis=["Parkinson disease"],
+        key_features=["implanted cardiac pacemaker"],
+    )
+    trial = make_trial(
+        inclusion_criteria=["Parkinson disease diagnosis"],
+        exclusion_criteria=["tDCS transcranial direct current stimulation"],
+    )
+    result = match_patient_to_trial(patient, trial)
+    assert result["prediction"] == "not_eligible", (
+        f"Pacemaker patient must be not_eligible for tDCS trial. "
+        f"prediction={result['prediction']}"
+    )
+
+
+# ---------------------------------------------------------------------------
+# Cognitive impairment + explicit capacity/cognitive requirement
+# ---------------------------------------------------------------------------
+
+def test_cognitive_impairment_capacity_trial_not_eligible():
+    """Cognitive impairment patient must not be eligible when trial requires consent capacity."""
+    patient = make_patient(
+        age=72,
+        diagnosis=["Parkinson disease"],
+        key_features=["cognitive impairment", "MMSE score 19"],
+        exclusions=["cognitive impairment"],
+    )
+    trial = make_trial(
+        inclusion_criteria=[
+            "Parkinson disease diagnosis",
+            "Able to provide informed consent",
+            "Cognitively intact",
+        ],
+        exclusion_criteria=["Cognitive impairment or dementia"],
+    )
+    result = match_patient_to_trial(patient, trial)
+    assert result["prediction"] in {"not_eligible", "unclear"}, (
+        f"Cognitive impairment patient must not be eligible for capacity-requiring trial. "
+        f"prediction={result['prediction']}"
+    )
+    assert result["prediction"] != "eligible", (
+        f"prediction must not be 'eligible' for cognitively impaired patient in capacity trial."
     )

@@ -464,20 +464,27 @@ _TRIAL_COMPLEX_FOCUS_PATTERNS = [
 # that comorbidity is the enrolment target, suppress the uncertain flag.
 _COMORBIDITY_TARGET_PAIRS: list[tuple[list[str], list[str]]] = [
     (
-        # FoG / gait patient in a FoG / gait trial
-        [r"freezing.*gait", r"\bfog\b", r"gait.*disturbance", r"gait.*impairment"],
+        # FoG / gait patient in a FoG / gait / rehab / balance / cueing / exercise trial
+        [r"freezing.*gait", r"\bfog\b", r"gait.*disturbance", r"gait.*impairment",
+         r"gait.*difficulty", r"shuffling.*gait", r"festination"],
         [r"freezing.*gait", r"\bfog\b", r"gait.*study", r"gait.*trial",
-         r"somatosensory.*stimulation", r"auditory.*cue", r"gait.*cueing"],
+         r"somatosensory.*stimulation", r"auditory.*cue", r"gait.*cueing",
+         r"gait", r"balance", r"rehabilitation", r"physiotherapy", r"physical.*therapy",
+         r"exercise.*trial", r"exercise.*study", r"motor.*function",
+         r"lower.*limb", r"lower.*extremity", r"virtual.*reality", r"\bvr\b.*trial",
+         r"cueing", r"stepping", r"treadmill", r"fall.*prevention", r"fall.*risk",
+         r"mobility", r"locomotion", r"walking"],
     ),
     (
-        # DBS-implanted patient in a DBS-focused study
+        # DBS-implanted patient in a DBS-specific outcomes/effects/implanted-patient study
         [r"\bdbs\b", r"deep brain stimulation", r"subthalamic", r"\bstn\b"],
-        [r"dbs.*effect", r"effect.*dbs", r"dbs.*patient", r"dbs.*implant",
+        [r"dbs.*effect", r"effect.*dbs", r"dbs.*outcome", r"dbs.*patient", r"dbs.*implant",
          r"deep brain stimulation.*effect", r"lfp.*sensing", r"directional.*lead",
          r"dbs.*facial", r"dbs.*neuropsychiatric", r"dbs.*programming",
          r"subthalamic.*steering", r"dbs.*optimization",
          r"undergone.*dbs", r"dbs.*surgery", r"subthalamic.*dbs",
-         r"stn.*surgery", r"subthalamic nucleus.*dbs"],
+         r"stn.*surgery", r"subthalamic nucleus.*dbs",
+         r"stimulation.*parameter", r"dbs.*follow.up"],
     ),
     (
         # Frail patient in a frailty / home physiotherapy trial
@@ -485,6 +492,19 @@ _COMORBIDITY_TARGET_PAIRS: list[tuple[list[str], list[str]]] = [
         [r"frailty.*trial", r"frailty.*study", r"frail.*patient",
          r"home.*physiotherapy", r"home.*physical.*therapy",
          r"frailty.*intervention", r"frailty.*rehabilitation"],
+    ),
+    (
+        # Depression / RBD / autonomic / non-motor features in explicitly non-motor/neuropsychiatric/QoL/phenotype trials
+        [r"\bdepression\b", r"\bdepressed\b", r"rem.*sleep.*behavior", r"\brbd\b",
+         r"rem.*behavior.*disorder", r"autonomic.*dysfunction", r"autonomic.*failure",
+         r"orthostatic.*hypotension", r"postural.*hypotension"],
+        [r"non.motor", r"neuropsychiatric", r"neuropsychological", r"quality.*of.*life",
+         r"\bqol\b", r"pd.*phenotype", r"parkinson.*phenotype", r"phenotype.*study",
+         r"depression.*trial", r"depression.*study", r"anxiety.*trial", r"sleep.*study",
+         r"sleep.*trial", r"autonomic.*study", r"autonomic.*trial",
+         r"rem.*behavior", r"\brbd\b.*trial", r"\brbd\b.*study",
+         r"dementia.*evaluation", r"prodromal", r"non.motor.*symptom",
+         r"neuropsychiatric.*symptom", r"quality.*life.*parkinson"],
     ),
 ]
 
@@ -1198,7 +1218,7 @@ def _check_comorbidity_protocol_risk(
 
     # Target-population exemption → suppress uncertain
     for patient_patterns, trial_inclusion_patterns in _COMORBIDITY_TARGET_PAIRS:
-        if _any_match(patient_patterns, patient_all_text) and _any_match(trial_inclusion_patterns, inclusion_text):
+        if _any_match(patient_patterns, patient_all_text) and _any_match(trial_inclusion_patterns, trial_text):
             return None, None, None
 
     # Cognitive/MCI scope guard: if the only comorbidity trigger is mild cognitive uncertainty,
