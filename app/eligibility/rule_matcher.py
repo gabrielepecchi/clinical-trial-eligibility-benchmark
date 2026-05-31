@@ -1353,13 +1353,38 @@ def _check_device_contraindication_stimulation(
     if not _any_match(_PACEMAKER_PATTERNS, patient_text):
         return None, None
 
-    trial_text = _text(
-        trial.get("inclusion_criteria", []) + trial.get("exclusion_criteria", [])
+    # Check all available trial text fields for stimulation keywords
+    all_trial_fields = _text(
+        trial.get("inclusion_criteria", [])
+        + trial.get("exclusion_criteria", [])
+        + [
+            trial.get("title", ""),
+            trial.get("brief_title", ""),
+            trial.get("official_title", ""),
+            trial.get("summary", ""),
+            trial.get("brief_summary", ""),
+            trial.get("description", ""),
+        ]
     )
-    if _any_match(_TRIAL_STIMULATION_PATTERNS, trial_text):
+    if _any_match(_TRIAL_STIMULATION_PATTERNS, all_trial_fields):
         return (
             "hard safety contraindication: implanted cardiac device is incompatible with transcranial/electrical stimulation",
             "implanted cardiac device present; stimulation trial",
+        )
+
+    # Also block if exclusion criteria explicitly list pacemaker as an exclusion
+    _EXPLICIT_PACEMAKER_EXCLUSION_PATTERNS = [
+        r"(?:metal.*implants?.*and.*)?cardiac\s+pacemaker",
+        r"pacemaker.*(?:exclusion|excluded|contraindicated|not permitted)",
+        r"(?:exclusion|excluded|contraindicated).*pacemaker",
+        r"metal.*implants?.*pacemaker",
+        r"pacemaker.*metal.*implants?",
+    ]
+    excl_text = _text(trial.get("exclusion_criteria", []))
+    if _any_match(_EXPLICIT_PACEMAKER_EXCLUSION_PATTERNS, excl_text):
+        return (
+            "hard safety contraindication: patient has implanted cardiac pacemaker which is explicitly excluded",
+            "implanted cardiac device present; pacemaker explicitly excluded",
         )
 
     return None, None

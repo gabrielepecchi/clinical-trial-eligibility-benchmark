@@ -1391,3 +1391,83 @@ def test_not_eligible_moca_below_threshold_cognitive():
         f"got '{result['prediction']}'. blocking_criteria={result['blocking_criteria']}"
     )
     assert any("moca" in c.lower() for c in result["blocking_criteria"])
+
+# ---------------------------------------------------------------------------
+# New regression tests — pass 6
+# ---------------------------------------------------------------------------
+
+def test_not_eligible_pacemaker_trial_title_transcranial_electrical():
+    """Pacemaker patient + trial title contains 'transcranial electrical stimulation' -> not_eligible."""
+    patient = make_patient(
+        age=68,
+        diagnosis=["Parkinson disease"],
+        key_features=["implanted cardiac pacemaker"],
+        medications=[],
+        exclusions=[],
+    )
+    trial = make_trial(
+        title="Transcranial electrical stimulation for gait in Parkinson disease",
+        inclusion_criteria=[
+            "Age 40 to 80 years",
+            "Confirmed Parkinson disease diagnosis",
+        ],
+        exclusion_criteria=[],
+    )
+    result = match_patient_to_trial(patient, trial)
+    assert result["prediction"] == "not_eligible", (
+        f"Expected 'not_eligible' for pacemaker + transcranial electrical stimulation trial title, "
+        f"got '{result['prediction']}'. blocking_criteria={result['blocking_criteria']}"
+    )
+
+
+def test_not_eligible_pacemaker_explicit_exclusion_criterion():
+    """Pacemaker patient + exclusion criterion listing 'metal implants and a cardiac pacemaker' -> not_eligible."""
+    patient = make_patient(
+        age=70,
+        diagnosis=["Parkinson disease"],
+        key_features=["implanted cardiac pacemaker"],
+        medications=[],
+        exclusions=[],
+    )
+    trial = make_trial(
+        inclusion_criteria=[
+            "Age 40 to 80 years",
+            "Confirmed Parkinson disease diagnosis",
+        ],
+        exclusion_criteria=[
+            "Patients with metal implants and a cardiac pacemaker",
+        ],
+    )
+    result = match_patient_to_trial(patient, trial)
+    assert result["prediction"] == "not_eligible", (
+        f"Expected 'not_eligible' for pacemaker explicitly excluded, "
+        f"got '{result['prediction']}'. blocking_criteria={result['blocking_criteria']}"
+    )
+
+
+def test_not_not_eligible_pacemaker_cognitive_motor_vr():
+    """Pacemaker patient + VR/cognitive-motor training trial with no electrical stimulation -> not not_eligible."""
+    patient = make_patient(
+        age=70,
+        diagnosis=["Parkinson disease"],
+        key_features=["implanted cardiac pacemaker"],
+        medications=[],
+        exclusions=[],
+    )
+    trial = make_trial(
+        inclusion_criteria=[
+            "Age 40 to 80 years",
+            "Confirmed Parkinson disease diagnosis",
+            "Virtual reality cognitive-motor training program",
+        ],
+        exclusion_criteria=[],
+    )
+    result = match_patient_to_trial(patient, trial)
+    assert result["prediction"] != "not_eligible" or not any(
+        kw in c.lower()
+        for c in result["blocking_criteria"]
+        for kw in ("stimulation", "transcranial", "tms", "tdcs", "pacemaker")
+    ), (
+        f"Stimulation/pacemaker blocker should not fire for VR/cognitive-motor trial. "
+        f"prediction={result['prediction']}, blocking_criteria={result['blocking_criteria']}"
+    )
