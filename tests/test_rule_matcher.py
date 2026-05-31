@@ -2,6 +2,7 @@
 
 from rule_matcher import match_patient_to_trial, match_patient_to_trial_criteria
 from models import CriterionDecision, CriterionType
+from tests.helpers import make_patient
 
 # ---------------------------------------------------------------------------
 # Shared fixtures
@@ -17,25 +18,6 @@ REQUIRED_KEYS = {
 }
 
 VALID_PREDICTIONS = {"eligible", "not_eligible", "unclear"}
-
-
-# ---------------------------------------------------------------------------
-# Inline patient and trial helpers
-# ---------------------------------------------------------------------------
-
-def make_patient(**kwargs) -> dict:
-    """Return a minimal patient dict, overridable via kwargs."""
-    base = {
-        "patient_id": "P_TEST",
-        "age": 60,
-        "sex": "male",
-        "diagnosis": ["Parkinson disease"],
-        "key_features": ["Hoehn and Yahr stage 2"],
-        "exclusions": [],
-        "medications": ["levodopa/carbidopa 100/25 mg three times daily"],
-    }
-    base.update(kwargs)
-    return base
 
 
 def make_trial(**kwargs) -> dict:
@@ -142,40 +124,28 @@ def test_eligible_blocking_criteria_is_empty():
 
 def test_not_eligible_when_patient_too_young():
     patient = make_patient(age=30)
-    trial = make_trial(
-        inclusion_criteria=["Age 40 to 80 years"],
-        exclusion_criteria=[],
-    )
+    trial = make_trial(inclusion_criteria=["Age 40 to 80 years"], exclusion_criteria=[])
     result = match_patient_to_trial(patient, trial)
     assert result["prediction"] == "not_eligible"
 
 
 def test_not_eligible_when_patient_too_old():
     patient = make_patient(age=90)
-    trial = make_trial(
-        inclusion_criteria=["Age 40 to 80 years"],
-        exclusion_criteria=[],
-    )
+    trial = make_trial(inclusion_criteria=["Age 40 to 80 years"], exclusion_criteria=[])
     result = match_patient_to_trial(patient, trial)
     assert result["prediction"] == "not_eligible"
 
 
 def test_not_eligible_age_confidence_is_correct():
     patient = make_patient(age=30)
-    trial = make_trial(
-        inclusion_criteria=["Age 40 to 80 years"],
-        exclusion_criteria=[],
-    )
+    trial = make_trial(inclusion_criteria=["Age 40 to 80 years"], exclusion_criteria=[])
     result = match_patient_to_trial(patient, trial)
     assert result["confidence"] == 0.90
 
 
 def test_not_eligible_age_has_blocking_criterion():
     patient = make_patient(age=30)
-    trial = make_trial(
-        inclusion_criteria=["Age 40 to 80 years"],
-        exclusion_criteria=[],
-    )
+    trial = make_trial(inclusion_criteria=["Age 40 to 80 years"], exclusion_criteria=[])
     result = match_patient_to_trial(patient, trial)
     assert len(result["blocking_criteria"]) >= 1
 
@@ -357,16 +327,14 @@ def test_age_inclusion_met_when_in_range():
     patient = make_patient(age=60)
     trial = make_trial(inclusion_criteria=["Age 40 to 80 years"], exclusion_criteria=[])
     results = match_patient_to_trial_criteria(patient, trial)
-    age_result = results[0]
-    assert age_result.decision == CriterionDecision.met
+    assert results[0].decision == CriterionDecision.met
 
 
 def test_age_inclusion_not_met_when_out_of_range():
     patient = make_patient(age=30)
     trial = make_trial(inclusion_criteria=["Age 40 to 80 years"], exclusion_criteria=[])
     results = match_patient_to_trial_criteria(patient, trial)
-    age_result = results[0]
-    assert age_result.decision == CriterionDecision.not_met
+    assert results[0].decision == CriterionDecision.not_met
 
 
 def test_dbs_exclusion_met_when_patient_has_dbs():
@@ -379,8 +347,7 @@ def test_dbs_exclusion_met_when_patient_has_dbs():
         exclusion_criteria=["Deep brain stimulation (DBS) implant"],
     )
     results = match_patient_to_trial_criteria(patient, trial)
-    dbs_result = results[0]
-    assert dbs_result.decision == CriterionDecision.met
+    assert results[0].decision == CriterionDecision.met
 
 
 def test_missing_moca_score_returns_unknown():
@@ -478,6 +445,3 @@ def test_no_duplicate_cognitive_score_label():
     )
     result = match_patient_to_trial(patient, trial)
     assert result["missing_information"].count("cognitive_score") == 1
-
-
-
