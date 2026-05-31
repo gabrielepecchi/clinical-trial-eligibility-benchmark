@@ -4,6 +4,7 @@ This evaluates the rule-based matcher against labels_llm_reviewed.json.
 The labels are benchmark draft labels and still need spot-checking.
 """
 
+import csv
 import json
 from pathlib import Path
 
@@ -14,6 +15,44 @@ PATIENTS_FILE = Path("data/processed/patient_cases.json")
 TRIALS_FILE = Path("data/processed/trial_cases.json")
 LABELS_FILE = Path("data/processed/labels_llm_reviewed.json")
 RESULTS_FILE = Path("data/processed/results_llm_reviewed.json")
+RESULTS_CSV_FILE = Path("data/processed/results_llm_reviewed.csv")
+
+
+_CSV_FIELDNAMES = [
+    "patient_id", "trial_id", "gold_label", "predicted_label",
+    "correct", "label_status", "confidence",
+    "matched_facts", "blocking_criteria", "uncertain_criteria",
+    "matcher_explanation", "gold_rationale",
+]
+
+
+def build_llm_reviewed_csv_rows(prediction_records: list[dict]) -> list[dict]:
+    rows = []
+    for r in prediction_records:
+        gold = r.get("gold_label", "")
+        predicted = r.get("predicted_label", "")
+        rows.append({
+            "patient_id": r.get("patient_id", ""),
+            "trial_id": r.get("trial_id", ""),
+            "gold_label": gold,
+            "predicted_label": predicted,
+            "correct": gold == predicted,
+            "label_status": r.get("label_status", ""),
+            "confidence": r.get("confidence", ""),
+            "matched_facts": "; ".join(r.get("matched_facts") or []),
+            "blocking_criteria": "; ".join(r.get("blocking_criteria") or []),
+            "uncertain_criteria": "; ".join(r.get("uncertain_criteria") or []),
+            "matcher_explanation": r.get("matcher_explanation", ""),
+            "gold_rationale": r.get("gold_rationale", ""),
+        })
+    return rows
+
+
+def write_llm_reviewed_csv_rows(rows: list[dict], output_path: Path) -> None:
+    with output_path.open("w", newline="", encoding="utf-8") as f:
+        writer = csv.DictWriter(f, fieldnames=_CSV_FIELDNAMES, extrasaction="ignore")
+        writer.writeheader()
+        writer.writerows(rows)
 
 
 def load_json(path: Path) -> list[dict]:
@@ -84,6 +123,9 @@ def main() -> None:
 
     RESULTS_FILE.write_text(json.dumps(output, indent=2), encoding="utf-8")
 
+    csv_rows = build_llm_reviewed_csv_rows(prediction_records)
+    write_llm_reviewed_csv_rows(csv_rows, RESULTS_CSV_FILE)
+
     print("\n=== LLM-Reviewed Draft Benchmark Results ===")
     print(f"Evaluated pairs : {len(gold_labels)}")
     print(f"Skipped pairs   : {skipped}")
@@ -95,6 +137,7 @@ def main() -> None:
         print(f"  {label:<15} {values['f1']:.3f}")
 
     print(f"\nResults saved to {RESULTS_FILE}")
+    print(f"Predictions CSV saved to {RESULTS_CSV_FILE}")
 
 
 if __name__ == "__main__":
