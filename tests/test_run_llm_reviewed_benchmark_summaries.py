@@ -1,4 +1,4 @@
-"""Tests for CSV helpers in run_llm_reviewed_benchmark.py."""
+"""Tests for LLM-reviewed benchmark summary and export helpers."""
 
 from run_llm_reviewed_benchmark import (
     build_llm_reviewed_csv_rows,
@@ -528,5 +528,79 @@ def test_format_error_severity_summary_rate_three_decimals():
 
 def test_format_error_severity_summary_zero_no_crash():
     result = format_error_severity_summary(_ES_ZERO)
+    assert isinstance(result, str)
+    assert "0.000" in result
+
+
+# --- format_safety_uncertainty_summary ---
+
+from run_llm_reviewed_benchmark import format_safety_uncertainty_summary
+
+_SU_INPUT = {
+    "total_predictions": 10,
+    "unsafe_eligible_errors": 1,
+    "overly_conservative_errors": 2,
+    "uncertainty_errors": 3,
+    "unclear_recall": 0.333,
+    "unclear_precision": 0.5,
+    "overcommitment_rate": 0.667,
+}
+
+_SU_ZERO = {
+    "total_predictions": 0,
+    "unsafe_eligible_errors": 0,
+    "overly_conservative_errors": 0,
+    "uncertainty_errors": 0,
+    "unclear_recall": 0,
+    "unclear_precision": 0,
+    "overcommitment_rate": 0,
+}
+
+
+def test_format_safety_uncertainty_summary_returns_string():
+    assert isinstance(format_safety_uncertainty_summary(_SU_INPUT), str)
+
+
+def test_format_safety_uncertainty_summary_header():
+    assert "Safety & Uncertainty Summary" in format_safety_uncertainty_summary(_SU_INPUT)
+
+
+def test_format_safety_uncertainty_summary_total_predictions():
+    assert "Total predictions" in format_safety_uncertainty_summary(_SU_INPUT)
+
+
+def test_format_safety_uncertainty_summary_unsafe_eligible_errors():
+    assert "Unsafe eligible errors" in format_safety_uncertainty_summary(_SU_INPUT)
+
+
+def test_format_safety_uncertainty_summary_overly_conservative_errors():
+    assert "Overly conservative errors" in format_safety_uncertainty_summary(_SU_INPUT)
+
+
+def test_format_safety_uncertainty_summary_uncertainty_errors():
+    assert "Uncertainty errors" in format_safety_uncertainty_summary(_SU_INPUT)
+
+
+def test_format_safety_uncertainty_summary_unclear_recall():
+    assert "Unclear recall" in format_safety_uncertainty_summary(_SU_INPUT)
+
+
+def test_format_safety_uncertainty_summary_unclear_precision():
+    assert "Unclear precision" in format_safety_uncertainty_summary(_SU_INPUT)
+
+
+def test_format_safety_uncertainty_summary_overcommitment_rate():
+    assert "Overcommitment rate" in format_safety_uncertainty_summary(_SU_INPUT)
+
+
+def test_format_safety_uncertainty_summary_rate_three_decimals():
+    result = format_safety_uncertainty_summary(_SU_INPUT)
+    assert "0.333" in result
+    assert "0.500" in result
+    assert "0.667" in result
+
+
+def test_format_safety_uncertainty_summary_zero_no_crash():
+    result = format_safety_uncertainty_summary(_SU_ZERO)
     assert isinstance(result, str)
     assert "0.000" in result

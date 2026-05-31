@@ -143,6 +143,21 @@ def build_benchmark_output(
     }
 
 
+def format_safety_uncertainty_summary(s: dict) -> str:
+    """Format safety and uncertainty summary as a printable string."""
+    lines = [
+        "\n=== Safety & Uncertainty Summary ===",
+        f"Total predictions    : {s['total_predictions']}",
+        f"Unsafe eligible errors     : {s['unsafe_eligible_errors']}",
+        f"Overly conservative errors : {s['overly_conservative_errors']}",
+        f"Uncertainty errors         : {s['uncertainty_errors']}",
+        f"Unclear recall             : {s['unclear_recall']:.3f}",
+        f"Unclear precision          : {s['unclear_precision']:.3f}",
+        f"Overcommitment rate        : {s['overcommitment_rate']:.3f}",
+    ]
+    return "\n".join(lines)
+
+
 def format_error_severity_summary(s: dict) -> str:
     """Format error severity summary as a printable string."""
     lines = [
@@ -292,15 +307,7 @@ def main() -> None:
     print(f"Predictions CSV saved to {RESULTS_CSV_FILE}")
     print(f"Criterion-level CSV saved to {CRITERION_CSV_FILE}")
 
-    print("\n=== Safety & Uncertainty Summary ===")
-    print(f"Total predictions    : {safety_summary['total_predictions']}")
-    print(f"Unsafe eligible errors     : {safety_summary['unsafe_eligible_errors']}")
-    print(f"Overly conservative errors : {safety_summary['overly_conservative_errors']}")
-    print(f"Uncertainty errors         : {safety_summary['uncertainty_errors']}")
-    print(f"Unclear recall             : {safety_summary['unclear_recall']:.3f}")
-    print(f"Unclear precision          : {safety_summary['unclear_precision']:.3f}")
-    print(f"Overcommitment rate        : {safety_summary['overcommitment_rate']:.3f}")
-
+    print(format_safety_uncertainty_summary(safety_summary))
     print(format_error_severity_summary(error_summary))
 
 
