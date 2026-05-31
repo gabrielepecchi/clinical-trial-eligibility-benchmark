@@ -495,8 +495,10 @@ _HARD_CONTRAINDICATION_PAIRS: list[tuple[list[str], list[str]]] = [
         # Implanted cardiac device + electrical brain stimulation
         [r"\bpacemaker\b", r"cardiac.*pacemaker", r"implanted.*cardiac",
          r"cardiac.*device", r"implanted.*pacemaker"],
-        [r"\brtms\b", r"\btms\b", r"\btdcs\b",
+        [r"\brtms\b", r"\btms\b", r"\btdcs\b", r"\btacs\b",
          r"transcranial.*magnetic", r"transcranial.*electrical",
+         r"transcranial.*alternating.*current",
+         r"alternating.*current.*stimulation",
          r"repetitive.*transcranial", r"brain.*stimulation.*trial",
          r"non.invasive.*brain.*stimulation"],
     ),
@@ -573,9 +575,12 @@ _TRIAL_STIMULATION_PATTERNS = [
     r"\brtms\b",
     r"\btms\b",
     r"\btdcs\b",
+    r"\btacs\b",
     r"transcranial.*magnetic",
     r"transcranial.*electric",
     r"transcranial.*direct.*current",
+    r"transcranial.*alternating.*current",
+    r"alternating.*current.*stimulation",
     r"repetitive.*transcranial",
     r"non.invasive.*brain.*stimulation",
 ]
@@ -1167,7 +1172,17 @@ def _check_comorbidity_protocol_risk(
         return None, None, None
 
     inclusion_text = _text(trial.get("inclusion_criteria", []))
-    trial_text = inclusion_text + " " + _text(trial.get("exclusion_criteria", []))
+    _TRIAL_META_FIELDS = [
+        "title", "brief_title", "official_title", "summary", "brief_summary",
+        "description", "detailed_description", "intervention", "intervention_name",
+        "intervention_type", "interventions", "keywords", "conditions",
+    ]
+    meta_parts = []
+    for field in _TRIAL_META_FIELDS:
+        val = trial.get(field)
+        if val is not None:
+            meta_parts.append(_text(val))
+    trial_text = inclusion_text + " " + _text(trial.get("exclusion_criteria", [])) + " " + " ".join(meta_parts)
 
     if not _any_match(_TRIAL_COMPLEX_FOCUS_PATTERNS, trial_text):
         return None, None, None

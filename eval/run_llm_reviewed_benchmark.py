@@ -236,7 +236,13 @@ def main() -> None:
             skipped += 1
             continue
 
-        result = match_patient_to_trial(patient, trial)
+        _TRIAL_META_FIELDS = [
+            "title", "brief_title", "official_title", "summary", "brief_summary",
+            "description", "detailed_description", "intervention", "intervention_name",
+            "intervention_type", "interventions", "keywords", "conditions",
+        ]
+        enriched_trial = {**trial, **{f: trial[f] for f in _TRIAL_META_FIELDS if f in trial}}
+        result = match_patient_to_trial(patient, enriched_trial)
         predicted_label = result["prediction"]
         gold_label = record["label"]
 
@@ -247,7 +253,7 @@ def main() -> None:
                 "decision": cr.decision.value,
                 "reason": cr.reason,
             }
-            for cr in match_patient_to_trial_criteria(patient, trial)
+            for cr in match_patient_to_trial_criteria(patient, enriched_trial)
         ]
 
         gold_labels.append(gold_label)
