@@ -642,3 +642,117 @@ def test_eligible_when_dbs_patient_in_dbs_surgery_required_study():
     )
 
 
+# ---------------------------------------------------------------------------
+# New safety blocker tests
+# ---------------------------------------------------------------------------
+
+def test_not_eligible_cognitive_exclusion_general_dementia():
+    """Exclusion mentions dementia (no numeric threshold); patient has cognitive impairment."""
+    patient = make_patient(
+        age=68,
+        diagnosis=["Parkinson disease"],
+        key_features=["mild cognitive impairment documented", "low MoCA"],
+        medications=[],
+        exclusions=[],
+    )
+    trial = make_trial(
+        inclusion_criteria=["Age 40 to 80 years", "Confirmed Parkinson disease diagnosis"],
+        exclusion_criteria=["Dementia or cognitive impairment"],
+    )
+    result = match_patient_to_trial(patient, trial)
+    assert result["prediction"] == "not_eligible", (
+        f"Expected 'not_eligible' for cognitive exclusion, got '{result['prediction']}'. "
+        f"blocking_criteria={result['blocking_criteria']}"
+    )
+    assert any(
+        kw in c.lower()
+        for c in result["blocking_criteria"]
+        for kw in ("cognitive", "dementia", "moca", "mmse")
+    )
+
+
+def test_not_eligible_cognitive_inclusion_minimum_mmse():
+    """Inclusion requires MMSE >= 25; patient has documented low cognitive score."""
+    patient = make_patient(
+        age=65,
+        diagnosis=["Parkinson disease"],
+        key_features=["MMSE score 19"],
+        medications=[],
+        exclusions=[],
+    )
+    trial = make_trial(
+        inclusion_criteria=[
+            "Age 40 to 80 years",
+            "Confirmed Parkinson disease diagnosis",
+            "MMSE >= 25 required for protocol compliance",
+        ],
+        exclusion_criteria=[],
+    )
+    result = match_patient_to_trial(patient, trial)
+    assert result["prediction"] == "not_eligible", (
+        f"Expected 'not_eligible' for MMSE inclusion minimum, got '{result['prediction']}'. "
+        f"blocking_criteria={result['blocking_criteria']}"
+    )
+    assert any(
+        kw in c.lower()
+        for c in result["blocking_criteria"]
+        for kw in ("cognitive", "mmse", "cognition")
+    )
+
+
+def test_not_eligible_dbs_required_patient_no_dbs():
+    """Trial requires prior bilateral STN DBS surgery; patient has no DBS."""
+    patient = make_patient(
+        age=62,
+        diagnosis=["Parkinson disease"],
+        key_features=["idiopathic Parkinson disease, levodopa responsive"],
+        medications=["levodopa/carbidopa"],
+        exclusions=[],
+    )
+    trial = make_trial(
+        inclusion_criteria=[
+            "Age 40 to 80 years",
+            "Confirmed Parkinson disease diagnosis",
+            "Prior bilateral STN DBS surgery required",
+        ],
+        exclusion_criteria=[],
+    )
+    result = match_patient_to_trial(patient, trial)
+    assert result["prediction"] == "not_eligible", (
+        f"Expected 'not_eligible' for DBS-required trial without patient DBS, "
+        f"got '{result['prediction']}'. blocking_criteria={result['blocking_criteria']}"
+    )
+    assert any(
+        "dbs" in c.lower()
+        for c in result["blocking_criteria"]
+    )
+
+
+def test_not_eligible_pacemaker_in_tdcs_trial():
+    """Patient has implanted cardiac pacemaker; trial uses tDCS."""
+    patient = make_patient(
+        age=70,
+        diagnosis=["Parkinson disease"],
+        key_features=["implanted cardiac pacemaker"],
+        medications=[],
+        exclusions=[],
+    )
+    trial = make_trial(
+        inclusion_criteria=[
+            "Age 40 to 80 years",
+            "Confirmed Parkinson disease diagnosis",
+        ],
+        exclusion_criteria=[
+            "Transcranial direct current stimulation (tDCS) contraindications apply",
+        ],
+    )
+    result = match_patient_to_trial(patient, trial)
+    assert result["prediction"] == "not_eligible", (
+        f"Expected 'not_eligible' for pacemaker in tDCS trial, got '{result['prediction']}'. "
+        f"blocking_criteria={result['blocking_criteria']}"
+    )
+    assert any(
+        kw in c.lower()
+        for c in result["blocking_criteria"]
+        for kw in ("pacemaker", "cardiac", "stimulation", "contraindication")
+    )

@@ -502,6 +502,78 @@ _HARD_CONTRAINDICATION_PAIRS: list[tuple[list[str], list[str]]] = [
     ),
 ]
 
+# Patterns indicating patient has cognitive impairment / dementia (general, non-numeric)
+_PATIENT_COGNITIVE_IMPAIRMENT_PATTERNS = [
+    r"cognitive impairment",
+    r"dementia",
+    r"\bmci\b",
+    r"mild cognitive",
+    r"low moca",
+    r"low mmse",
+    r"impaired cognition",
+    r"cognitive decline",
+    r"neuropsychological impairment",
+]
+
+# Trial exclusion criteria that mention dementia/cognitive impairment without a numeric threshold
+_TRIAL_COGNITIVE_EXCLUSION_GENERAL_PATTERNS = [
+    r"dementia",
+    r"cognitive impairment",
+    r"neuropsychological impairment",
+    r"inability to consent",
+    r"inability to cooperate",
+    r"unable to consent",
+    r"unable to cooperate",
+    r"capacity to consent",
+]
+
+# Trial inclusion criteria requiring cognitive minimum (non-numeric)
+_TRIAL_COGNITIVE_INCLUSION_MIN_PATTERNS = [
+    r"intact cognition",
+    r"capacity to consent",
+    r"capacity to cooperate",
+    r"ability to consent",
+    r"cognitively intact",
+    r"no cognitive impairment",
+    r"normal cognition",
+]
+
+_MMSE_INCLUSION_MIN_PATTERN = re.compile(r"mmse\s*[≥>=]+\s*(\d+)", re.IGNORECASE)
+_MOCA_INCLUSION_MIN_PATTERN = re.compile(r"moca\s*[≥>=]+\s*(\d+)", re.IGNORECASE)
+
+# Trial inclusion criteria requiring DBS
+_TRIAL_DBS_REQUIRED_PATTERNS = [
+    r"prior.*bilateral.*stn.*dbs",
+    r"bilateral.*stn.*dbs.*surgery",
+    r"prior.*dbs.*surgery",
+    r"undergone.*dbs",
+    r"active.*dbs.*hardware",
+    r"dbs.*implanted",
+    r"subthalamic.*dbs",
+    r"dbs.*surgery.*required",
+    r"must.*have.*dbs",
+    r"requires.*dbs",
+    r"prior.*deep brain stimulation",
+    r"undergone.*deep brain stimulation",
+    r"deep brain stimulation.*surgery",
+    r"directional.*lead.*hardware",
+    r"dbs.*directional",
+]
+
+# Broader transcranial/electrical stimulation patterns for device contraindication
+_TRIAL_STIMULATION_PATTERNS = [
+    r"\brtms\b",
+    r"\btms\b",
+    r"\btdcs\b",
+    r"transcranial.*magnetic",
+    r"transcranial.*electrical",
+    r"transcranial.*direct",
+    r"repetitive.*transcranial",
+    r"brain.*stimulation",
+    r"non.invasive.*brain.*stimulation",
+    r"electrical.*stimulation",
+]
+
 _UNVERIFIABLE_INCLUSION_PATTERNS = [
     r"ability to.*(?:operate|use).*(?:device|app|application|system|software|technology)",
     r"(?:operate|use).*(?:device|app|application|system|software|technology).*independently",
@@ -1011,6 +1083,158 @@ def _check_comorbidity_protocol_risk(
 
 
 # ---------------------------------------------------------------------------
+# New safety blocker checks
+# ---------------------------------------------------------------------------
+
+def _check_cognitive_exclusion_general(
+    patient: dict, trial: dict
+) -> tuple[str | None, str | None]:
+    """Block when exclusion criteria mention dementia/cognitive impairment (no numeric threshold)
+    and patient documents cognitive impairment.  Numeric MMSE/MoCA thresholds are handled by
+    _check_cognitive; this covers the non-numeric case only."""
+    exclusion_list = trial.get("exclusion_criteria", [])
+    patient_features = _text(
+        patient.get("key_features", [])
+        + patient.get("exclusions", [])
+        + [patient.get("summary", "")]
+    )
+
+    if not _any_match(_PATIENT_COGNITIVE_IMPAIRMENT_PATTERNS, patient_features):
+        return None, None
+
+    for criterion in exclusion_list:
+        c = criterion.lower()
+        # Skip criteria that already have a numeric threshold (handled by _check_cognitive)
+        if _MMSE_THRESHOLD_PATTERN.search(c) or _MOCA_THRESHOLD_PATTERN.search(c):
+            continue
+        if _any_match(_TRIAL_COGNITIVE_EXCLUSION_GENERAL_PATTERNS, c):
+            return (
+                "cognitive exclusion: trial excludes patients with dementia or cognitive impairment",
+                "cognitive impairment or dementia documented in patient",
+            )
+
+    return None, None
+
+
+def _check_cognitive_inclusion_minimum(
+    patient: dict, trial: dict
+) -> tuple[str | None, str | None]:
+    """Block when inclusion criteria require a minimum cognitive score or intact cognition
+    and patient data clearly indicates failure."""
+    inclusion_list = trial.get("inclusion_criteria", [])
+    patient_features = _text(patient.get("key_features", []))
+
+    for criterion in inclusion_list:
+        c = criterion.lower()
+
+        # Numeric MMSE minimum
+        m = _MMSE_INCLUSION_MIN_PATTERN.search(c)
+        if m:
+            required = int(m.group(1))
+            vm = _MMSE_VALUE_PATTERN.search(patient_features)
+            if vm:
+                score = int(vm.group(1))
+                if score < required:
+                    return (
+                        f"cognitive inclusion minimum: MMSE >= {required} required; patient MMSE {score}",
+                        f"patient MMSE {score} below required {required}",
+                    )
+            elif _any_match(_PATIENT_COGNITIVE_IMPAIRMENT_PATTERNS, patient_features):
+                return (
+                    f"cognitive inclusion minimum: MMSE >= {required} required; patient has documented cognitive impairment",
+                    "cognitive impairment documented; MMSE score not available",
+                )
+            continue
+
+        # Numeric MoCA minimum
+        m = _MOCA_INCLUSION_MIN_PATTERN.search(c)
+        if m:
+            required = int(m.group(1))
+            vm = _MOCA_VALUE_PATTERN.search(patient_features)
+            if vm:
+                score = int(vm.group(1))
+                if score < required:
+                    return (
+                        f"cognitive inclusion minimum: MoCA >= {required} required; patient MoCA {score}",
+                        f"patient MoCA {score} below required {required}",
+                    )
+            elif _any_match(_PATIENT_COGNITIVE_IMPAIRMENT_PATTERNS, patient_features):
+                return (
+                    f"cognitive inclusion minimum: MoCA >= {required} required; patient has documented cognitive impairment",
+                    "cognitive impairment documented; MoCA score not available",
+                )
+            continue
+
+        # Non-numeric intact-cognition requirement
+        if _any_match(_TRIAL_COGNITIVE_INCLUSION_MIN_PATTERNS, c):
+            if _any_match(_PATIENT_COGNITIVE_IMPAIRMENT_PATTERNS, patient_features):
+                return (
+                    "cognitive inclusion requirement: intact cognition or consent capacity required; patient has documented cognitive impairment",
+                    "cognitive impairment documented",
+                )
+
+    return None, None
+
+
+def _check_dbs_required(patient: dict, trial: dict) -> tuple[str | None, str | None]:
+    """Block when inclusion criteria require DBS but patient has no documented DBS."""
+    inclusion_list = trial.get("inclusion_criteria", [])
+    has_dbs_requirement = any(
+        _any_match(_TRIAL_DBS_REQUIRED_PATTERNS, c.lower()) for c in inclusion_list
+    )
+    if not has_dbs_requirement:
+        return None, None
+
+    patient_text = _text(
+        patient.get("key_features", [])
+        + patient.get("medications", [])
+        + patient.get("exclusions", [])
+        + [patient.get("summary", "")]
+    )
+    if _any_match(_DBS_PATTERNS, patient_text) and not _has_negated_dbs(patient_text):
+        return None, None  # Patient has DBS — fine
+
+    return (
+        "DBS required: trial requires prior or active DBS implant; patient has no documented DBS",
+        "no DBS documented",
+    )
+
+
+def _check_device_contraindication_stimulation(
+    patient: dict, trial: dict
+) -> tuple[str | None, str | None]:
+    """Block when patient has implanted cardiac device and trial involves transcranial/electrical stimulation."""
+    _PACEMAKER_PATTERNS = [
+        r"\bpacemaker\b",
+        r"cardiac.*pacemaker",
+        r"implanted.*cardiac",
+        r"cardiac.*device",
+        r"implanted.*pacemaker",
+        r"implantable.*cardioverter",
+        r"\bicd\b",
+    ]
+    patient_text = _text(
+        patient.get("key_features", [])
+        + patient.get("medications", [])
+        + patient.get("exclusions", [])
+        + [patient.get("summary", "")]
+    )
+    if not _any_match(_PACEMAKER_PATTERNS, patient_text):
+        return None, None
+
+    trial_text = _text(
+        trial.get("inclusion_criteria", []) + trial.get("exclusion_criteria", [])
+    )
+    if _any_match(_TRIAL_STIMULATION_PATTERNS, trial_text):
+        return (
+            "hard safety contraindication: implanted cardiac device is incompatible with transcranial/electrical stimulation",
+            "implanted cardiac device present; stimulation trial",
+        )
+
+    return None, None
+
+
+# ---------------------------------------------------------------------------
 # Main matcher
 # ---------------------------------------------------------------------------
 
@@ -1057,12 +1281,40 @@ def match_patient_to_trial(patient: dict, trial: dict) -> dict:
         if maob_fact:
             matched_facts.append(maob_fact)
 
-    # --- Cognitive / MMSE / MoCA ---
+    # --- Cognitive / MMSE / MoCA (numeric threshold) ---
     cog_block, cog_fact = _check_cognitive(patient, trial)
     if cog_block:
         blocking_criteria.append(cog_block)
         if cog_fact:
             matched_facts.append(cog_fact)
+
+    # --- Cognitive exclusion — general (no numeric threshold) ---
+    cog_gen_block, cog_gen_fact = _check_cognitive_exclusion_general(patient, trial)
+    if cog_gen_block and cog_gen_block not in blocking_criteria:
+        blocking_criteria.append(cog_gen_block)
+        if cog_gen_fact:
+            matched_facts.append(cog_gen_fact)
+
+    # --- Cognitive inclusion minimum ---
+    cog_min_block, cog_min_fact = _check_cognitive_inclusion_minimum(patient, trial)
+    if cog_min_block and cog_min_block not in blocking_criteria:
+        blocking_criteria.append(cog_min_block)
+        if cog_min_fact:
+            matched_facts.append(cog_min_fact)
+
+    # --- DBS required by inclusion ---
+    dbs_req_block, dbs_req_fact = _check_dbs_required(patient, trial)
+    if dbs_req_block:
+        blocking_criteria.append(dbs_req_block)
+        if dbs_req_fact:
+            matched_facts.append(dbs_req_fact)
+
+    # --- Device contraindication: pacemaker + stimulation (broad) ---
+    dev_block, dev_fact = _check_device_contraindication_stimulation(patient, trial)
+    if dev_block and dev_block not in blocking_criteria:
+        blocking_criteria.append(dev_block)
+        if dev_fact:
+            matched_facts.append(dev_fact)
 
     # --- Hoehn and Yahr stage ---
     hy_block, hy_fact = _check_hy_stage(patient, trial)
