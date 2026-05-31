@@ -3043,3 +3043,592 @@ def test_dementia_explicit_dementia_exclusion_not_eligible():
         f"Dementia patient must be not_eligible when trial explicitly excludes dementia. "
         f"prediction={result['prediction']}"
     )
+
+
+# ---------------------------------------------------------------------------
+# Non-motor / safety comorbidity uncertainty
+# ---------------------------------------------------------------------------
+
+def test_rbd_explicit_neuropsychiatric_protocol_exclusion_unclear():
+    """RBD patient + trial with explicit neuropsychiatric protocol/exclusion ambiguity -> unclear."""
+    patient = make_patient(
+        age=66,
+        diagnosis=["Parkinson disease"],
+        key_features=["REM sleep behavior disorder", "RBD documented"],
+        medications=["levodopa"],
+    )
+    trial = make_trial(
+        inclusion_criteria=[
+            "Age 40 to 80 years",
+            "Confirmed Parkinson disease diagnosis",
+        ],
+        exclusion_criteria=[
+            "Psychiatric exclusion criteria apply",
+            "Neuropsychiatric protocol safety assessment required",
+        ],
+    )
+    result = match_patient_to_trial(patient, trial)
+    assert result["prediction"] == "unclear", (
+        f"RBD patient in neuropsychiatric protocol/exclusion trial should be unclear. "
+        f"prediction={result['prediction']}, uncertain={result['uncertain_criteria']}"
+    )
+
+
+def test_rbd_simple_pd_age_trial_eligible():
+    """RBD patient + simple age/confirmed PD trial -> eligible."""
+    patient = make_patient(
+        age=66,
+        diagnosis=["Parkinson disease"],
+        key_features=["REM sleep behavior disorder"],
+        medications=["levodopa"],
+    )
+    trial = make_trial(
+        inclusion_criteria=[
+            "Age 40 to 80 years",
+            "Confirmed Parkinson disease diagnosis",
+        ],
+        exclusion_criteria=[],
+    )
+    result = match_patient_to_trial(patient, trial)
+    assert result["prediction"] == "eligible", (
+        f"RBD patient in simple PD age trial should be eligible. "
+        f"prediction={result['prediction']}, uncertain={result['uncertain_criteria']}"
+    )
+
+
+def test_rbd_nonmotor_phenotype_study_not_unclear_by_nonmotor_helper():
+    """RBD patient + non-motor PD phenotype/dementia evaluation study -> not made unclear by non-motor helper."""
+    patient = make_patient(
+        age=67,
+        diagnosis=["Parkinson disease"],
+        key_features=["REM sleep behavior disorder"],
+        medications=["levodopa"],
+    )
+    trial = make_trial(
+        inclusion_criteria=[
+            "Age 40 to 80 years",
+            "Confirmed Parkinson disease diagnosis",
+            "Non-motor PD phenotype study",
+            "Dementia evaluation in Parkinson disease",
+        ],
+        exclusion_criteria=[],
+    )
+    result = match_patient_to_trial(patient, trial)
+    assert not any(
+        "rem sleep" in c.lower() or "rbd" in c.lower()
+        for c in result["uncertain_criteria"]
+    ), (
+        f"Non-motor helper must not flag RBD in phenotype/dementia evaluation study. "
+        f"uncertain={result['uncertain_criteria']}"
+    )
+
+
+def test_orthostatic_hypotension_rehab_trial_unclear():
+    """Orthostatic hypotension + rehabilitation/home physiotherapy trial -> unclear."""
+    patient = make_patient(
+        age=71,
+        diagnosis=["Parkinson disease"],
+        key_features=["orthostatic hypotension documented"],
+        medications=["levodopa"],
+    )
+    trial = make_trial(
+        inclusion_criteria=[
+            "Age 40 to 80 years",
+            "Confirmed Parkinson disease diagnosis",
+            "Home physiotherapy rehabilitation program",
+        ],
+        exclusion_criteria=[],
+    )
+    result = match_patient_to_trial(patient, trial)
+    assert result["prediction"] == "unclear", (
+        f"Orthostatic hypotension patient in rehab trial should be unclear. "
+        f"prediction={result['prediction']}, uncertain={result['uncertain_criteria']}"
+    )
+
+
+def test_depression_pet_imaging_trial_unclear():
+    """Depression + PET imaging/biomarker trial -> unclear."""
+    patient = make_patient(
+        age=63,
+        diagnosis=["Parkinson disease"],
+        key_features=["depression documented", "mild depressive symptoms"],
+        medications=["levodopa"],
+    )
+    trial = make_trial(
+        inclusion_criteria=[
+            "Age 40 to 80 years",
+            "Confirmed Parkinson disease diagnosis",
+            "PET imaging biomarker study",
+        ],
+        exclusion_criteria=[],
+    )
+    result = match_patient_to_trial(patient, trial)
+    assert result["prediction"] == "unclear", (
+        f"Depression patient in PET imaging trial should be unclear. "
+        f"prediction={result['prediction']}, uncertain={result['uncertain_criteria']}"
+    )
+
+
+def test_depression_psychological_treatment_trial_not_unclear_by_nonmotor_helper():
+    """Depression patient + psychological/depression treatment trial -> not made unclear solely by non-motor helper."""
+    patient = make_patient(
+        age=63,
+        diagnosis=["Parkinson disease"],
+        key_features=["depression documented"],
+        medications=["levodopa"],
+    )
+    trial = make_trial(
+        inclusion_criteria=[
+            "Age 40 to 80 years",
+            "Confirmed Parkinson disease diagnosis",
+            "Psychological depression treatment study",
+        ],
+        exclusion_criteria=[],
+    )
+    result = match_patient_to_trial(patient, trial)
+    assert not any(
+        "depression" in c.lower() and "confound" in c.lower()
+        for c in result["uncertain_criteria"]
+    ), (
+        f"Non-motor helper must not flag depression in psychological/depression treatment trial. "
+        f"uncertain={result['uncertain_criteria']}"
+    )
+
+
+def test_frailty_explicit_frailty_home_physiotherapy_trial_eligible():
+    """Frailty patient + explicit frailty/home physiotherapy trial -> eligible."""
+    patient = make_patient(
+        age=78,
+        diagnosis=["Parkinson disease"],
+        key_features=["frailty noted", "recurrent falls"],
+        medications=[],
+        exclusions=[],
+    )
+    trial = make_trial(
+        inclusion_criteria=[
+            "Age 40 to 80 years",
+            "Confirmed Parkinson disease diagnosis",
+            "Frailty present as defined by Fried criteria",
+            "Home physiotherapy frailty rehabilitation study",
+        ],
+        exclusion_criteria=[],
+    )
+    result = match_patient_to_trial(patient, trial)
+    assert result["prediction"] == "eligible", (
+        f"Frailty patient in frailty/home-physio trial must stay eligible. "
+        f"prediction={result['prediction']}, uncertain={result['uncertain_criteria']}"
+    )
+
+
+def test_frailty_mindfulness_adherence_trial_unclear():
+    """Frailty/recurrent falls + mindfulness or adherence/sustained participation trial -> unclear."""
+    patient = make_patient(
+        age=77,
+        diagnosis=["Parkinson disease"],
+        key_features=["frailty noted", "recurrent falls"],
+        medications=["levodopa"],
+    )
+    trial = make_trial(
+        inclusion_criteria=[
+            "Age 40 to 80 years",
+            "Confirmed Parkinson disease diagnosis",
+            "Mindfulness-based sustained participation program",
+        ],
+        exclusion_criteria=[],
+    )
+    result = match_patient_to_trial(patient, trial)
+    assert result["prediction"] == "unclear", (
+        f"Frailty patient in mindfulness/adherence trial should be unclear. "
+        f"prediction={result['prediction']}, uncertain={result['uncertain_criteria']}"
+    )
+
+
+def test_active_cancer_gait_neuroprotection_trial_unclear():
+    """Active cancer treatment + gait/neuroprotection/safety-sensitive intervention -> unclear."""
+    patient = make_patient(
+        age=64,
+        diagnosis=["Parkinson disease"],
+        key_features=["active cancer treatment ongoing"],
+        medications=["levodopa"],
+    )
+    trial = make_trial(
+        inclusion_criteria=[
+            "Age 40 to 80 years",
+            "Confirmed Parkinson disease diagnosis",
+            "Neuroprotective gait rehabilitation study",
+        ],
+        exclusion_criteria=[],
+    )
+    result = match_patient_to_trial(patient, trial)
+    assert result["prediction"] == "unclear", (
+        f"Active cancer patient in gait/neuroprotection trial should be unclear. "
+        f"prediction={result['prediction']}, uncertain={result['uncertain_criteria']}"
+    )
+
+
+def test_active_cancer_uncertainty_not_duplicated():
+    """Active cancer patient in safety-sensitive trial -> cancer uncertainty appears at most once."""
+    patient = make_patient(
+        age=64,
+        diagnosis=["Parkinson disease"],
+        key_features=["active cancer treatment ongoing"],
+        medications=["levodopa"],
+    )
+    trial = make_trial(
+        inclusion_criteria=[
+            "Age 40 to 80 years",
+            "Confirmed Parkinson disease diagnosis",
+            "Stable cardiovascular status required",
+        ],
+        exclusion_criteria=["No serious comorbidities"],
+    )
+    result = match_patient_to_trial(patient, trial)
+    cancer_hits = [c for c in result["uncertain_criteria"] if "cancer" in c.lower()]
+    assert len(cancer_hits) <= 1, (
+        f"Cancer uncertainty must not be duplicated. uncertain={result['uncertain_criteria']}"
+    )
+
+
+def test_ordinary_pd_no_comorbidities_broad_trial_eligible():
+    """Ordinary PD patient without non-motor comorbidities + broad PD trial -> eligible."""
+    patient = make_patient(
+        age=60,
+        diagnosis=["Parkinson disease"],
+        key_features=["idiopathic Parkinson disease, stable"],
+        medications=["levodopa/carbidopa"],
+    )
+    trial = make_trial(
+        inclusion_criteria=[
+            "Age 40 to 80 years",
+            "Confirmed Parkinson disease diagnosis",
+        ],
+        exclusion_criteria=[],
+    )
+    result = match_patient_to_trial(patient, trial)
+    assert result["prediction"] == "eligible", (
+        f"Ordinary PD patient without comorbidities should be eligible in broad PD trial. "
+        f"prediction={result['prediction']}, uncertain={result['uncertain_criteria']}"
+    )
+
+
+# ---------------------------------------------------------------------------
+# Regression tests — fix set: healthy control ambiguity
+# ---------------------------------------------------------------------------
+
+def test_healthy_control_age_matched_control_group_trial_unclear():
+    patient = make_patient(
+        age=60,
+        diagnosis=["healthy control"],
+        key_features=["no neurological diagnosis"],
+    )
+    trial = make_trial(
+        inclusion_criteria=[
+            "Age 40 to 80 years",
+            "Parkinson disease diagnosis",
+            "age-matched healthy control group",
+        ],
+        exclusion_criteria=[],
+    )
+    result = match_patient_to_trial(patient, trial)
+    assert result["prediction"] == "unclear", (
+        f"Healthy control + age-matched control group trial must be unclear. "
+        f"prediction={result['prediction']}, blocking={result['blocking_criteria']}"
+    )
+
+
+def test_healthy_control_observational_cohort_pd_trial_unclear():
+    patient = make_patient(
+        age=58,
+        diagnosis=["healthy volunteer"],
+        key_features=["no neurological disease"],
+    )
+    trial = make_trial(
+        inclusion_criteria=[
+            "Age 40 to 80 years",
+            "Parkinson disease diagnosis",
+            "biomarker cohort with healthy comparator group",
+        ],
+        exclusion_criteria=[],
+    )
+    result = match_patient_to_trial(patient, trial)
+    assert result["prediction"] == "unclear", (
+        f"Healthy volunteer + biomarker cohort with comparator must be unclear. "
+        f"prediction={result['prediction']}, blocking={result['blocking_criteria']}"
+    )
+
+
+def test_healthy_control_pd_stimulation_intervention_not_eligible():
+    patient = make_patient(
+        age=62,
+        diagnosis=["healthy control"],
+        key_features=["no neurological diagnosis"],
+    )
+    trial = make_trial(
+        inclusion_criteria=[
+            "Age 40 to 80 years",
+            "Parkinson disease diagnosis",
+            "randomized placebo-controlled DBS intervention trial",
+        ],
+        exclusion_criteria=[],
+    )
+    result = match_patient_to_trial(patient, trial)
+    assert result["prediction"] == "not_eligible", (
+        f"Healthy control in PD interventional trial must be not_eligible. "
+        f"prediction={result['prediction']}"
+    )
+
+
+# ---------------------------------------------------------------------------
+# Regression tests — fix set: DBS ambiguity
+# ---------------------------------------------------------------------------
+
+def test_prior_dbs_patient_dbs_neuropsychiatric_effects_study_not_blocked():
+    patient = make_patient(
+        age=65,
+        diagnosis=["Parkinson disease"],
+        key_features=["bilateral STN DBS implanted 3 years ago"],
+        medications=["levodopa"],
+        exclusions=[],
+    )
+    trial = make_trial(
+        inclusion_criteria=[
+            "Age 40 to 80 years",
+            "Confirmed Parkinson disease diagnosis",
+            "Patients who have undergone DBS surgery",
+        ],
+        exclusion_criteria=[
+            "contraindication to DBS",
+        ],
+    )
+    result = match_patient_to_trial(patient, trial)
+    assert result["prediction"] != "not_eligible" or not any(
+        "deep brain stimulation (dbs) implant is an exclusion" in c.lower()
+        for c in result["blocking_criteria"]
+    ), (
+        f"Prior DBS patient must not be blocked by generic DBS exclusion in DBS effects study. "
+        f"prediction={result['prediction']}, blocking={result['blocking_criteria']}"
+    )
+
+
+def test_prior_dbs_patient_fmri_dbs_imaging_not_blocked():
+    patient = make_patient(
+        age=63,
+        diagnosis=["Parkinson disease"],
+        key_features=["bilateral STN DBS implanted 18 months ago"],
+        medications=["levodopa"],
+    )
+    trial = make_trial(
+        inclusion_criteria=[
+            "Age 40 to 80 years",
+            "Confirmed Parkinson disease diagnosis",
+            "DBS fMRI imaging outcomes study",
+        ],
+        exclusion_criteria=[
+            "DBS contraindications apply",
+        ],
+    )
+    result = match_patient_to_trial(patient, trial)
+    assert result["prediction"] != "not_eligible" or not any(
+        "deep brain stimulation (dbs) implant is an exclusion" in c.lower()
+        for c in result["blocking_criteria"]
+    ), (
+        f"Prior DBS patient must not be blocked in DBS fMRI imaging study. "
+        f"prediction={result['prediction']}, blocking={result['blocking_criteria']}"
+    )
+
+
+def test_no_dbs_dbs_effects_neuropsychiatric_study_unclear():
+    patient = make_patient(
+        age=64,
+        diagnosis=["Parkinson disease"],
+        key_features=["advanced Parkinson disease, no prior DBS"],
+        medications=["levodopa"],
+    )
+    trial = make_trial(
+        inclusion_criteria=[
+            "Age 40 to 80 years",
+            "Confirmed Parkinson disease diagnosis",
+            "DBS neuropsychiatric effects study",
+        ],
+        exclusion_criteria=[],
+    )
+    result = match_patient_to_trial(patient, trial)
+    assert result["prediction"] != "not_eligible" or not any(
+        "dbs required" in c.lower() for c in result["blocking_criteria"]
+    ), (
+        f"No-DBS patient must not be hard-blocked in DBS neuropsychiatric effects study. "
+        f"prediction={result['prediction']}, blocking={result['blocking_criteria']}"
+    )
+
+
+# ---------------------------------------------------------------------------
+# Regression tests — fix set: atypical/suspected parkinsonism
+# ---------------------------------------------------------------------------
+
+def test_atypical_parkinsonism_scale_validation_study_unclear_not_not_eligible():
+    patient = make_patient(
+        age=67,
+        diagnosis=["atypical parkinsonism"],
+        key_features=["suspected parkinsonism", "differential diagnosis ongoing"],
+    )
+    trial = make_trial(
+        inclusion_criteria=[
+            "Confirmed idiopathic Parkinson disease diagnosis",
+            "Age 40 to 80 years",
+            "Questionnaire validation study across PD stages",
+        ],
+        exclusion_criteria=[],
+    )
+    result = match_patient_to_trial(patient, trial)
+    assert result["prediction"] != "not_eligible", (
+        f"Atypical parkinsonism must not be hard-blocked in scale validation study. "
+        f"prediction={result['prediction']}, blocking={result['blocking_criteria']}"
+    )
+
+
+def test_atypical_parkinsonism_observational_cohort_unclear_not_not_eligible():
+    patient = make_patient(
+        age=65,
+        diagnosis=["suspected parkinsonism"],
+        key_features=["unclear parkinsonism"],
+    )
+    trial = make_trial(
+        inclusion_criteria=[
+            "Confirmed idiopathic Parkinson disease diagnosis",
+            "Age 40 to 80 years",
+            "Observational cohort natural history study",
+        ],
+        exclusion_criteria=[],
+    )
+    result = match_patient_to_trial(patient, trial)
+    assert result["prediction"] != "not_eligible", (
+        f"Suspected parkinsonism must not be hard-blocked in observational cohort. "
+        f"prediction={result['prediction']}, blocking={result['blocking_criteria']}"
+    )
+
+
+def test_atypical_parkinsonism_explicit_atypical_exclusion_still_not_eligible():
+    patient = make_patient(
+        age=65,
+        diagnosis=["atypical parkinsonism"],
+        key_features=["poor levodopa response"],
+    )
+    trial = make_trial(
+        inclusion_criteria=[
+            "Confirmed idiopathic Parkinson disease diagnosis",
+            "Age 40 to 80 years",
+            "Observational cohort natural history study",
+        ],
+        exclusion_criteria=[
+            "Atypical or secondary parkinsonism excluded",
+        ],
+    )
+    result = match_patient_to_trial(patient, trial)
+    assert result["prediction"] == "not_eligible", (
+        f"Atypical parkinsonism with explicit atypical exclusion must be not_eligible. "
+        f"prediction={result['prediction']}"
+    )
+
+
+# ---------------------------------------------------------------------------
+# Regression tests — fix set: missing detail uncertainty suppression
+# ---------------------------------------------------------------------------
+
+def test_broad_pd_observational_no_severity_docs_not_unclear_from_severity():
+    patient = make_patient(
+        age=65,
+        diagnosis=["Parkinson disease"],
+        key_features=["idiopathic Parkinson disease"],
+    )
+    trial = make_trial(
+        inclusion_criteria=[
+            "Age 40 to 80 years",
+            "Parkinson disease diagnosis",
+            "Quality of life and non-motor symptom observational study across all PD stages",
+        ],
+        exclusion_criteria=[],
+    )
+    result = match_patient_to_trial(patient, trial)
+    assert not any(
+        "severity" in c.lower() or "stage" in c.lower() or "duration" in c.lower()
+        for c in result["uncertain_criteria"]
+    ), (
+        f"Severity uncertainty must be suppressed for broad PD QoL/observational study. "
+        f"uncertain={result['uncertain_criteria']}"
+    )
+
+
+def test_non_motor_phenotype_no_med_docs_not_unclear_from_med():
+    patient = make_patient(
+        age=63,
+        diagnosis=["Parkinson disease"],
+        key_features=["idiopathic Parkinson disease"],
+        medications=[],
+    )
+    trial = make_trial(
+        inclusion_criteria=[
+            "Age 40 to 80 years",
+            "Parkinson disease diagnosis",
+            "Non-motor PD phenotype registry study",
+        ],
+        exclusion_criteria=[],
+    )
+    result = match_patient_to_trial(patient, trial)
+    assert not any(
+        "medication" in c.lower() for c in result["uncertain_criteria"]
+    ), (
+        f"Medication uncertainty must be suppressed for non-motor phenotype registry. "
+        f"uncertain={result['uncertain_criteria']}"
+    )
+
+
+# ---------------------------------------------------------------------------
+# Regression tests — fix set: non-motor over-unclear suppression
+# ---------------------------------------------------------------------------
+
+def test_autonomic_dysfunction_qol_phenotype_not_unclear():
+    patient = make_patient(
+        age=70,
+        diagnosis=["Parkinson disease"],
+        key_features=["autonomic dysfunction", "orthostatic hypotension"],
+        medications=["levodopa"],
+    )
+    trial = make_trial(
+        inclusion_criteria=[
+            "Age 40 to 80 years",
+            "Parkinson disease diagnosis",
+            "Quality of life and PD phenotype observational study",
+        ],
+        exclusion_criteria=[],
+    )
+    result = match_patient_to_trial(patient, trial)
+    assert not any(
+        "autonomic" in c.lower() for c in result["uncertain_criteria"]
+    ), (
+        f"Autonomic dysfunction must not generate uncertainty in QoL/phenotype study. "
+        f"uncertain={result['uncertain_criteria']}"
+    )
+
+
+def test_rbd_non_motor_pd_study_not_unclear():
+    patient = make_patient(
+        age=67,
+        diagnosis=["Parkinson disease"],
+        key_features=["REM sleep behavior disorder", "non-motor symptoms"],
+        medications=["levodopa"],
+    )
+    trial = make_trial(
+        inclusion_criteria=[
+            "Age 40 to 80 years",
+            "Parkinson disease diagnosis",
+            "Non-motor symptom study in PD phenotype cohort",
+        ],
+        exclusion_criteria=[],
+    )
+    result = match_patient_to_trial(patient, trial)
+    assert not any(
+        "rbd" in c.lower() or "rem sleep" in c.lower() for c in result["uncertain_criteria"]
+    ), (
+        f"RBD must not generate uncertainty in non-motor PD phenotype study. "
+        f"uncertain={result['uncertain_criteria']}"
+    )

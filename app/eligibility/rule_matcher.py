@@ -593,6 +593,27 @@ _TRIAL_DBS_REQUIRED_PATTERNS = [
     r"implanted.*dbs.*patient",
 ]
 
+# Ambiguous DBS protocol patterns: downgrade to unclear, not not_eligible.
+_AMBIGUOUS_DBS_INCLUSION_PATTERNS = [
+    r"dbs\s+candidacy",
+    r"candidacy.*dbs",
+    r"deep brain stimulation\s+candidacy",
+    r"dbs\s+(?:effects?|outcomes?|programming|optimization|facial|parameters?|neuropsychiatric)",
+    r"(?:effects?|outcomes?|programming|optimization|facial|parameters?|neuropsychiatric).*dbs",
+    r"scheduled\s+to\s+undergo\s+dbs",
+    r"dbs.*scheduled",
+    r"meets\s+criteria\s+for.*dbs",
+    r"criteria\s+for\s+(?:treatment\s+with\s+)?(?:stn.)?dbs",
+    r"lfp\s+sensing",
+    r"directional\s+lead",
+    r"electrophysiology.*(?:stn|subthalamic)",
+    r"(?:stn|subthalamic).*(?:recording|electrophysiology)",
+    r"compatible.*(?:dbs|hardware)",
+    r"(?:dbs|hardware).*compatible",
+    r"mri.compatible.*dbs",
+    r"dbs.*mri.compatible",
+]
+
 # Broader transcranial/electrical stimulation patterns for device contraindication.
 # Intentionally excludes generic "brain stimulation", "electrical stimulation", or rehab wording.
 _TRIAL_STIMULATION_PATTERNS = [
@@ -811,6 +832,20 @@ def _check_age(patient: dict, trial: dict) -> tuple[str | None, str | None, str 
     return "ok", f"patient age {patient_age} within {age_range_str}", None
 
 
+def _age_miss_by_one(patient: dict, trial: dict) -> bool:
+    """Return True if the patient misses the age boundary by exactly 1 year."""
+    patient_age = patient.get("age")
+    if patient_age is None:
+        return False
+    inclusion = trial.get("inclusion_criteria", [])
+    min_age, max_age = _extract_age_range(inclusion)
+    if min_age is not None and patient_age == min_age - 1:
+        return True
+    if max_age is not None and patient_age == max_age + 1:
+        return True
+    return False
+
+
 def _check_dbs(patient: dict, trial: dict) -> tuple[str | None, str | None]:
     """Return (blocking_criterion, matched_fact) if DBS is a problem, else (None, None)."""
     exclusion_text = _text(trial.get("exclusion_criteria", []))
@@ -829,10 +864,14 @@ def _check_dbs(patient: dict, trial: dict) -> tuple[str | None, str | None]:
     if not patient_has_dbs:
         return None, None
 
-    # If trial is a DBS-candidacy / DBS-indication / DBS-effects study, generic DBS wording in
-    # exclusion criteria may refer to surgical contraindications, not existing implants.
-    # Only hard-block if exclusion explicitly mentions prior/previous/existing DBS implant/surgery.
     inclusion_text = _text(trial.get("inclusion_criteria", []))
+    _TRIAL_META_FIELDS = [
+        "title", "brief_title", "official_title", "summary", "brief_summary",
+        "description", "detailed_description",
+    ]
+    meta_text = " ".join(_text(trial.get(f, "") or "") for f in _TRIAL_META_FIELDS)
+    trial_full = inclusion_text + " " + exclusion_text + " " + meta_text
+
     _DBS_CANDIDACY_TRIAL_PATTERNS = [
         r"dbs\s+candidacy",
         r"candidacy.*dbs",
@@ -843,11 +882,42 @@ def _check_dbs(patient: dict, trial: dict) -> tuple[str | None, str | None]:
         r"meets\s+criteria\s+for.*dbs",
         r"criteria\s+for\s+(?:treatment\s+with\s+)?(?:stn.)?dbs",
         r"dbs\s+(?:neuropsychiatric|effects|programming|optimization)",
+    ]
+
+    # Patterns that clearly indicate the trial recruits implanted DBS patients as the target population
+    _DBS_IMPLANTED_TARGET_PATTERNS = [
+        r"dbs\s+(?:effects?|outcomes?|programming|optimization|facial|parameters?|follow.up)",
+        r"(?:effects?|outcomes?|programming|optimization|follow.up).*dbs",
         r"lfp\s+sensing",
         r"directional\s+lead",
+        r"dbs.*(?:implanted|patient|surgery|undergone)",
+        r"(?:undergone|implanted|completed).*dbs",
+        r"subthalamic.*steering",
+        r"stimulation.*parameter",
+        r"dbs.*optimization",
     ]
-    if _any_match(_DBS_CANDIDACY_TRIAL_PATTERNS, inclusion_text):
-        # Only block if exclusion explicitly says prior/existing DBS implant excluded
+
+    # MRI/fMRI/neuroimaging safety exclusion context: DBS hardware raises MRI compatibility concerns.
+    # If the trial involves MRI/fMRI/neuroimaging AND has a DBS-related exclusion, treat DBS patient
+    # as not_eligible UNLESS the trial is a clearly DBS-implanted-patient target study.
+    _MRI_IMAGING_TRIAL_PATTERNS = [
+        r"\bfmri\b", r"\bmri\b", r"neuroimaging", r"magnetic resonance imaging",
+        r"magnetic resonance", r"mri.*compatible", r"mri.*safety",
+        r"imaging.*protocol", r"brain.*imaging",
+    ]
+
+    is_candidacy = _any_match(_DBS_CANDIDACY_TRIAL_PATTERNS, inclusion_text)
+    is_implanted_target = _any_match(_DBS_IMPLANTED_TARGET_PATTERNS, trial_full)
+    is_mri_context = _any_match(_MRI_IMAGING_TRIAL_PATTERNS, trial_full)
+
+    # MRI/fMRI context + DBS exclusion + patient has DBS = device incompatibility risk → block
+    # unless the trial explicitly recruits implanted DBS patients (outcomes/effects/LFP study)
+    if is_mri_context and not is_implanted_target:
+        return "deep brain stimulation (DBS) implant is an exclusion criterion", "DBS implant present"
+
+    is_outcomes_study = is_implanted_target or is_candidacy
+
+    if is_outcomes_study:
         _EXPLICIT_PRIOR_DBS_EXCLUSION = [
             r"prior.*dbs.*(?:implant|surgery|procedure)",
             r"previous.*dbs.*(?:implant|surgery|procedure)",
@@ -859,6 +929,116 @@ def _check_dbs(patient: dict, trial: dict) -> tuple[str | None, str | None]:
             return None, None
 
     return "deep brain stimulation (DBS) implant is an exclusion criterion", "DBS implant present"
+
+
+def _check_dbs_mri_compatibility(patient: dict, trial: dict) -> tuple[str | None, str | None]:
+    """Block when patient has DBS implant and trial involves MRI/fMRI/neuroimaging without confirmed MRI-conditional compatibility.
+
+    Returns (blocking_criterion, matched_fact) or (None, None).
+    """
+    # Gather all trial text for MRI context detection
+    _TRIAL_META_FIELDS = [
+        "title", "brief_title", "official_title", "summary", "brief_summary",
+        "description", "detailed_description", "intervention", "intervention_name",
+        "intervention_type", "interventions", "keywords", "conditions",
+    ]
+    _MRI_IMAGING_TRIAL_PATTERNS = [
+        r"\bfmri\b",
+        r"\bmri\b",
+        r"neuroimaging",
+        r"magnetic resonance imaging",
+        r"magnetic resonance",
+        r"imaging.*protocol",
+        r"brain.*imaging",
+        r"fmri.*dbs",
+        r"dbs.*fmri",
+    ]
+    collected: list[str] = []
+    for f in ["inclusion_criteria", "exclusion_criteria"]:
+        v = trial.get(f, [])
+        if isinstance(v, list):
+            collected.extend(v)
+        elif v:
+            collected.append(str(v))
+    for f in _TRIAL_META_FIELDS:
+        v = trial.get(f, "")
+        if v:
+            collected.append(str(v))
+    all_trial_text = _text(collected)
+
+    if not _any_match(_MRI_IMAGING_TRIAL_PATTERNS, all_trial_text):
+        return None, None
+
+    # Check if patient has DBS implant
+    patient_text = _text(
+        patient.get("key_features", [])
+        + patient.get("medications", [])
+        + patient.get("exclusions", [])
+        + [patient.get("summary", "")]
+    )
+    if _has_negated_dbs(patient_text):
+        return None, None
+    if not _any_match(_DBS_PATTERNS, patient_text):
+        return None, None
+
+    # If trial explicitly targets implanted DBS patients (LFP, directional leads, DBS outcomes)
+    # AND mentions MRI-conditional compatibility, do not block
+    _DBS_IMPLANTED_TARGET_PATTERNS = [
+        r"dbs\s+(?:effects?|outcomes?|programming|optimization|facial|parameters?|follow.up)",
+        r"(?:effects?|outcomes?|programming|optimization|follow.up).*dbs",
+        r"lfp\s+sensing",
+        r"directional\s+lead",
+        r"dbs.*(?:implanted|patient|surgery|undergone)",
+        r"(?:undergone|implanted|completed).*dbs",
+        r"subthalamic.*steering",
+        r"stimulation.*parameter",
+        r"dbs.*optimization",
+    ]
+    _MRI_CONDITIONAL_PATTERNS = [
+        r"mri.conditional.*dbs",
+        r"dbs.*mri.conditional",
+        r"mri.compatible.*dbs",
+        r"dbs.*mri.compatible",
+        r"mri.safe.*dbs",
+        r"dbs.*mri.safe",
+        r"medtronic.*mri",
+        r"mri.*medtronic",
+    ]
+    if (
+        _any_match(_DBS_IMPLANTED_TARGET_PATTERNS, all_trial_text)
+        and _any_match(_MRI_CONDITIONAL_PATTERNS, all_trial_text)
+    ):
+        return None, None
+
+    # If trial is purely DBS outcomes/effects study without MRI as primary modality, skip
+    # (MRI mention must be as a core study procedure, not a background safety note only in exclusions)
+    _MRI_AS_PROCEDURE_PATTERNS = [
+        r"\bfmri\b",
+        r"magnetic resonance imaging.*(?:session|scan|protocol|visit)",
+        r"(?:session|scan|protocol|visit).*magnetic resonance imaging",
+        r"neuroimaging.*(?:session|protocol|study)",
+        r"mri.*(?:session|scan|protocol|acquisition)",
+        r"(?:session|scan|protocol|acquisition).*mri",
+        r"fmri.*dbs",
+        r"dbs.*fmri",
+    ]
+    inclusion_text = _text(trial.get("inclusion_criteria", []))
+    excl_text = _text(trial.get("exclusion_criteria", []))
+    trial_body = all_trial_text
+
+    has_mri_as_procedure = _any_match(_MRI_AS_PROCEDURE_PATTERNS, trial_body)
+
+    # Also block if DBS is explicitly listed as exclusion in an MRI trial
+    _DBS_EXPLICITLY_EXCLUDED = _any_match(_DBS_PATTERNS, excl_text)
+
+    if not has_mri_as_procedure and not _DBS_EXPLICITLY_EXCLUDED:
+        return None, None
+
+    return (
+        "DBS hardware and MRI/fMRI incompatibility: patient has existing DBS implant; "
+        "MRI/fMRI-based trial without confirmed MRI-conditional DBS compatibility",
+        "DBS implant present; MRI/fMRI trial",
+    )
 
 
 def _check_maob(patient: dict, trial: dict) -> tuple[str | None, str | None]:
@@ -936,6 +1116,22 @@ _HEALTHY_CONTROL_TRIAL_PATTERNS = [
     r"non.pd.*control", r"control.*arm",
 ]
 
+_HEALTHY_CONTROL_AMBIGUITY_SIGNALS = [
+    r"control.*group", r"healthy.*control", r"comparator", r"age.matched.*control",
+    r"imaging.*cohort", r"biomarker.*cohort", r"observational.*cohort",
+]
+
+_PATIENT_HEALTHY_CONTROL_PATTERNS = [
+    r"healthy.*(?:control|volunteer)",
+    r"(?:control|volunteer).*healthy",
+    r"no.*neurological.*diagnosis",
+    r"neurologically.*healthy",
+    r"healthy.*subject",
+    r"no.*parkinson",
+    r"no.*neurological.*disease",
+    r"no.*neurological.*condition",
+]
+
 _INTERVENTIONAL_PD_ONLY_PATTERNS = [
     r"\bstimulation\b", r"\brehabilitation\b", r"\bexercise\b", r"\btreadmill\b",
     r"\btraining\b", r"\bintervention\b", r"\btreatment\b", r"\btherapy\b",
@@ -965,8 +1161,26 @@ def _check_parkinson_diagnosis(patient: dict, trial: dict) -> tuple[str | None, 
     )
     trial_full = inclusion_text + " " + _text(trial.get("exclusion_criteria", [])) + " " + meta_text
 
+    is_interventional = _any_match(_INTERVENTIONAL_PD_ONLY_PATTERNS, trial_full)
+
+    # Patient is healthy control / no neurological diagnosis
+    if _any_match(_PATIENT_HEALTHY_CONTROL_PATTERNS, patient_diagnosis_text):
+        if _any_match(_HEALTHY_CONTROL_AMBIGUITY_SIGNALS, trial_full) and not is_interventional:
+            return (
+                "__unclear__:patient is a healthy control/volunteer; trial mentions Parkinson disease "
+                "but also has comparator/control group language — eligibility as control participant is unclear",
+                None,
+            )
+        if is_interventional:
+            return "Parkinson disease diagnosis required", None
+        return (
+            "__unclear__:patient is a healthy control/volunteer; Parkinson disease may be required "
+            "but trial scope is ambiguous",
+            None,
+        )
+
     if _any_match(_HEALTHY_CONTROL_TRIAL_PATTERNS, trial_full):
-        if not _any_match(_INTERVENTIONAL_PD_ONLY_PATTERNS, trial_full):
+        if not is_interventional:
             return (
                 "__unclear__:trial may include healthy/control comparator participants; "
                 "Parkinson diagnosis requirement cannot be interpreted as a hard exclusion from available text",
@@ -1168,6 +1382,15 @@ def _check_atypical_parkinsonism(
             _scope_parts.append(_text(_v))
     trial_full = " ".join(_scope_parts)
 
+    _BROAD_PD_COHORT_PATTERNS = [
+        r"scale.*validation", r"validation.*scale", r"questionnaire.*validation",
+        r"non.motor.*symptom", r"non.motor.*pd", r"quality.*of.*life",
+        r"\bqol\b", r"pd.*phenotype", r"parkinson.*phenotype",
+        r"biomarker.*cohort", r"imaging.*cohort", r"observational.*cohort",
+        r"\bobservational\b", r"\bregistry\b", r"natural.*history",
+        r"cross.sectional", r"longitudinal.*cohort",
+    ]
+
     if _any_match(_IDIOPATHIC_PD_REQUIRED_PATTERNS, inclusion_text):
         if _any_match(_EXPLICIT_ATYPICAL_EXCLUSION_PATTERNS, exclusion_text):
             return (
@@ -1178,6 +1401,8 @@ def _check_atypical_parkinsonism(
         is_treatment = _any_match(_TREATMENT_INTERVENTION_PATTERNS, trial_full)
         is_diagnostic = _any_match(_DIAGNOSTIC_STUDY_PATTERNS, trial_full)
         is_hard_diagnostic = _any_match(_HARD_DIAGNOSTIC_PATTERNS, trial_full)
+        is_broad_cohort = _any_match(_BROAD_PD_COHORT_PATTERNS, trial_full)
+
         if is_diagnostic and not is_treatment and not is_hard_diagnostic:
             return (
                 "unclear",
@@ -1188,6 +1413,12 @@ def _check_atypical_parkinsonism(
             return (
                 "unclear",
                 "patient has atypical or unclear parkinsonism; trial requires idiopathic Parkinson disease but appears to be a diagnostic/differential study",
+                None,
+            )
+        if is_broad_cohort and not is_treatment:
+            return (
+                "unclear",
+                "patient has atypical or unclear parkinsonism; trial requires idiopathic Parkinson disease but appears to be a broad cohort/observational/scale-validation study",
                 None,
             )
         if is_treatment:
@@ -1246,6 +1477,80 @@ def _check_active_cancer(
         return (
             "patient has active cancer treatment; eligibility for non-oncology trial with safety-sensitive criteria is unclear",
             "active cancer treatment noted",
+        )
+
+    return None, None
+
+
+def _check_active_cancer_hard_block(
+    patient: dict, trial: dict
+) -> tuple[str | None, str | None]:
+    """Block (not_eligible) when active cancer + clearly invasive/surgical/implant/procedure-based trial.
+
+    Non-invasive gait/rehab/neuroprotection remains unclear via _check_active_cancer.
+    Returns (blocking_criterion, matched_fact) or (None, None).
+    """
+    patient_all_text = _text(
+        patient.get("key_features", [])
+        + patient.get("medications", [])
+        + patient.get("exclusions", [])
+        + [patient.get("summary", "")]
+        + [patient.get("diagnosis", "")]
+    )
+
+    if not _any_match(_ACTIVE_CANCER_PATTERNS, patient_all_text):
+        return None, None
+
+    # Gather full trial text
+    _TRIAL_META_FIELDS = [
+        "title", "brief_title", "official_title", "summary", "brief_summary",
+        "description", "detailed_description", "intervention", "intervention_name",
+        "intervention_type", "interventions", "keywords", "conditions",
+    ]
+    collected: list[str] = []
+    for f in ["inclusion_criteria", "exclusion_criteria"]:
+        v = trial.get(f, [])
+        if isinstance(v, list):
+            collected.extend(v)
+        elif v:
+            collected.append(str(v))
+    for f in _TRIAL_META_FIELDS:
+        v = trial.get(f, "")
+        if v:
+            collected.append(str(v))
+    all_trial_text = _text(collected)
+
+    # Skip oncology trials
+    oncology_patterns = [r"oncology", r"cancer.*trial", r"tumor.*trial", r"chemotherapy.*eligible"]
+    if _any_match(oncology_patterns, all_trial_text):
+        return None, None
+
+    # Only hard-block for clearly invasive/surgical/implant/procedure-based trials
+    _INVASIVE_TRIAL_PATTERNS = [
+        r"\bsurgery\b",
+        r"\bsurgical\b",
+        r"\bimplant\b",
+        r"\bdbs\b",
+        r"deep brain stimulation",
+        r"device.*implant",
+        r"implant.*device",
+        r"neurosurgical",
+        r"stereotactic",
+        r"intracranial",
+        r"lumbar.*puncture",
+        r"spinal.*cord.*stimulation",
+        r"\bstenting\b",
+        r"\bcatheter\b",
+        r"infusion.*pump",
+        r"subcutaneous.*pump",
+        r"\blcig\b",
+        r"intestinal.*gel.*infusion",
+        r"levodopa.*infusion.*pump",
+    ]
+    if _any_match(_INVASIVE_TRIAL_PATTERNS, all_trial_text):
+        return (
+            "active cancer treatment: patient has active cancer which is incompatible with invasive/surgical/implant-based trial",
+            "active cancer treatment present; invasive/surgical trial",
         )
 
     return None, None
@@ -1378,7 +1683,11 @@ def _check_cognitive_exclusion_general(
 ) -> tuple[str | None, str | None]:
     """Block when exclusion criteria explicitly exclude dementia/cognitive impairment (no numeric threshold)
     and patient clearly documents dementia or significant cognitive impairment.
-    MCI/mild cognitive alone is not sufficient — requires explicit dementia or cognitive impairment."""
+    MCI/mild cognitive alone is not sufficient — requires explicit dementia or cognitive impairment.
+
+    In DBS/neuropsychiatric/facial-expression/imaging outcome studies without a numeric cutoff
+    or explicit dementia exclusion, downgrade cognitive impairment/low MoCA/MCI to unclear.
+    """
     exclusion_list = trial.get("exclusion_criteria", [])
     patient_features = _text(
         patient.get("key_features", [])
@@ -1429,6 +1738,39 @@ def _check_cognitive_exclusion_general(
         return None, None
     if not _any_match(_STRICT_COGNITIVE_IMPAIRMENT_PATTERNS, patient_features):
         return None, None
+
+    # For DBS/neuropsychiatric/facial/imaging outcome trials without explicit numeric cutoff
+    # or explicit dementia exclusion: downgrade to unclear instead of hard blocking.
+    _DBS_NEURO_IMAGING_OUTCOME_PATTERNS = [
+        r"\bdbs\b",
+        r"deep brain stimulation",
+        r"neuropsychiatric",
+        r"neuropsychological",
+        r"facial.*expression",
+        r"expression.*facial",
+        r"\bfmri\b",
+        r"\bmri\b.*outcome",
+        r"imaging.*outcome",
+        r"neuroimaging.*outcome",
+        r"cognitive.*outcome",
+    ]
+    trial_all_text = _text(
+        trial.get("inclusion_criteria", []) + trial.get("exclusion_criteria", [])
+    )
+    has_numeric_cutoff = bool(
+        _MMSE_THRESHOLD_PATTERN.search(trial_all_text)
+        or _MOCA_THRESHOLD_PATTERN.search(trial_all_text)
+    )
+    has_explicit_dementia_excl = _any_match(
+        [r"\bdementia\b", r"cognitive impairment.*exclud", r"exclud.*cognitive impairment"],
+        trial_all_text,
+    )
+    if (
+        _any_match(_DBS_NEURO_IMAGING_OUTCOME_PATTERNS, trial_all_text)
+        and not has_numeric_cutoff
+        and not has_explicit_dementia_excl
+    ):
+        return None, None  # Will be picked up as unclear by MCI/DBS block below
 
     for criterion in exclusion_list:
         c = criterion.lower()
@@ -1538,27 +1880,21 @@ def _check_cognitive_inclusion_minimum(
 
 def _check_dbs_required(patient: dict, trial: dict) -> tuple[str | None, str | None]:
     """Block when inclusion criteria require DBS but patient has no documented DBS.
-    Returns (blocking_criterion, matched_fact) for hard block, or ('unclear', reason) for ambiguous."""
-    inclusion_list = trial.get("inclusion_criteria", [])
 
-    # Ambiguous DBS wording: candidacy, effects, neuropsychiatric, scheduled — return unclear not not_eligible
-    _AMBIGUOUS_DBS_PATTERNS = [
-        r"dbs\s+candidacy",
-        r"candidacy.*dbs",
-        r"deep brain stimulation\s+candidacy",
-        r"dbs\s+(?:effects|programming|optimization|facial|parameters)",
-        r"(?:effects|programming|optimization|facial|parameters).*dbs",
-        r"scheduled\s+to\s+undergo\s+dbs",
-        r"dbs.*scheduled",
-        r"meets\s+criteria\s+for.*dbs",
-        r"criteria\s+for\s+(?:treatment\s+with\s+)?(?:stn.)?dbs",
-    ]
+    Returns (blocking_criterion, matched_fact) for hard block,
+    or ('__unclear__:...', reason) for ambiguous cases.
+
+    Hard block: clear prior/active DBS requirements (e.g. 'prior bilateral STN DBS surgery required').
+    Unclear: ambiguous DBS protocol wording (candidacy, effects, LFP, directional leads,
+             electrophysiology, STN recording, compatible hardware, neuropsychiatric, etc.)
+    """
+    inclusion_list = trial.get("inclusion_criteria", [])
 
     has_hard_requirement = any(
         _any_match(_TRIAL_DBS_REQUIRED_PATTERNS, c.lower()) for c in inclusion_list
     )
     has_ambiguous = any(
-        _any_match(_AMBIGUOUS_DBS_PATTERNS, c.lower()) for c in inclusion_list
+        _any_match(_AMBIGUOUS_DBS_INCLUSION_PATTERNS, c.lower()) for c in inclusion_list
     )
 
     if not has_hard_requirement and not has_ambiguous:
@@ -1579,9 +1915,10 @@ def _check_dbs_required(patient: dict, trial: dict) -> tuple[str | None, str | N
             "no DBS documented",
         )
 
-    # Ambiguous only — return unclear signal via uncertain (use special sentinel)
+    # Ambiguous only — return unclear signal
     return (
-        "__unclear__:DBS eligibility unclear: trial involves DBS effects/candidacy but patient has no confirmed DBS",
+        "__unclear__:DBS eligibility unclear: trial involves DBS effects/candidacy/LFP/electrophysiology "
+        "but patient has no confirmed DBS or hardware compatibility not established",
         "no confirmed DBS; ambiguous DBS-related study",
     )
 
@@ -1784,7 +2121,9 @@ def _check_oncology_required(patient: dict, trial: dict) -> tuple[str | None, st
 
 def _check_frailty_high_demand_exercise(patient: dict, trial: dict) -> tuple[str | None, str | None]:
     """Block when patient has explicit frailty/fall risk and trial demands high physical exercise.
-    FoG/gait impairment/motor dysfunction alone does NOT count as frailty."""
+    FoG/gait impairment/motor dysfunction alone does NOT count as frailty.
+    Very elderly patients with frailty/recurrent falls in high-demand exercise protocols → not_eligible.
+    """
     patient_text = _text(
         patient.get("key_features", [])
         + patient.get("exclusions", [])
@@ -2199,6 +2538,15 @@ def _check_missing_specific_inclusion_details(
         + [patient.get("diagnosis", "") or ""]
     )
 
+    _BROAD_PD_TRIAL_SUPPRESS = [
+        r"scale.*validation", r"validation.*scale", r"questionnaire.*validation",
+        r"non.motor.*symptom", r"non.motor.*pd", r"quality.*of.*life",
+        r"\bqol\b", r"pd.*phenotype", r"parkinson.*phenotype",
+        r"\bobservational\b", r"\bregistry\b", r"natural.*history",
+        r"cross.sectional", r"longitudinal.*cohort",
+        r"broad.*pd", r"all.*(?:stage|severity)", r"across.*stage",
+    ]
+
     # 1. FoG/gait-specific requirement
     if _any_match(_FOG_GAIT_TRIAL_PATTERNS, inclusion_text):
         if not _any_match(_FOG_GAIT_PATIENT_PATTERNS, patient_all):
@@ -2214,19 +2562,23 @@ def _check_missing_specific_inclusion_details(
             )
 
     # 3. Disease severity/stage/duration requirement
+    # Suppress for broad PD cohort / scale validation / non-motor phenotype studies
     if _any_match(_SEVERITY_TRIAL_PATTERNS, inclusion_text):
         if not _any_match(_SEVERITY_PATIENT_PATTERNS, patient_all):
-            uncertain.append(
-                "trial requires disease severity/stage/duration not documented in patient profile"
-            )
+            if not _any_match(_BROAD_PD_TRIAL_SUPPRESS, trial_full):
+                uncertain.append(
+                    "trial requires disease severity/stage/duration not documented in patient profile"
+                )
 
     # 4. Medication-specific requirement
+    # Suppress for broad PD cohort / observational studies where med history is background info
     if _any_match(_MED_SPECIFIC_TRIAL_PATTERNS, inclusion_text):
         patient_meds_empty = not patient.get("medications")
         if patient_meds_empty or not _any_match(_MED_DOCUMENTED_PATIENT_PATTERNS, patient_all):
-            uncertain.append(
-                "trial requires specific medication details not documented in patient profile"
-            )
+            if not _any_match(_BROAD_PD_TRIAL_SUPPRESS, trial_full):
+                uncertain.append(
+                    "trial requires specific medication details not documented in patient profile"
+                )
 
     # 5. Language/scale-validation requirement
     if _any_match(_LANG_SCALE_TRIAL_PATTERNS, trial_full):
@@ -2234,6 +2586,162 @@ def _check_missing_specific_inclusion_details(
             uncertain.append(
                 "trial appears to be a language-specific or scale-validation study; patient language ability not documented"
             )
+
+    return uncertain
+
+
+# ---------------------------------------------------------------------------
+# Non-motor / safety comorbidity uncertainty helper
+# ---------------------------------------------------------------------------
+
+_FRAILTY_TARGET_SUPPRESSION_PATTERNS = [
+    r"frailty.*trial", r"frailty.*study", r"frail.*patient",
+    r"home.*physiotherapy", r"home.*physical.*therapy",
+    r"frailty.*rehabilitation", r"frailty.*intervention",
+    r"elderly.*frail", r"frail.*elderly",
+    r"fall.prevention.*rehabilitation", r"fall.risk.*rehabilitation",
+    r"rehabilitation.*fall.prevention", r"rehabilitation.*fall.risk",
+]
+
+_RBD_TARGET_SUPPRESSION_PATTERNS = [
+    r"non.motor.*symptom", r"non.motor.*pd", r"pd.*non.motor",
+    r"non.motor.*parkinson", r"parkinson.*non.motor",
+    r"sleep.*phenotype", r"pd.*phenotype", r"parkinson.*phenotype",
+    r"dementia.*evaluation", r"neuropsychological.*evaluation",
+    r"prodromal.*pd", r"prodromal.*parkinson",
+    r"\brbd\b.*study", r"\brbd\b.*trial",
+    r"rem.*behavior.*study", r"rem.*behavior.*trial",
+]
+
+_RBD_AMBIGUITY_TRIGGER_PATTERNS = [
+    r"neuropsychiatric.*protocol", r"protocol.*neuropsychiatric",
+    r"psychiatric.*exclusion", r"exclusion.*psychiatric",
+    r"sleep.*exclusion", r"exclusion.*sleep",
+    r"rem.*sleep.*behavior.*disorder.*exclusion",
+    r"rbd.*exclusion", r"exclusion.*rbd",
+    r"protocol.*safety.*neuropsychiatric", r"neuropsychiatric.*safety.*protocol",
+    r"patient.reported.*neuropsychiatric.*outcome",
+]
+
+_DEPRESSION_IMAGING_BIOMARKER_PATTERNS = [
+    r"\bpet\b", r"\b18f\b", r"florbetapir", r"\bdtbz\b",
+    r"imaging.*biomarker", r"biomarker.*imaging",
+    r"molecular.*imaging", r"neuroimaging.*biomarker",
+    r"biomarker.*neuroimaging",
+]
+
+_ACTIVE_CANCER_PATIENT_PATTERNS = [
+    r"active.*cancer", r"cancer.*active", r"current.*chemotherapy",
+    r"ongoing.*chemotherapy", r"active.*malignancy", r"malignancy.*active",
+    r"active.*tumor", r"active.*tumour", r"cancer.*treatment.*ongoing",
+    r"undergoing.*cancer.*treatment",
+]
+
+_ACTIVE_CANCER_TRIAL_PATTERNS = [
+    r"gait", r"stability", r"balance", r"rehabilitation",
+    r"exercise", r"neuroprotection", r"neuroprotective",
+    r"surgery", r"stimulation", r"safety.*sensitive",
+    r"cardiovascular", r"hepatic", r"tolerability",
+]
+
+
+def _check_nonmotor_comorbidity_uncertainty(
+    patient: dict, trial: dict, existing_uncertain: list[str] | None = None
+) -> list[str]:
+    """Return uncertain criteria for non-motor/safety comorbidity + relevant trial focus.
+
+    Only adds uncertainty; never blocks. Only runs when blocking_criteria is empty.
+    """
+    patient_all_text = _text(
+        patient.get("key_features", [])
+        + patient.get("medications", [])
+        + patient.get("exclusions", [])
+        + [patient.get("summary", "") or ""]
+        + (patient.get("diagnosis", []) if isinstance(patient.get("diagnosis"), list)
+           else [patient.get("diagnosis", "") or ""])
+    )
+
+    _TRIAL_SCOPE_FIELDS = [
+        "inclusion_criteria", "exclusion_criteria",
+        "title", "brief_title", "official_title",
+        "summary", "brief_summary", "description", "detailed_description",
+        "intervention", "intervention_name", "intervention_type", "interventions",
+        "keywords", "conditions",
+    ]
+    scope_parts: list[str] = []
+    for f in _TRIAL_SCOPE_FIELDS:
+        v = trial.get(f)
+        if v:
+            scope_parts.append(_text(v))
+    trial_scope_text = " ".join(scope_parts)
+
+    uncertain: list[str] = []
+
+    # RBD: only trigger on explicit protocol/exclusion ambiguity, suppressed for target-population
+    _RBD_PATIENT = [r"\brbd\b", r"rem.*sleep.*behavior", r"rem.*behavior.*disorder"]
+    if _any_match(_RBD_PATIENT, patient_all_text):
+        if (
+            _any_match(_RBD_AMBIGUITY_TRIGGER_PATTERNS, trial_scope_text)
+            and not _any_match(_RBD_TARGET_SUPPRESSION_PATTERNS, trial_scope_text)
+        ):
+            msg = "patient has REM sleep behavior disorder; protocol/exclusion criteria may affect eligibility"
+            if msg not in uncertain:
+                uncertain.append(msg)
+
+    # Autonomic dysfunction / orthostatic hypotension
+    _AUTONOMIC_PATIENT = [
+        r"autonomic.*dysfunction", r"autonomic.*failure",
+        r"orthostatic.*hypotension", r"postural.*hypotension",
+    ]
+    _AUTONOMIC_TRIAL = [
+        r"rehabilitation", r"physiotherapy", r"physical.*therapy",
+        r"exercise", r"gait", r"balance", r"home.*therap",
+        r"fall.*risk", r"fall.*prevention",
+    ]
+    _AUTONOMIC_NON_MOTOR_SUPPRESS = [
+        r"non.motor.*symptom", r"non.motor.*pd", r"pd.*phenotype",
+        r"parkinson.*phenotype", r"quality.*of.*life", r"\bqol\b",
+        r"\bobservational\b", r"\bregistry\b", r"natural.*history",
+        r"autonomic.*study", r"autonomic.*trial",
+    ]
+    if _any_match(_AUTONOMIC_PATIENT, patient_all_text) and _any_match(_AUTONOMIC_TRIAL, trial_scope_text):
+        if not _any_match(_AUTONOMIC_NON_MOTOR_SUPPRESS, trial_scope_text):
+            msg = "patient has autonomic dysfunction/orthostatic hypotension; eligibility for rehabilitation/gait/exercise trial is uncertain"
+            if msg not in uncertain:
+                uncertain.append(msg)
+
+    # Depression: only imaging/PET/biomarker studies
+    _DEPRESSION_PATIENT = [r"\bdepression\b", r"\bdepressed\b"]
+    if _any_match(_DEPRESSION_PATIENT, patient_all_text) and _any_match(_DEPRESSION_IMAGING_BIOMARKER_PATTERNS, trial_scope_text):
+        msg = "patient has depression; depression may confound imaging/biomarker outcomes"
+        if msg not in uncertain:
+            uncertain.append(msg)
+
+    # Frailty / recurrent falls: mindfulness/adherence only, suppressed for frailty-targeted trials
+    _FRAILTY_PATIENT = [r"\bfrail\b", r"\bfrailty\b", r"recurrent.*falls", r"frequent.*falls"]
+    _FRAILTY_AMBIGUITY_TRIAL = [
+        r"mindfulness", r"meditation", r"adherence", r"protocol.*adherence",
+        r"sustained.*participation", r"cognitive.*engagement",
+        r"sustained.*engagement", r"home.*based.*program",
+    ]
+    if _any_match(_FRAILTY_PATIENT, patient_all_text):
+        if (
+            _any_match(_FRAILTY_AMBIGUITY_TRIAL, trial_scope_text)
+            and not _any_match(_FRAILTY_TARGET_SUPPRESSION_PATTERNS, trial_scope_text)
+        ):
+            msg = "patient has frailty/recurrent falls; eligibility for mindfulness/adherence/sustained-participation trial is uncertain"
+            if msg not in uncertain:
+                uncertain.append(msg)
+
+    # Active cancer: only when _check_active_cancer hasn't already flagged it
+    already_has_cancer = existing_uncertain is not None and any(
+        "cancer" in c for c in existing_uncertain
+    )
+    if not already_has_cancer:
+        if _any_match(_ACTIVE_CANCER_PATIENT_PATTERNS, patient_all_text) and _any_match(_ACTIVE_CANCER_TRIAL_PATTERNS, trial_scope_text):
+            msg = "patient has active cancer treatment; eligibility for gait/neuroprotection/safety-sensitive intervention trial is uncertain"
+            if msg not in uncertain:
+                uncertain.append(msg)
 
     return uncertain
 
@@ -2278,6 +2786,13 @@ def match_patient_to_trial(patient: dict, trial: dict) -> dict:
         blocking_criteria.append(dbs_block)
         matched_facts.append(dbs_fact)
 
+    # --- DBS + MRI/fMRI compatibility ---
+    dbs_mri_block, dbs_mri_fact = _check_dbs_mri_compatibility(patient, trial)
+    if dbs_mri_block and dbs_mri_block not in blocking_criteria:
+        blocking_criteria.append(dbs_mri_block)
+        if dbs_mri_fact:
+            matched_facts.append(dbs_mri_fact)
+
     # --- MAO-B inhibitor ---
     maob_block, maob_fact = _check_maob(patient, trial)
     if maob_block:
@@ -2306,12 +2821,14 @@ def match_patient_to_trial(patient: dict, trial: dict) -> dict:
         if cog_min_fact:
             matched_facts.append(cog_min_fact)
 
-    # --- MCI-only + DBS/neuropsychiatric/imaging trial: prefer unclear over not_eligible ---
+    # --- MCI-only + DBS/neuropsychiatric/facial-expression/imaging outcome trial:
+    #     prefer unclear over not_eligible when no numeric cutoff or explicit dementia exclusion ---
     if not blocking_criteria:
         _MCI_ONLY_PAT = [r"\bmci\b", r"mild cognitive impairment", r"mild\s+cognitive"]
         _DBS_NEURO_IMAGING_TRIAL_PAT = [
             r"\bdbs\b", r"deep brain stimulation", r"neuropsychiatric", r"neuropsychological",
             r"\bmri\b", r"imaging.*outcome", r"neuroimaging", r"cognitive.*outcome",
+            r"facial.*expression", r"expression.*facial",
         ]
         patient_feat_text = _text(patient.get("key_features", []) + patient.get("exclusions", []))
         _HARD_COG_PAT = [r"\bdementia\b", r"(?:significant|moderate|severe).*cognitive", r"low moca", r"low mmse", r"impaired cognition"]
@@ -2325,7 +2842,10 @@ def match_patient_to_trial(patient: dict, trial: dict) -> dict:
             and not _EXPLICIT_NUM_CUTOFF
             and not _EXPLICIT_DEMENTIA_EXCL
         ):
-            _unc = "patient has mild cognitive impairment; trial involves DBS/neuropsychiatric/imaging outcomes without explicit numeric cognitive cutoff or dementia exclusion — eligibility uncertain"
+            _unc = (
+                "patient has mild cognitive impairment; trial involves DBS/neuropsychiatric/facial-expression/"
+                "imaging outcomes without explicit numeric cognitive cutoff or dementia exclusion — eligibility uncertain"
+            )
             if _unc not in uncertain_criteria:
                 uncertain_criteria.append(_unc)
 
@@ -2361,6 +2881,13 @@ def match_patient_to_trial(patient: dict, trial: dict) -> dict:
         blocking_criteria.append(onco_block)
         if onco_fact:
             matched_facts.append(onco_fact)
+
+    # --- Active cancer hard block (invasive/surgical/implant trials only) ---
+    cancer_hard_block, cancer_hard_fact = _check_active_cancer_hard_block(patient, trial)
+    if cancer_hard_block and cancer_hard_block not in blocking_criteria:
+        blocking_criteria.append(cancer_hard_block)
+        if cancer_hard_fact:
+            matched_facts.append(cancer_hard_fact)
 
     # --- Advanced PD required ---
     adv_pd_block, adv_pd_fact = _check_advanced_pd_requirement(patient, trial)
@@ -2448,6 +2975,12 @@ def match_patient_to_trial(patient: dict, trial: dict) -> dict:
         if comorbid_fact:
             matched_facts.append(comorbid_fact)
 
+    # --- Extended: non-motor/safety comorbidity uncertainty (uncertainty only) ---
+    if not blocking_criteria:
+        for nm_unc in _check_nonmotor_comorbidity_uncertainty(patient, trial, existing_uncertain=uncertain_criteria):
+            if nm_unc not in uncertain_criteria:
+                uncertain_criteria.append(nm_unc)
+
     # --- Extended: unverifiable inclusion criteria burden ---
     unverifiable_count = _count_unverifiable_inclusion_criteria(trial)
     if unverifiable_count >= 3 and not blocking_criteria:
@@ -2464,6 +2997,23 @@ def match_patient_to_trial(patient: dict, trial: dict) -> dict:
         for unc in missing_detail_uncertainties:
             if unc not in uncertain_criteria:
                 uncertain_criteria.append(unc)
+
+    # --- Borderline age: downgrade not_eligible → unclear when miss is exactly 1 year
+    #     and there are already protocol/safety uncertainties ---
+    if (
+        blocking_criteria
+        and len(blocking_criteria) == 1
+        and age_block is not None
+        and blocking_criteria[0] == age_block
+        and _age_miss_by_one(patient, trial)
+        and uncertain_criteria
+    ):
+        blocking_criteria.clear()
+        uncertain_criteria.insert(
+            0,
+            f"borderline age: patient age is within 1 year of the trial age boundary "
+            f"({age_block}); eligibility uncertain given protocol uncertainties",
+        )
 
     # --- Determine prediction ---
     if blocking_criteria:
