@@ -10,9 +10,10 @@ from run_sample_benchmark import (
     build_benchmark_metadata,
     format_benchmark_metadata,
     build_benchmark_output,
+    build_error_cases,
 )
 
-_TOP_LEVEL_KEYS = {"metadata", "coverage", "label_distribution", "confusion_matrix", "metrics", "predictions"}
+_TOP_LEVEL_KEYS = {"metadata", "coverage", "label_distribution", "confusion_matrix", "metrics", "predictions", "error_cases"}
 
 
 def _build_sample_output() -> dict:
@@ -30,6 +31,7 @@ def _build_sample_output() -> dict:
         "confusion_matrix": build_confusion_matrix(gold, predicted),
         "metrics": {"accuracy": 1.0, "macro_f1": 1.0, "per_class": {}},
         "predictions": prediction_records,
+        "error_cases": build_error_cases(prediction_records),
     }
 
 
@@ -537,42 +539,90 @@ _DIST = {"gold": {"eligible": 1, "not_eligible": 0, "unclear": 0}, "predicted": 
 _CM = {"eligible": {"eligible": 1, "not_eligible": 0, "unclear": 0}, "not_eligible": {"eligible": 0, "not_eligible": 0, "unclear": 0}, "unclear": {"eligible": 0, "not_eligible": 0, "unclear": 0}}
 _METRICS = {"accuracy": 1.0, "macro_f1": 1.0, "per_class": {}}
 _PREDS = [{"patient_id": "P001", "trial_id": "T001", "predicted_label": "eligible"}]
+_ERROR_CASES = []
 
 
 def test_build_benchmark_output_returns_dict():
-    assert isinstance(build_benchmark_output(_META, _COV, _DIST, _CM, _METRICS, _PREDS), dict)
+    assert isinstance(build_benchmark_output(_META, _COV, _DIST, _CM, _METRICS, _PREDS, _ERROR_CASES), dict)
 
 
 def test_build_benchmark_output_exact_keys():
-    result = build_benchmark_output(_META, _COV, _DIST, _CM, _METRICS, _PREDS)
+    result = build_benchmark_output(_META, _COV, _DIST, _CM, _METRICS, _PREDS, _ERROR_CASES)
     assert set(result.keys()) == _TOP_LEVEL_KEYS
 
 
 def test_build_benchmark_output_metadata_value():
-    assert build_benchmark_output(_META, _COV, _DIST, _CM, _METRICS, _PREDS)["metadata"] is _META
+    assert build_benchmark_output(_META, _COV, _DIST, _CM, _METRICS, _PREDS, _ERROR_CASES)["metadata"] is _META
 
 
 def test_build_benchmark_output_coverage_value():
-    assert build_benchmark_output(_META, _COV, _DIST, _CM, _METRICS, _PREDS)["coverage"] is _COV
+    assert build_benchmark_output(_META, _COV, _DIST, _CM, _METRICS, _PREDS, _ERROR_CASES)["coverage"] is _COV
 
 
 def test_build_benchmark_output_label_distribution_value():
-    assert build_benchmark_output(_META, _COV, _DIST, _CM, _METRICS, _PREDS)["label_distribution"] is _DIST
+    assert build_benchmark_output(_META, _COV, _DIST, _CM, _METRICS, _PREDS, _ERROR_CASES)["label_distribution"] is _DIST
 
 
 def test_build_benchmark_output_confusion_matrix_value():
-    assert build_benchmark_output(_META, _COV, _DIST, _CM, _METRICS, _PREDS)["confusion_matrix"] is _CM
+    assert build_benchmark_output(_META, _COV, _DIST, _CM, _METRICS, _PREDS, _ERROR_CASES)["confusion_matrix"] is _CM
 
 
 def test_build_benchmark_output_metrics_value():
-    assert build_benchmark_output(_META, _COV, _DIST, _CM, _METRICS, _PREDS)["metrics"] is _METRICS
+    assert build_benchmark_output(_META, _COV, _DIST, _CM, _METRICS, _PREDS, _ERROR_CASES)["metrics"] is _METRICS
 
 
 def test_build_benchmark_output_predictions_equals_records():
-    assert build_benchmark_output(_META, _COV, _DIST, _CM, _METRICS, _PREDS)["predictions"] == _PREDS
+    assert build_benchmark_output(_META, _COV, _DIST, _CM, _METRICS, _PREDS, _ERROR_CASES)["predictions"] == _PREDS
+
+
+def test_build_benchmark_output_error_cases_is_list():
+    assert isinstance(build_benchmark_output(_META, _COV, _DIST, _CM, _METRICS, _PREDS, _ERROR_CASES)["error_cases"], list)
+
+
+def test_build_benchmark_output_error_cases_value():
+    assert build_benchmark_output(_META, _COV, _DIST, _CM, _METRICS, _PREDS, _ERROR_CASES)["error_cases"] is _ERROR_CASES
 
 
 def test_build_benchmark_output_normal_case():
-    result = build_benchmark_output(_META, _COV, _DIST, _CM, _METRICS, _PREDS)
+    result = build_benchmark_output(_META, _COV, _DIST, _CM, _METRICS, _PREDS, _ERROR_CASES)
     assert result["metadata"]["benchmark_name"] == "sample_benchmark"
     assert result["predictions"][0]["patient_id"] == "P001"
+
+
+# ---------------------------------------------------------------------------
+# build_error_cases tests
+# ---------------------------------------------------------------------------
+
+def test_build_error_cases_returns_list():
+    assert isinstance(build_error_cases([]), list)
+
+
+def test_build_error_cases_empty_input():
+    assert build_error_cases([]) == []
+
+
+def test_build_error_cases_all_correct():
+    records = [{"patient_id": "P001", "gold_label": "eligible", "predicted_label": "eligible"}]
+    assert build_error_cases(records) == []
+
+
+def test_build_error_cases_all_incorrect():
+    records = [{"patient_id": "P001", "gold_label": "eligible", "predicted_label": "not_eligible"}]
+    assert len(build_error_cases(records)) == 1
+
+
+def test_build_error_cases_preserves_record():
+    record = {"patient_id": "P001", "gold_label": "eligible", "predicted_label": "not_eligible"}
+    assert build_error_cases([record])[0] == record
+
+
+def test_build_error_cases_mixed():
+    records = [
+        {"patient_id": "P001", "gold_label": "eligible", "predicted_label": "eligible"},
+        {"patient_id": "P002", "gold_label": "eligible", "predicted_label": "not_eligible"},
+        {"patient_id": "P003", "gold_label": "not_eligible", "predicted_label": "unclear"},
+    ]
+    result = build_error_cases(records)
+    assert len(result) == 2
+    assert result[0]["patient_id"] == "P002"
+    assert result[1]["patient_id"] == "P003"

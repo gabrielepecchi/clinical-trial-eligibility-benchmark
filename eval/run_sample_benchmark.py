@@ -207,7 +207,14 @@ def main() -> None:
     print(format_coverage_summary(coverage))
 
     # Save results
-    output = build_benchmark_output(metadata, coverage, label_distribution, confusion_matrix, metrics, prediction_records)
+    output = build_benchmark_output(
+        metadata,
+        coverage,
+        label_distribution,
+        confusion_matrix,
+        metrics,
+        prediction_records,
+    )
     RESULTS_FILE.write_text(json.dumps(output, indent=2), encoding="utf-8")
     print(f"\nResults saved to {RESULTS_FILE}")
 
