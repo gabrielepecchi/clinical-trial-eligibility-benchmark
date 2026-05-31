@@ -2,7 +2,7 @@
 
 import re
 
-from models import CriterionDecision, CriterionMatchResult, CriterionType
+from app.models import CriterionDecision, CriterionMatchResult, CriterionType
 
 
 # ---------------------------------------------------------------------------

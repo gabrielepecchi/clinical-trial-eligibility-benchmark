@@ -12,6 +12,8 @@ from run_sample_benchmark import (
     build_benchmark_output,
     build_error_cases,
     build_error_summary,
+    build_prediction_csv_rows,
+    write_prediction_csv_rows,
     format_error_summary,
 )
 
@@ -736,3 +738,123 @@ def test_build_error_summary_error_rate():
 
 def test_build_error_summary_zero_total():
     assert build_error_summary([], 0)["error_rate"] == 0.0
+
+
+# ---------------------------------------------------------------------------
+# build_prediction_csv_rows tests
+# ---------------------------------------------------------------------------
+
+_CSV_RECORD = {
+    "patient_id": "P001",
+    "trial_id": "T001",
+    "gold_label": "eligible",
+    "predicted_label": "eligible",
+    "confidence": 0.9,
+    "missing_information": ["age", "diagnosis"],
+    "criterion_results": [{"criterion_text": "age >= 18"}],
+}
+
+_CSV_RECORD_WRONG = {
+    "patient_id": "P002",
+    "trial_id": "T001",
+    "gold_label": "eligible",
+    "predicted_label": "not_eligible",
+    "confidence": 0.6,
+    "missing_information": [],
+    "criterion_results": [],
+}
+
+
+def test_build_prediction_csv_rows_returns_list():
+    assert isinstance(build_prediction_csv_rows([]), list)
+
+
+def test_build_prediction_csv_rows_empty_input():
+    assert build_prediction_csv_rows([]) == []
+
+
+def test_build_prediction_csv_rows_normal_case_length():
+    assert len(build_prediction_csv_rows([_CSV_RECORD])) == 1
+
+
+def test_build_prediction_csv_rows_row_is_dict():
+    row = build_prediction_csv_rows([_CSV_RECORD])[0]
+    assert isinstance(row, dict)
+
+
+def test_build_prediction_csv_rows_patient_id():
+    assert build_prediction_csv_rows([_CSV_RECORD])[0]["patient_id"] == "P001"
+
+
+def test_build_prediction_csv_rows_trial_id():
+    assert build_prediction_csv_rows([_CSV_RECORD])[0]["trial_id"] == "T001"
+
+
+def test_build_prediction_csv_rows_gold_label():
+    assert build_prediction_csv_rows([_CSV_RECORD])[0]["gold_label"] == "eligible"
+
+
+def test_build_prediction_csv_rows_predicted_label():
+    assert build_prediction_csv_rows([_CSV_RECORD])[0]["predicted_label"] == "eligible"
+
+
+def test_build_prediction_csv_rows_correct_true():
+    assert build_prediction_csv_rows([_CSV_RECORD])[0]["correct"] is True
+
+
+def test_build_prediction_csv_rows_correct_false():
+    assert build_prediction_csv_rows([_CSV_RECORD_WRONG])[0]["correct"] is False
+
+
+def test_build_prediction_csv_rows_confidence():
+    assert build_prediction_csv_rows([_CSV_RECORD])[0]["confidence"] == 0.9
+
+
+def test_build_prediction_csv_rows_missing_information_string():
+    assert isinstance(build_prediction_csv_rows([_CSV_RECORD])[0]["missing_information"], str)
+
+
+def test_build_prediction_csv_rows_missing_information_joined():
+    assert build_prediction_csv_rows([_CSV_RECORD])[0]["missing_information"] == "age; diagnosis"
+
+
+def test_build_prediction_csv_rows_num_missing_information():
+    assert build_prediction_csv_rows([_CSV_RECORD])[0]["num_missing_information"] == 2
+
+
+def test_build_prediction_csv_rows_num_criterion_results():
+    assert build_prediction_csv_rows([_CSV_RECORD])[0]["num_criterion_results"] == 1
+
+
+def test_build_prediction_csv_rows_num_missing_information_zero():
+    assert build_prediction_csv_rows([_CSV_RECORD_WRONG])[0]["num_missing_information"] == 0
+
+
+def test_build_prediction_csv_rows_num_criterion_results_zero():
+    assert build_prediction_csv_rows([_CSV_RECORD_WRONG])[0]["num_criterion_results"] == 0
+
+
+# ---------------------------------------------------------------------------
+# write_prediction_csv_rows tests
+# ---------------------------------------------------------------------------
+
+def test_write_prediction_csv_rows_creates_file(tmp_path):
+    out = tmp_path / "preds.csv"
+    write_prediction_csv_rows([_CSV_RECORD], out)
+    assert out.exists()
+
+
+def test_write_prediction_csv_rows_header_present(tmp_path):
+    out = tmp_path / "preds.csv"
+    write_prediction_csv_rows([_CSV_RECORD], out)
+    first_line = out.read_text(encoding="utf-8").splitlines()[0]
+    assert "patient_id" in first_line
+    assert "gold_label" in first_line
+
+
+def test_write_prediction_csv_rows_empty_creates_header_only(tmp_path):
+    out = tmp_path / "empty.csv"
+    write_prediction_csv_rows([], out)
+    lines = out.read_text(encoding="utf-8").splitlines()
+    assert len(lines) == 1
+    assert "patient_id" in lines[0]

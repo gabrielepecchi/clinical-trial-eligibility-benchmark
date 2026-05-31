@@ -1,5 +1,6 @@
 """Run the sample benchmark: match patients to trials and evaluate predictions."""
 
+import csv
 import json
 from pathlib import Path
 
@@ -14,6 +15,7 @@ PATIENTS_FILE = Path("data/processed/patient_cases_sample.json")
 TRIALS_FILE = Path("data/processed/trial_cases_sample.json")
 LABELS_FILE = Path("data/processed/labels_sample.json")
 RESULTS_FILE = Path("data/processed/results_sample.json")
+SAMPLE_PREDICTIONS_CSV_FILE = Path("data/processed/results_sample_predictions.csv")
 
 
 def load_json(path: Path) -> list[dict]:
@@ -126,6 +128,41 @@ def build_error_summary(error_cases: list[dict], total_predictions: int) -> dict
         "total_predictions": total_predictions,
         "error_rate": 0.0 if total_predictions == 0 else n / total_predictions,
     }
+
+
+_CSV_FIELDNAMES = [
+    "patient_id", "trial_id", "gold_label", "predicted_label",
+    "correct", "confidence", "missing_information",
+    "num_missing_information", "num_criterion_results",
+]
+
+
+def write_prediction_csv_rows(rows: list[dict], output_path: Path) -> None:
+    with output_path.open("w", newline="", encoding="utf-8") as f:
+        writer = csv.DictWriter(f, fieldnames=_CSV_FIELDNAMES, extrasaction="ignore")
+        writer.writeheader()
+        writer.writerows(rows)
+
+
+def build_prediction_csv_rows(prediction_records: list[dict]) -> list[dict]:
+    rows = []
+    for r in prediction_records:
+        missing = r.get("missing_information") or []
+        criterion = r.get("criterion_results") or []
+        gold = r.get("gold_label", "")
+        predicted = r.get("predicted_label", "")
+        rows.append({
+            "patient_id": r.get("patient_id", ""),
+            "trial_id": r.get("trial_id", ""),
+            "gold_label": gold,
+            "predicted_label": predicted,
+            "correct": gold == predicted,
+            "confidence": r.get("confidence", ""),
+            "missing_information": "; ".join(missing),
+            "num_missing_information": len(missing),
+            "num_criterion_results": len(criterion),
+        })
+    return rows
 
 
 def build_benchmark_output(
@@ -248,6 +285,10 @@ def main() -> None:
     )
     RESULTS_FILE.write_text(json.dumps(output, indent=2), encoding="utf-8")
     print(f"\nResults saved to {RESULTS_FILE}")
+
+    csv_rows = build_prediction_csv_rows(prediction_records)
+    write_prediction_csv_rows(csv_rows, SAMPLE_PREDICTIONS_CSV_FILE)
+    print(f"Predictions CSV saved to {SAMPLE_PREDICTIONS_CSV_FILE}")
 
 
 if __name__ == "__main__":
