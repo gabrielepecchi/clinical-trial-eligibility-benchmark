@@ -399,6 +399,35 @@ _TRIAL_WASHOUT_PATTERNS = [
     r"prior.*participation",
 ]
 
+_UNVERIFIABLE_INCLUSION_PATTERNS = [
+    r"ability to.*(?:operate|use).*(?:device|app|application|system|software|technology)",
+    r"(?:operate|use).*(?:device|app|application|system|software|technology).*independently",
+    r"home.*(?:wifi|wi.fi|wireless|internet|broadband|connectivity)",
+    r"(?:wifi|wi.fi|wireless|internet|broadband).*(?:access|connection|available|required)",
+    r"no.*concurrent.*(?:trial|study|participation|investigational)",
+    r"not.*(?:enrolled|participating).*(?:trial|study|investigational)",
+    r"concurrent.*(?:trial|study).*(?:exclusion|prohibited|not permitted)",
+    r"(?:medical|physician|doctor|clinician).*clearance",
+    r"clearance.*(?:from|by).*(?:physician|doctor|clinician|medical)",
+    r"written.*(?:clearance|approval|consent).*(?:physician|doctor)",
+    r"caregiver.*(?:available|present|willing|required)",
+    r"access to.*(?:transport|transportation|clinic|facility)",
+    r"ability to.*(?:attend|travel|commute|visit).*(?:clinic|site|centre|center)",
+    r"willing.*(?:to comply|to participate|to attend|to complete)",
+    r"able to.*(?:comply|participate|attend|complete).*(?:protocol|study|trial|visits)",
+]
+
+
+def _count_unverifiable_inclusion_criteria(trial: dict) -> int:
+    """Return the number of inclusion criteria that are logistical/external and cannot be verified from a patient profile."""
+    count = 0
+    for criterion in trial.get("inclusion_criteria", []):
+        c = criterion.lower()
+        if _any_match(_UNVERIFIABLE_INCLUSION_PATTERNS, c):
+            count += 1
+    return count
+
+
 _PATIENT_COMPLEX_COMORBIDITY_PATTERNS = [
     r"\bfrail",
     r"frailty",
@@ -994,6 +1023,16 @@ def match_patient_to_trial(patient: dict, trial: dict) -> dict:
         if comorbid_fact:
             matched_facts.append(comorbid_fact)
 
+    # --- Extended: unverifiable inclusion criteria burden ---
+    unverifiable_count = _count_unverifiable_inclusion_criteria(trial)
+    if unverifiable_count >= 3 and not blocking_criteria:
+        uncertain_criteria.append(
+            f"unverifiable inclusion criteria: {unverifiable_count} inclusion criteria"
+            " cannot be verified from the patient profile"
+            " (e.g. device operation ability, home internet access,"
+            " concurrent trial participation, physician clearance)"
+        )
+
     # --- Determine prediction ---
     if blocking_criteria:
         prediction = "not_eligible"
@@ -1049,6 +1088,9 @@ def match_patient_to_trial(patient: dict, trial: dict) -> dict:
 
     if stage_uncertain:
         missing_information.append("disease_stage_or_duration")
+
+    if unverifiable_count >= 3 and not blocking_criteria:
+        missing_information.append("unverifiable_inclusion_criteria")
 
     if trial_part_uncertain:
         missing_information.append("trial_participation_history")

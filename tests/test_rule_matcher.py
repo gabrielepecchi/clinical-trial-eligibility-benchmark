@@ -445,3 +445,49 @@ def test_no_duplicate_cognitive_score_label():
     )
     result = match_patient_to_trial(patient, trial)
     assert result["missing_information"].count("cognitive_score") == 1
+
+
+# ---------------------------------------------------------------------------
+# Unclear — unverifiable inclusion criteria burden
+# ---------------------------------------------------------------------------
+
+def test_unclear_when_multiple_unverifiable_inclusion_criteria():
+    """Predicts eligible today; should predict unclear once the burden check is implemented."""
+    patient = make_patient(
+        age=65,
+        diagnosis=["Parkinson disease"],
+        key_features=["idiopathic Parkinson disease, stable"],
+        medications=[],
+        exclusions=[],
+    )
+    trial = make_trial(
+        inclusion_criteria=[
+            "Confirmed diagnosis of idiopathic Parkinson disease",
+            "Ability to safely operate and use the study device independently",
+            "Access to home wireless internet (WiFi) required for data transmission",
+            "No concurrent participation in another interventional clinical trial",
+            "Medical clearance from physician prior to study participation",
+        ],
+        exclusion_criteria=[],
+    )
+    result = match_patient_to_trial(patient, trial)
+    # The patient has no blocking criteria, but 4 inclusion criteria cannot be
+    # verified from the patient profile. The matcher should flag this as unclear.
+    assert result["prediction"] == "unclear", (
+        f"Expected 'unclear' due to unverifiable inclusion criteria burden, "
+        f"got '{result['prediction']}'. "
+        f"uncertain_criteria={result['uncertain_criteria']}, "
+        f"missing_information={result.get('missing_information', [])}"
+    )
+    has_uncertainty_signal = (
+        any(
+            "unverifiable" in c.lower() or "inclusion" in c.lower()
+            for c in result["uncertain_criteria"]
+        )
+        or "unverifiable_inclusion_criteria" in result.get("missing_information", [])
+    )
+    assert has_uncertainty_signal, (
+        "Expected an uncertainty signal mentioning unverifiable or missing inclusion criteria. "
+        f"uncertain_criteria={result['uncertain_criteria']}, "
+        f"missing_information={result.get('missing_information', [])}"
+    )
