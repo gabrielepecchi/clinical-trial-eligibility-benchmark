@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang='en'>
+<head>
+<meta charset='utf-8'>
+<meta name='viewport' content='width=device-width, initial-scale=1'>
+<title>Benchmark Report</title>
+<style>
+body { font-family: sans-serif; max-width: 1100px; margin: 2rem auto; padding: 0 1rem; color: #222; }
+h1 { color: #c0392b; }
+h2 { border-bottom: 2px solid #ddd; padding-bottom: .3rem; margin-top: 2rem; }
+.disclaimer { background: #fff3cd; border: 1px solid #ffc107; padding: .8rem 1rem; border-radius: 4px; }
+table { border-collapse: collapse; width: 100%; margin: .8rem 0; font-size: .9rem; }
+th, td { border: 1px solid #ccc; padding: .4rem .7rem; text-align: left; }
+thead { background: #f0f0f0; }
+table.kv th { width: 40%; background: #f8f8f8; }
+.good { color: #27ae60; font-weight: bold; }
+.bad  { color: #c0392b; font-weight: bold; }
+.warn { color: #e67e22; font-weight: bold; }
+pre { background: #f4f4f4; padding: .6rem; border-radius: 4px; white-space: pre-wrap; font-size: .82rem; }
+</style>
+</head>
+<body>
+<h1>LLM-Reviewed Benchmark Report</h1>
+<div class='disclaimer'><strong>⚠ Disclaimer:</strong> This report is based on <strong>synthetic patient cases</strong> and <strong>draft LLM-reviewed labels</strong> that have not been fully validated. Results are for research and development purposes only. <strong>Not for clinical use.</strong> Label source: <code>data\processed\labels_llm_reviewed.json</code></div>
+<section>
+<h2>Benchmark Metadata</h2>
+<table class='kv'><tr><th>label_source</th><td>data\processed\labels_llm_reviewed.json</td></tr><tr><th>label_status</th><td>llm_reviewed_needs_spotcheck</td></tr><tr><th>evaluated_pairs</th><td>150</td></tr><tr><th>skipped_pairs</th><td>0</td></tr></table>
+</section>
+<section>
+<h2>Global Metrics</h2>
+<table class='kv'><tr><th>Accuracy</th><td>68.7%</td></tr><tr><th>Macro Precision</th><td>0.689</td></tr><tr><th>Macro Recall</th><td>0.744</td></tr><tr><th>Macro F1</th><td>0.694</td></tr></table><h3>Per-class metrics</h3><table><thead><tr><th>Label</th><th>Precision</th><th>Recall</th><th>F1</th></tr></thead><tbody><tr><td>eligible</td><td>0.582</td><td>0.780</td><td>0.667</td></tr><tr><td>not_eligible</td><td>0.644</td><td>0.906</td><td>0.753</td></tr><tr><td>unclear</td><td>0.840</td><td>0.545</td><td>0.661</td></tr></tbody></table>
+</section>
+<section>
+<h2>Confusion Matrix</h2>
+<table><thead><tr><th>Gold \ Predicted</th><th>eligible</th><th>not_eligible</th><th>unclear</th></tr></thead><tbody><tr><td>eligible</td><td>32</td><td>4</td><td>5</td></tr><tr><td>not_eligible</td><td>0</td><td>29</td><td>3</td></tr><tr><td>unclear</td><td>23</td><td>12</td><td>42</td></tr></tbody></table>
+</section>
+<section>
+<h2>Safety &amp; Uncertainty Summary</h2>
+<table class='kv'><tr><th>Total predictions</th><td>150</td></tr><tr><th>Unsafe eligible errors (not_eligible → eligible)</th><td>0</td></tr><tr><th>Overly conservative errors (eligible → not_eligible)</th><td>4</td></tr><tr><th>Uncertainty errors (unclear → eligible/not_eligible)</th><td>35</td></tr><tr><th>Unclear recall</th><td>0.545</td></tr><tr><th>Unclear precision</th><td>0.840</td></tr><tr><th>Overcommitment rate</th><td>0.455</td></tr></table>
+</section>
+<section>
+<h2>Error Severity Summary</h2>
+<table class='kv'><tr><th>Total predictions</th><td>150</td></tr><tr><th>Total errors</th><td>47</td></tr><tr><th>Critical errors (not_eligible → eligible)</th><td>0</td></tr><tr><th>Major errors</th><td>43</td></tr><tr><th>Minor errors</th><td>7</td></tr><tr><th>Critical error rate</th><td>0.0%</td></tr><tr><th>Major error rate</th><td>28.7%</td></tr><tr><th>Minor error rate</th><td>4.7%</td></tr></table>
+</section>
+<section>
+<h2>Criterion Type Summary</h2>
+<table><thead><tr><th>criterion_type</th><th>total_criteria</th><th>decision_met</th><th>decision_not_met</th><th>decision_unclear</th><th>decision_unknown</th><th>correct_pairs</th><th>total_pairs</th><th>pair_accuracy</th></tr></thead><tbody><tr><td>exclusion</td><td>1002</td><td>13</td><td>27</td><td>0</td><td>962</td><td>101</td><td>147</td><td>0.6870748299319728</td></tr><tr><td>inclusion</td><td>798</td><td>221</td><td>11</td><td>0</td><td>566</td><td>103</td><td>150</td><td>0.6866666666666666</td></tr></tbody></table>
+</section>
+<section>
+<h2>Error Analysis (from error_analysis_llm_reviewed.json)</h2>
+<p>47 error analysis records loaded.</p>
+</section>
+<section>
+<h2>Errors by Type</h2>
+<h3>Errors by error_type</h3><table><thead><tr><th>error_type</th><th>count</th></tr></thead><tbody><tr><td>missed_uncertainty_missing_detail</td><td>16</td></tr><tr><td>overcalled_not_eligible_instead_of_unclear</td><td>12</td></tr><tr><td>overcalled_unclear</td><td>5</td></tr><tr><td>undercalled_not_eligible_as_unclear</td><td>3</td></tr><tr><td>overcalled_eligible</td><td>3</td></tr><tr><td>missed_device_uncertainty</td><td>2</td></tr><tr><td>missed_safety_uncertainty</td><td>2</td></tr><tr><td>overcalled_not_eligible</td><td>2</td></tr><tr><td>overstrict_dbs_rule</td><td>1</td></tr><tr><td>overstrict_age_or_stage_rule</td><td>1</td></tr></tbody></table><h3>Errors by Gold/Predicted Pair</h3><table><thead><tr><th>Gold label</th><th>Predicted label</th><th>Count</th></tr></thead><tbody><tr><td>unclear</td><td>eligible</td><td>23</td></tr><tr><td>unclear</td><td>not_eligible</td><td>12</td></tr><tr><td>eligible</td><td>unclear</td><td>5</td></tr><tr><td>eligible</td><td>not_eligible</td><td>4</td></tr><tr><td>not_eligible</td><td>unclear</td><td>3</td></tr></tbody></table>
+</section>
+<section>
+<h2>Error Examples (first 15)</h2>
+<details><summary><strong>#1</strong> patient=P008 trial=T003 — gold=<span class='good'>unclear</span> predicted=<span class='bad'>eligible</span></summary><pre>Blocking criteria : 
+Uncertain criteria: 
+Matcher explanation:
+No blocking or uncertain criteria identified. Matched facts: patient age 69 within age &gt;= 21; Parkinson disease diagnosis confirmed.
+
+Gold rationale:
+REM sleep behavior disorder symptoms are present; it is unclear whether this constitutes an exclusion in this neuropsychiatric protocol.</pre></details>
+<details><summary><strong>#2</strong> patient=P012 trial=T004 — gold=<span class='good'>unclear</span> predicted=<span class='bad'>not_eligible</span></summary><pre>Blocking criteria : Parkinson disease diagnosis required
+Uncertain criteria: 
+Matcher explanation:
+Patient does not meet eligibility requirements. Blocking criteria: Parkinson disease diagnosis required.
+
+Gold rationale:
+Patient is a healthy control; the E-RAS trial targets individuals with PD, but the summary does not clarify whether healthy controls are included as a comparator arm.</pre></details>
+<details><summary><strong>#3</strong> patient=P019 trial=T005 — gold=<span class='good'>unclear</span> predicted=<span class='bad'>not_eligible</span></summary><pre>Blocking criteria : cognitive exclusion: trial excludes patients with dementia or cognitive impairment
+Uncertain criteria: 
+Matcher explanation:
+Patient does not meet eligibility requirements. Blocking criteria: cognitive exclusion: trial excludes patients with dementia or cognitive impairment.
+
+Gold rationale:
+No prior DBS confirmed; study requires DBS candidacy or implantation, but protocol details are unavailable to determine whether naive candidates qualify.</pre></details>
+<details><summary><strong>#4</strong> patient=P003 trial=T005 — gold=<span class='good'>unclear</span> predicted=<span class='bad'>not_eligible</span></summary><pre>Blocking criteria : deep brain stimulation (DBS) implant is an exclusion criterion
+Uncertain criteria: 
+Matcher explanation:
+Patient does not meet eligibility requirements. Blocking criteria: deep brain stimulation (DBS) implant is an exclusion criterion.
+
+Gold rationale:
+Patient has prior bilateral DBS; whether the DBS international study targets already-implanted patients or new candidates cannot be determined from the summary.</pre></details>
+<details><summary><strong>#5</strong> patient=P013 trial=T006 — gold=<span class='good'>unclear</span> predicted=<span class='bad'>not_eligible</span></summary><pre>Blocking criteria : trial requires idiopathic Parkinson disease for treatment/intervention; patient has atypical or unclear parkinsonism
+Uncertain criteria: 
+Matcher explanation:
+Patient does not meet eligibility requirements. Blocking criteria: trial requires idiopathic Parkinson disease for treatment/intervention; patient has atypical or unclear parkinsonism.
+
+Gold rationale:
+Atypical parkinsonism with poor levodopa response may not meet inclusion criteria for a PD-specific intervention; confirmation of PD diagnosis is unclear.</pre></details>
+<details><summary><strong>#6</strong> patient=P012 trial=T007 — gold=<span class='good'>not_eligible</span> predicted=<span class='bad'>unclear</span></summary><pre>Blocking criteria : 
+Uncertain criteria: patient is a healthy control/volunteer; Parkinson disease may be required but trial scope is ambiguous
+Matcher explanation:
+Eligibility cannot be determined due to missing or unverifiable information. Uncertain criteria: patient is a healthy control/volunteer; Parkinson disease may be required but trial scope is ambiguous.
+
+Gold rationale:
+Healthy control without PD does not meet the inclusion criterion for a PD enteric nervous system study unless a control arm is specified, which is not confirmed.</pre></details>
+<details><summary><strong>#7</strong> patient=P014 trial=T008 — gold=<span class='good'>unclear</span> predicted=<span class='bad'>eligible</span></summary><pre>Blocking criteria : 
+Uncertain criteria: 
+Matcher explanation:
+No blocking or uncertain criteria identified. Matched facts: Parkinson disease diagnosis confirmed.
+
+Gold rationale:
+Patient has PD with autonomic dysfunction; it is unclear whether orthostatic hypotension is an exclusion for a general PD rehabilitation quality-of-life study.</pre></details>
+<details><summary><strong>#8</strong> patient=P020 trial=T008 — gold=<span class='good'>unclear</span> predicted=<span class='bad'>eligible</span></summary><pre>Blocking criteria : 
+Uncertain criteria: 
+Matcher explanation:
+No blocking or uncertain criteria identified. Matched facts: Parkinson disease diagnosis confirmed.
+
+Gold rationale:
+Missing disease duration and severity details prevent confirmation of key inclusion criteria for a rehabilitation quality-of-life trial.</pre></details>
+<details><summary><strong>#9</strong> patient=P018 trial=T009 — gold=<span class='good'>unclear</span> predicted=<span class='bad'>not_eligible</span></summary><pre>Blocking criteria : trial requires age &gt;= 60
+Uncertain criteria: patient has comorbidity or condition that may affect protocol compliance or safety in this trial type
+Matcher explanation:
+Patient does not meet eligibility requirements. Blocking criteria: trial requires age &gt;= 60.
+
+Gold rationale:
+Cardiac pacemaker is present; home physiotherapy without electrical stimulation may not be contraindicated, but pacemaker safety in this specific protocol cannot be confirmed.</pre></details>
+<details><summary><strong>#10</strong> patient=P019 trial=T011 — gold=<span class='good'>unclear</span> predicted=<span class='bad'>eligible</span></summary><pre>Blocking criteria : 
+Uncertain criteria: 
+Matcher explanation:
+No blocking or uncertain criteria identified. Matched facts: Parkinson disease diagnosis confirmed.
+
+Gold rationale:
+Patient has PD with imaging workup; fMRI-DBS study may require active DBS candidacy or hardware that is not confirmed in this summary.</pre></details>
+<details><summary><strong>#11</strong> patient=P004 trial=T011 — gold=<span class='good'>unclear</span> predicted=<span class='bad'>eligible</span></summary><pre>Blocking criteria : 
+Uncertain criteria: 
+Matcher explanation:
+No blocking or uncertain criteria identified. Matched facts: Parkinson disease diagnosis confirmed.
+
+Gold rationale:
+Cognitive impairment is present; it is unclear whether this triggers exclusion for an fMRI-DBS study that may require intact capacity.</pre></details>
+<details><summary><strong>#12</strong> patient=P012 trial=T012 — gold=<span class='good'>not_eligible</span> predicted=<span class='bad'>unclear</span></summary><pre>Blocking criteria : 
+Uncertain criteria: patient is a healthy control/volunteer; Parkinson disease may be required but trial scope is ambiguous
+Matcher explanation:
+Eligibility cannot be determined due to missing or unverifiable information. Uncertain criteria: patient is a healthy control/volunteer; Parkinson disease may be required but trial scope is ambiguous.
+
+Gold rationale:
+Healthy control without PD does not meet inclusion for a PD-specific virtual reality task study unless a comparator arm is confirmed.</pre></details>
+<details><summary><strong>#13</strong> patient=P020 trial=T013 — gold=<span class='good'>unclear</span> predicted=<span class='bad'>eligible</span></summary><pre>Blocking criteria : 
+Uncertain criteria: 
+Matcher explanation:
+No blocking or uncertain criteria identified. Matched facts: Parkinson disease diagnosis confirmed.
+
+Gold rationale:
+Missing disease duration and severity data prevent determining whether the patient meets FoG-specific inclusion criteria.</pre></details>
+<details><summary><strong>#14</strong> patient=P001 trial=T013 — gold=<span class='good'>unclear</span> predicted=<span class='bad'>eligible</span></summary><pre>Blocking criteria : 
+Uncertain criteria: 
+Matcher explanation:
+No blocking or uncertain criteria identified. Matched facts: Parkinson disease diagnosis confirmed.
+
+Gold rationale:
+Patient has mild tremor without documented freezing of gait; FoG study inclusion typically requires confirmed FoG episodes.</pre></details>
+<details><summary><strong>#15</strong> patient=P007 trial=T014 — gold=<span class='good'>unclear</span> predicted=<span class='bad'>eligible</span></summary><pre>Blocking criteria : 
+Uncertain criteria: 
+Matcher explanation:
+No blocking or uncertain criteria identified. Matched facts: Parkinson disease diagnosis confirmed.
+
+Gold rationale:
+Depression is present; a LCIG non-motor symptoms trial may or may not exclude psychiatric comorbidities depending on scope.</pre></details>
+</section>
+
+</body>
+</html>
