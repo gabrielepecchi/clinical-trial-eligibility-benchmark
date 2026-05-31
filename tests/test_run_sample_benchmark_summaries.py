@@ -11,10 +11,11 @@ from run_sample_benchmark import (
     format_benchmark_metadata,
     build_benchmark_output,
     build_error_cases,
+    build_error_summary,
     format_error_summary,
 )
 
-_TOP_LEVEL_KEYS = {"metadata", "coverage", "label_distribution", "confusion_matrix", "metrics", "predictions", "error_cases"}
+_TOP_LEVEL_KEYS = {"metadata", "coverage", "label_distribution", "confusion_matrix", "metrics", "predictions", "error_cases", "error_summary"}
 
 
 def _build_sample_output() -> dict:
@@ -33,6 +34,7 @@ def _build_sample_output() -> dict:
         "metrics": {"accuracy": 1.0, "macro_f1": 1.0, "per_class": {}},
         "predictions": prediction_records,
         "error_cases": build_error_cases(prediction_records),
+        "error_summary": build_error_summary(build_error_cases(prediction_records), len(prediction_records)),
     }
 
 
@@ -541,51 +543,56 @@ _CM = {"eligible": {"eligible": 1, "not_eligible": 0, "unclear": 0}, "not_eligib
 _METRICS = {"accuracy": 1.0, "macro_f1": 1.0, "per_class": {}}
 _PREDS = [{"patient_id": "P001", "trial_id": "T001", "predicted_label": "eligible"}]
 _ERROR_CASES = []
+_ERROR_SUMMARY = {"error_cases": 0, "total_predictions": 1, "error_rate": 0.0}
 
 
 def test_build_benchmark_output_returns_dict():
-    assert isinstance(build_benchmark_output(_META, _COV, _DIST, _CM, _METRICS, _PREDS, _ERROR_CASES), dict)
+    assert isinstance(build_benchmark_output(_META, _COV, _DIST, _CM, _METRICS, _PREDS, _ERROR_CASES, _ERROR_SUMMARY), dict)
 
 
 def test_build_benchmark_output_exact_keys():
-    result = build_benchmark_output(_META, _COV, _DIST, _CM, _METRICS, _PREDS, _ERROR_CASES)
+    result = build_benchmark_output(_META, _COV, _DIST, _CM, _METRICS, _PREDS, _ERROR_CASES, _ERROR_SUMMARY)
     assert set(result.keys()) == _TOP_LEVEL_KEYS
 
 
 def test_build_benchmark_output_metadata_value():
-    assert build_benchmark_output(_META, _COV, _DIST, _CM, _METRICS, _PREDS, _ERROR_CASES)["metadata"] is _META
+    assert build_benchmark_output(_META, _COV, _DIST, _CM, _METRICS, _PREDS, _ERROR_CASES, _ERROR_SUMMARY)["metadata"] is _META
 
 
 def test_build_benchmark_output_coverage_value():
-    assert build_benchmark_output(_META, _COV, _DIST, _CM, _METRICS, _PREDS, _ERROR_CASES)["coverage"] is _COV
+    assert build_benchmark_output(_META, _COV, _DIST, _CM, _METRICS, _PREDS, _ERROR_CASES, _ERROR_SUMMARY)["coverage"] is _COV
 
 
 def test_build_benchmark_output_label_distribution_value():
-    assert build_benchmark_output(_META, _COV, _DIST, _CM, _METRICS, _PREDS, _ERROR_CASES)["label_distribution"] is _DIST
+    assert build_benchmark_output(_META, _COV, _DIST, _CM, _METRICS, _PREDS, _ERROR_CASES, _ERROR_SUMMARY)["label_distribution"] is _DIST
 
 
 def test_build_benchmark_output_confusion_matrix_value():
-    assert build_benchmark_output(_META, _COV, _DIST, _CM, _METRICS, _PREDS, _ERROR_CASES)["confusion_matrix"] is _CM
+    assert build_benchmark_output(_META, _COV, _DIST, _CM, _METRICS, _PREDS, _ERROR_CASES, _ERROR_SUMMARY)["confusion_matrix"] is _CM
 
 
 def test_build_benchmark_output_metrics_value():
-    assert build_benchmark_output(_META, _COV, _DIST, _CM, _METRICS, _PREDS, _ERROR_CASES)["metrics"] is _METRICS
+    assert build_benchmark_output(_META, _COV, _DIST, _CM, _METRICS, _PREDS, _ERROR_CASES, _ERROR_SUMMARY)["metrics"] is _METRICS
 
 
 def test_build_benchmark_output_predictions_equals_records():
-    assert build_benchmark_output(_META, _COV, _DIST, _CM, _METRICS, _PREDS, _ERROR_CASES)["predictions"] == _PREDS
+    assert build_benchmark_output(_META, _COV, _DIST, _CM, _METRICS, _PREDS, _ERROR_CASES, _ERROR_SUMMARY)["predictions"] == _PREDS
 
 
 def test_build_benchmark_output_error_cases_is_list():
-    assert isinstance(build_benchmark_output(_META, _COV, _DIST, _CM, _METRICS, _PREDS, _ERROR_CASES)["error_cases"], list)
+    assert isinstance(build_benchmark_output(_META, _COV, _DIST, _CM, _METRICS, _PREDS, _ERROR_CASES, _ERROR_SUMMARY)["error_cases"], list)
 
 
 def test_build_benchmark_output_error_cases_value():
-    assert build_benchmark_output(_META, _COV, _DIST, _CM, _METRICS, _PREDS, _ERROR_CASES)["error_cases"] is _ERROR_CASES
+    assert build_benchmark_output(_META, _COV, _DIST, _CM, _METRICS, _PREDS, _ERROR_CASES, _ERROR_SUMMARY)["error_cases"] is _ERROR_CASES
+
+
+def test_build_benchmark_output_error_summary_value():
+    assert build_benchmark_output(_META, _COV, _DIST, _CM, _METRICS, _PREDS, _ERROR_CASES, _ERROR_SUMMARY)["error_summary"] is _ERROR_SUMMARY
 
 
 def test_build_benchmark_output_normal_case():
-    result = build_benchmark_output(_META, _COV, _DIST, _CM, _METRICS, _PREDS, _ERROR_CASES)
+    result = build_benchmark_output(_META, _COV, _DIST, _CM, _METRICS, _PREDS, _ERROR_CASES, _ERROR_SUMMARY)
     assert result["metadata"]["benchmark_name"] == "sample_benchmark"
     assert result["predictions"][0]["patient_id"] == "P001"
 
@@ -672,3 +679,27 @@ def test_format_error_summary_zero_cases():
 def test_format_error_summary_zero_total():
     result = format_error_summary([], 0)
     assert "0.0%" in result
+
+
+# ---------------------------------------------------------------------------
+# build_error_summary tests
+# ---------------------------------------------------------------------------
+
+def test_build_error_summary_returns_dict():
+    assert isinstance(build_error_summary(_TWO_ERRORS, 10), dict)
+
+
+def test_build_error_summary_error_cases_count():
+    assert build_error_summary(_TWO_ERRORS, 10)["error_cases"] == 2
+
+
+def test_build_error_summary_total_predictions():
+    assert build_error_summary(_TWO_ERRORS, 10)["total_predictions"] == 10
+
+
+def test_build_error_summary_error_rate():
+    assert build_error_summary(_TWO_ERRORS, 10)["error_rate"] == 0.2
+
+
+def test_build_error_summary_zero_total():
+    assert build_error_summary([], 0)["error_rate"] == 0.0
