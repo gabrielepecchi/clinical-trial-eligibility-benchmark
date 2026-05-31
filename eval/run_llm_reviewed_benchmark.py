@@ -141,6 +141,40 @@ def build_benchmark_output(
     }
 
 
+def build_error_severity_summary(prediction_records: list[dict]) -> dict:
+    """Compute error severity counts and rates."""
+    total = len(prediction_records)
+    total_errors = 0
+    critical = 0
+    major = 0
+    minor = 0
+
+    for r in prediction_records:
+        gold = r.get("gold_label", "")
+        pred = r.get("predicted_label", "")
+        if gold != pred:
+            total_errors += 1
+        if gold == "not_eligible" and pred == "eligible":
+            critical += 1
+        if (gold == "unclear" and pred in {"eligible", "not_eligible"}) or \
+           (gold in {"eligible", "not_eligible"} and pred == "unclear"):
+            major += 1
+        if (gold == "eligible" and pred == "not_eligible") or \
+           (gold == "not_eligible" and pred == "unclear"):
+            minor += 1
+
+    return {
+        "total_predictions": total,
+        "total_errors": total_errors,
+        "critical_errors": critical,
+        "major_errors": major,
+        "minor_errors": minor,
+        "critical_error_rate": critical / total if total else 0,
+        "major_error_rate": major / total if total else 0,
+        "minor_error_rate": minor / total if total else 0,
+    }
+
+
 def load_json(path: Path) -> list[dict]:
     """Load a JSON list from disk."""
     return json.loads(path.read_text(encoding="utf-8"))

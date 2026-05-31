@@ -345,3 +345,101 @@ def test_build_benchmark_output_summary_preserved_exactly():
     summary = {"total_predictions": 5, "unsafe_eligible_errors": 2, "unclear_recall": 0.5}
     result = build_benchmark_output(_META, _METRICS, summary, _PREDS)
     assert result["safety_uncertainty_summary"] == summary
+
+
+# --- build_error_severity_summary ---
+
+from run_llm_reviewed_benchmark import build_error_severity_summary
+
+# Fixture: 9 records covering all error categories
+# 0: correct eligible
+# 1: critical  — gold not_eligible, pred eligible
+# 2: major     — gold unclear, pred eligible
+# 3: major     — gold unclear, pred not_eligible
+# 4: major     — gold eligible, pred unclear
+# 5: major+minor — gold not_eligible, pred unclear  (counts as both major AND minor)
+# 6: minor     — gold eligible, pred not_eligible
+# 7: correct not_eligible
+# 8: correct unclear
+_ES_RECORDS = [
+    {"gold_label": "eligible",     "predicted_label": "eligible"},      # 0 correct
+    {"gold_label": "not_eligible", "predicted_label": "eligible"},      # 1 critical
+    {"gold_label": "unclear",      "predicted_label": "eligible"},      # 2 major
+    {"gold_label": "unclear",      "predicted_label": "not_eligible"},  # 3 major
+    {"gold_label": "eligible",     "predicted_label": "unclear"},       # 4 major
+    {"gold_label": "not_eligible", "predicted_label": "unclear"},       # 5 major+minor
+    {"gold_label": "eligible",     "predicted_label": "not_eligible"},  # 6 minor
+    {"gold_label": "not_eligible", "predicted_label": "not_eligible"},  # 7 correct
+    {"gold_label": "unclear",      "predicted_label": "unclear"},       # 8 correct
+]
+# total=9, total_errors=6 (records 1-6 are wrong), critical=1, major=4, minor=2
+
+
+def test_build_error_severity_summary_empty():
+    result = build_error_severity_summary([])
+    assert result["total_predictions"] == 0
+    assert result["total_errors"] == 0
+    assert result["critical_errors"] == 0
+    assert result["major_errors"] == 0
+    assert result["minor_errors"] == 0
+    assert result["critical_error_rate"] == 0
+    assert result["major_error_rate"] == 0
+    assert result["minor_error_rate"] == 0
+
+
+def test_build_error_severity_summary_returns_dict():
+    assert isinstance(build_error_severity_summary(_ES_RECORDS), dict)
+
+
+def test_build_error_severity_summary_keys():
+    result = build_error_severity_summary(_ES_RECORDS)
+    for key in [
+        "total_predictions", "total_errors",
+        "critical_errors", "major_errors", "minor_errors",
+        "critical_error_rate", "major_error_rate", "minor_error_rate",
+    ]:
+        assert key in result
+
+
+def test_build_error_severity_summary_total_predictions():
+    assert build_error_severity_summary(_ES_RECORDS)["total_predictions"] == 9
+
+
+def test_build_error_severity_summary_total_errors():
+    assert build_error_severity_summary(_ES_RECORDS)["total_errors"] == 6
+
+
+def test_build_error_severity_summary_critical_errors():
+    assert build_error_severity_summary(_ES_RECORDS)["critical_errors"] == 1
+
+
+def test_build_error_severity_summary_major_errors():
+    assert build_error_severity_summary(_ES_RECORDS)["major_errors"] == 4
+
+
+def test_build_error_severity_summary_minor_errors():
+    assert build_error_severity_summary(_ES_RECORDS)["minor_errors"] == 2
+
+
+def test_build_error_severity_summary_critical_error_rate():
+    assert build_error_severity_summary(_ES_RECORDS)["critical_error_rate"] == 1 / 9
+
+
+def test_build_error_severity_summary_major_error_rate():
+    assert build_error_severity_summary(_ES_RECORDS)["major_error_rate"] == 4 / 9
+
+
+def test_build_error_severity_summary_minor_error_rate():
+    assert build_error_severity_summary(_ES_RECORDS)["minor_error_rate"] == 2 / 9
+
+
+def test_build_error_severity_summary_no_errors():
+    records = [
+        {"gold_label": "eligible",     "predicted_label": "eligible"},
+        {"gold_label": "not_eligible", "predicted_label": "not_eligible"},
+    ]
+    result = build_error_severity_summary(records)
+    assert result["total_errors"] == 0
+    assert result["critical_errors"] == 0
+    assert result["major_errors"] == 0
+    assert result["minor_errors"] == 0
