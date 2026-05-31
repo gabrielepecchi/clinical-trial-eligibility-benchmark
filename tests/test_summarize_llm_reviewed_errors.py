@@ -138,3 +138,74 @@ def test_write_error_csv_rows_header_includes_severity(tmp_path):
     write_error_csv_rows(build_error_csv_rows([_ERROR_RECORD]), out)
     first_line = out.read_text(encoding="utf-8").splitlines()[0]
     assert "severity" in first_line
+
+
+# --- build_error_record ---
+
+from summarize_llm_reviewed_errors import build_error_record
+
+_PRED_RECORD = {
+    "patient_id": "P001",
+    "trial_id": "T001",
+    "gold_label": "not_eligible",
+    "predicted_label": "eligible",
+    "gold_rationale": "Cognitive exclusion applies.",
+    "matcher_explanation": "No blocking criteria found.",
+    "blocking_criteria": ["moca < 24"],
+    "uncertain_criteria": [],
+    "gold_evidence": {},
+}
+
+_PRED_RECORD_MINIMAL = {
+    "patient_id": "P002",
+    "trial_id": "T002",
+    "gold_label": "eligible",
+    "predicted_label": "not_eligible",
+}
+
+
+def test_build_error_record_returns_dict():
+    assert isinstance(build_error_record(_PRED_RECORD), dict)
+
+
+def test_build_error_record_keys():
+    result = build_error_record(_PRED_RECORD)
+    for key in [
+        "patient_id", "trial_id", "gold_label", "predicted_label",
+        "error_type", "severity", "gold_rationale", "matcher_explanation",
+        "blocking_criteria", "uncertain_criteria",
+    ]:
+        assert key in result
+
+
+def test_build_error_record_patient_id():
+    assert build_error_record(_PRED_RECORD)["patient_id"] == "P001"
+
+
+def test_build_error_record_gold_label():
+    assert build_error_record(_PRED_RECORD)["gold_label"] == "not_eligible"
+
+
+def test_build_error_record_predicted_label():
+    assert build_error_record(_PRED_RECORD)["predicted_label"] == "eligible"
+
+
+def test_build_error_record_severity_populated():
+    assert build_error_record(_PRED_RECORD)["severity"] == "critical"
+
+
+def test_build_error_record_error_type_populated():
+    assert build_error_record(_PRED_RECORD)["error_type"] != ""
+
+
+def test_build_error_record_minimal_no_crash():
+    result = build_error_record(_PRED_RECORD_MINIMAL)
+    assert result["patient_id"] == "P002"
+
+
+def test_build_error_record_minimal_severity_populated():
+    assert build_error_record(_PRED_RECORD_MINIMAL)["severity"] == "minor"
+
+
+def test_build_error_record_blocking_criteria_preserved():
+    assert build_error_record(_PRED_RECORD)["blocking_criteria"] == ["moca < 24"]
