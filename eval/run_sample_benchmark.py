@@ -20,6 +20,14 @@ def load_json(path: Path) -> list[dict]:
     return json.loads(path.read_text(encoding="utf-8"))
 
 
+def build_coverage_summary(prediction_records: list[dict]) -> dict:
+    return {
+        "total_predictions": len(prediction_records),
+        "with_missing_information": sum(1 for r in prediction_records if r.get("missing_information")),
+        "with_criterion_results": sum(1 for r in prediction_records if r.get("criterion_results")),
+    }
+
+
 def main() -> None:
     # Load data
     patients = load_json(PATIENTS_FILE)
@@ -94,6 +102,7 @@ def main() -> None:
 
     # Save results
     output = {
+        "coverage": build_coverage_summary(prediction_records),
         "metrics": metrics,
         "predictions": prediction_records,
     }
