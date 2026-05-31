@@ -108,3 +108,100 @@ def test_write_llm_reviewed_csv_rows_empty_creates_header_only(tmp_path):
     lines = out.read_text(encoding="utf-8").splitlines()
     assert len(lines) == 1
     assert "patient_id" in lines[0]
+
+
+# --- criterion-level CSV helpers ---
+
+from run_llm_reviewed_benchmark import (
+    build_criterion_level_csv_rows,
+    write_criterion_level_csv_rows,
+)
+
+_CR1 = {"criterion_text": "Age >= 18", "criterion_type": "inclusion", "decision": "met", "reason": "Patient is 25."}
+_CR2 = {"criterion_text": "No prior chemo", "criterion_type": "exclusion", "decision": "not_met", "reason": "No chemo history."}
+
+_PRED_WITH_CRITERIA = {
+    "patient_id": "P001",
+    "trial_id": "T001",
+    "gold_label": "eligible",
+    "predicted_label": "eligible",
+    "criterion_results": [_CR1, _CR2],
+}
+
+_PRED_NO_CRITERIA = {
+    "patient_id": "P002",
+    "trial_id": "T002",
+    "gold_label": "not_eligible",
+    "predicted_label": "not_eligible",
+    "criterion_results": [],
+}
+
+
+def test_build_criterion_level_csv_rows_empty_input():
+    assert build_criterion_level_csv_rows([]) == []
+
+
+def test_build_criterion_level_csv_rows_two_criteria_two_rows():
+    assert len(build_criterion_level_csv_rows([_PRED_WITH_CRITERIA])) == 2
+
+
+def test_build_criterion_level_csv_rows_no_criteria_no_rows():
+    assert build_criterion_level_csv_rows([_PRED_NO_CRITERIA]) == []
+
+
+def test_build_criterion_level_csv_rows_row_is_dict():
+    assert isinstance(build_criterion_level_csv_rows([_PRED_WITH_CRITERIA])[0], dict)
+
+
+def test_build_criterion_level_csv_rows_patient_id():
+    assert build_criterion_level_csv_rows([_PRED_WITH_CRITERIA])[0]["patient_id"] == "P001"
+
+
+def test_build_criterion_level_csv_rows_trial_id():
+    assert build_criterion_level_csv_rows([_PRED_WITH_CRITERIA])[0]["trial_id"] == "T001"
+
+
+def test_build_criterion_level_csv_rows_gold_label():
+    assert build_criterion_level_csv_rows([_PRED_WITH_CRITERIA])[0]["gold_label"] == "eligible"
+
+
+def test_build_criterion_level_csv_rows_predicted_label():
+    assert build_criterion_level_csv_rows([_PRED_WITH_CRITERIA])[0]["predicted_label"] == "eligible"
+
+
+def test_build_criterion_level_csv_rows_criterion():
+    assert build_criterion_level_csv_rows([_PRED_WITH_CRITERIA])[0]["criterion"] == "Age >= 18"
+
+
+def test_build_criterion_level_csv_rows_criterion_type():
+    assert build_criterion_level_csv_rows([_PRED_WITH_CRITERIA])[0]["criterion_type"] == "inclusion"
+
+
+def test_build_criterion_level_csv_rows_decision():
+    assert build_criterion_level_csv_rows([_PRED_WITH_CRITERIA])[0]["decision"] == "met"
+
+
+def test_build_criterion_level_csv_rows_reason():
+    assert build_criterion_level_csv_rows([_PRED_WITH_CRITERIA])[0]["reason"] == "Patient is 25."
+
+
+def test_write_criterion_level_csv_rows_creates_file(tmp_path):
+    out = tmp_path / "criterion.csv"
+    write_criterion_level_csv_rows(build_criterion_level_csv_rows([_PRED_WITH_CRITERIA]), out)
+    assert out.exists()
+
+
+def test_write_criterion_level_csv_rows_header_present(tmp_path):
+    out = tmp_path / "criterion.csv"
+    write_criterion_level_csv_rows(build_criterion_level_csv_rows([_PRED_WITH_CRITERIA]), out)
+    first_line = out.read_text(encoding="utf-8").splitlines()[0]
+    assert "patient_id" in first_line
+    assert "criterion" in first_line
+
+
+def test_write_criterion_level_csv_rows_empty_creates_header_only(tmp_path):
+    out = tmp_path / "criterion_empty.csv"
+    write_criterion_level_csv_rows([], out)
+    lines = out.read_text(encoding="utf-8").splitlines()
+    assert len(lines) == 1
+    assert "patient_id" in lines[0]

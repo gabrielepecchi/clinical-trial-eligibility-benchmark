@@ -8,7 +8,7 @@ import csv
 import json
 from pathlib import Path
 
-from app.eligibility.rule_matcher import match_patient_to_trial
+from app.eligibility.rule_matcher import match_patient_to_trial, match_patient_to_trial_criteria
 from eval.evaluate import compute_metrics
 
 PATIENTS_FILE = Path("data/processed/patient_cases.json")
@@ -16,6 +16,7 @@ TRIALS_FILE = Path("data/processed/trial_cases.json")
 LABELS_FILE = Path("data/processed/labels_llm_reviewed.json")
 RESULTS_FILE = Path("data/processed/results_llm_reviewed.json")
 RESULTS_CSV_FILE = Path("data/processed/results_llm_reviewed.csv")
+CRITERION_CSV_FILE = Path("data/processed/criterion_level_results.csv")
 
 
 _CSV_FIELDNAMES = [
@@ -55,6 +56,36 @@ def write_llm_reviewed_csv_rows(rows: list[dict], output_path: Path) -> None:
         writer.writerows(rows)
 
 
+_CRITERION_CSV_FIELDNAMES = [
+    "patient_id", "trial_id", "gold_label", "predicted_label",
+    "criterion", "criterion_type", "decision", "reason",
+]
+
+
+def build_criterion_level_csv_rows(prediction_records: list[dict]) -> list[dict]:
+    rows = []
+    for r in prediction_records:
+        for cr in r.get("criterion_results") or []:
+            rows.append({
+                "patient_id": r.get("patient_id", ""),
+                "trial_id": r.get("trial_id", ""),
+                "gold_label": r.get("gold_label", ""),
+                "predicted_label": r.get("predicted_label", ""),
+                "criterion": cr.get("criterion_text", ""),
+                "criterion_type": cr.get("criterion_type", ""),
+                "decision": cr.get("decision", ""),
+                "reason": cr.get("reason", ""),
+            })
+    return rows
+
+
+def write_criterion_level_csv_rows(rows: list[dict], output_path: Path) -> None:
+    with output_path.open("w", newline="", encoding="utf-8") as f:
+        writer = csv.DictWriter(f, fieldnames=_CRITERION_CSV_FIELDNAMES, extrasaction="ignore")
+        writer.writeheader()
+        writer.writerows(rows)
+
+
 def load_json(path: Path) -> list[dict]:
     """Load a JSON list from disk."""
     return json.loads(path.read_text(encoding="utf-8"))
@@ -88,6 +119,16 @@ def main() -> None:
         predicted_label = result["prediction"]
         gold_label = record["label"]
 
+        criterion_results = [
+            {
+                "criterion_text": cr.criterion_text,
+                "criterion_type": cr.criterion_type.value,
+                "decision": cr.decision.value,
+                "reason": cr.reason,
+            }
+            for cr in match_patient_to_trial_criteria(patient, trial)
+        ]
+
         gold_labels.append(gold_label)
         predictions.append(predicted_label)
 
@@ -105,6 +146,7 @@ def main() -> None:
                 "matcher_explanation": result["explanation"],
                 "gold_rationale": record.get("rationale", ""),
                 "gold_evidence": record.get("evidence", {}),
+                "criterion_results": criterion_results,
             }
         )
 
@@ -126,6 +168,9 @@ def main() -> None:
     csv_rows = build_llm_reviewed_csv_rows(prediction_records)
     write_llm_reviewed_csv_rows(csv_rows, RESULTS_CSV_FILE)
 
+    criterion_rows = build_criterion_level_csv_rows(prediction_records)
+    write_criterion_level_csv_rows(criterion_rows, CRITERION_CSV_FILE)
+
     print("\n=== LLM-Reviewed Draft Benchmark Results ===")
     print(f"Evaluated pairs : {len(gold_labels)}")
     print(f"Skipped pairs   : {skipped}")
@@ -138,6 +183,7 @@ def main() -> None:
 
     print(f"\nResults saved to {RESULTS_FILE}")
     print(f"Predictions CSV saved to {RESULTS_CSV_FILE}")
+    print(f"Criterion-level CSV saved to {CRITERION_CSV_FILE}")
 
 
 if __name__ == "__main__":
