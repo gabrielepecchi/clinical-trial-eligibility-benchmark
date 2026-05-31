@@ -110,10 +110,12 @@ def build_error_cases(prediction_records: list[dict]) -> list[dict]:
     return [r for r in prediction_records if r.get("gold_label") != r.get("predicted_label")]
 
 
-def format_error_summary(error_cases: list[dict]) -> str:
+def format_error_summary(error_cases: list[dict], total_predictions: int) -> str:
+    n = len(error_cases)
+    pct = 0.0 if total_predictions == 0 else round(n / total_predictions * 100, 1)
     return (
         "\nErrors\n"
-        f"  Error cases: {len(error_cases)}"
+        f"  Error cases: {n} / {total_predictions} ({pct}%)"
     )
 
 
@@ -218,7 +220,7 @@ def main() -> None:
     print(format_benchmark_metadata(metadata))
     print(format_label_distribution(label_distribution))
     print(format_confusion_matrix(confusion_matrix))
-    print(format_error_summary(error_cases))
+    print(format_error_summary(error_cases, len(prediction_records)))
     print(format_coverage_summary(coverage))
 
     # Save results

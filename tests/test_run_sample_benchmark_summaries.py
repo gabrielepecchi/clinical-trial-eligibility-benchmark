@@ -640,22 +640,35 @@ _TWO_ERRORS = [
 
 
 def test_format_error_summary_returns_string():
-    assert isinstance(format_error_summary(_TWO_ERRORS), str)
+    assert isinstance(format_error_summary(_TWO_ERRORS, 10), str)
 
 
 def test_format_error_summary_contains_errors_label():
-    assert "Errors" in format_error_summary(_TWO_ERRORS)
+    assert "Errors" in format_error_summary(_TWO_ERRORS, 10)
 
 
 def test_format_error_summary_contains_error_cases_label():
-    assert "Error cases" in format_error_summary(_TWO_ERRORS)
+    assert "Error cases" in format_error_summary(_TWO_ERRORS, 10)
 
 
 def test_format_error_summary_contains_count():
-    assert "2" in format_error_summary(_TWO_ERRORS)
+    assert "2" in format_error_summary(_TWO_ERRORS, 10)
+
+
+def test_format_error_summary_contains_total():
+    assert "10" in format_error_summary(_TWO_ERRORS, 10)
+
+
+def test_format_error_summary_contains_percentage():
+    assert "20.0%" in format_error_summary(_TWO_ERRORS, 10)
 
 
 def test_format_error_summary_zero_cases():
-    result = format_error_summary([])
+    result = format_error_summary([], 10)
     assert "0" in result
     assert "Error cases" in result
+
+
+def test_format_error_summary_zero_total():
+    result = format_error_summary([], 0)
+    assert "0.0%" in result
