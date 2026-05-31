@@ -1,11 +1,45 @@
 """Summarize errors from the LLM-reviewed draft benchmark results."""
 
+import csv
 import json
 from collections import Counter
 from pathlib import Path
 
 RESULTS_FILE = Path("data/processed/results_llm_reviewed.json")
 OUTPUT_FILE = Path("data/processed/error_analysis_llm_reviewed.json")
+ERROR_CSV_FILE = Path("data/processed/error_analysis_llm_reviewed.csv")
+
+
+_CSV_FIELDNAMES = [
+    "case_id", "patient_id", "trial_id", "gold_label", "predicted_label",
+    "error_type", "explanation", "possible_fix",
+    "blocking_criteria", "uncertain_criteria",
+]
+
+
+def build_error_csv_rows(error_records: list[dict]) -> list[dict]:
+    rows = []
+    for i, r in enumerate(error_records, start=1):
+        rows.append({
+            "case_id": i,
+            "patient_id": r.get("patient_id", ""),
+            "trial_id": r.get("trial_id", ""),
+            "gold_label": r.get("gold_label", ""),
+            "predicted_label": r.get("predicted_label", ""),
+            "error_type": r.get("error_type", ""),
+            "explanation": r.get("matcher_explanation", ""),
+            "possible_fix": "",
+            "blocking_criteria": "; ".join(r.get("blocking_criteria") or []),
+            "uncertain_criteria": "; ".join(r.get("uncertain_criteria") or []),
+        })
+    return rows
+
+
+def write_error_csv_rows(rows: list[dict], output_path: Path) -> None:
+    with output_path.open("w", newline="", encoding="utf-8") as f:
+        writer = csv.DictWriter(f, fieldnames=_CSV_FIELDNAMES, extrasaction="ignore")
+        writer.writeheader()
+        writer.writerows(rows)
 
 
 def classify_error(record: dict) -> str:
@@ -95,6 +129,9 @@ def main() -> None:
 
     OUTPUT_FILE.write_text(json.dumps(errors, indent=2), encoding="utf-8")
 
+    csv_rows = build_error_csv_rows(errors)
+    write_error_csv_rows(csv_rows, ERROR_CSV_FILE)
+
     print("=== LLM-Reviewed Benchmark Error Analysis ===")
     print(f"Total predictions: {len(predictions)}")
     print(f"Errors:            {len(errors)}")
@@ -118,6 +155,7 @@ def main() -> None:
         )
 
     print(f"\nSaved detailed errors to {OUTPUT_FILE}")
+    print(f"Error CSV saved to {ERROR_CSV_FILE}")
 
 
 if __name__ == "__main__":
