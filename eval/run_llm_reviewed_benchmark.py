@@ -86,6 +86,46 @@ def write_criterion_level_csv_rows(rows: list[dict], output_path: Path) -> None:
         writer.writerows(rows)
 
 
+def build_safety_uncertainty_summary(prediction_records: list[dict]) -> dict:
+    """Compute safety and uncertainty error counts and rates."""
+    total = len(prediction_records)
+    unsafe = 0
+    uncertainty = 0
+    conservative = 0
+    gold_unclear = 0
+    true_unclear = 0
+    predicted_unclear = 0
+    overcommitted = 0
+
+    for r in prediction_records:
+        gold = r.get("gold_label", "")
+        pred = r.get("predicted_label", "")
+        if gold == "not_eligible" and pred == "eligible":
+            unsafe += 1
+        if gold == "unclear" and pred in {"eligible", "not_eligible"}:
+            uncertainty += 1
+        if gold == "eligible" and pred == "not_eligible":
+            conservative += 1
+        if gold == "unclear":
+            gold_unclear += 1
+            if pred == "unclear":
+                true_unclear += 1
+            if pred in {"eligible", "not_eligible"}:
+                overcommitted += 1
+        if pred == "unclear":
+            predicted_unclear += 1
+
+    return {
+        "total_predictions": total,
+        "unsafe_eligible_errors": unsafe,
+        "uncertainty_errors": uncertainty,
+        "overly_conservative_errors": conservative,
+        "unclear_recall": true_unclear / gold_unclear if gold_unclear else 0,
+        "unclear_precision": true_unclear / predicted_unclear if predicted_unclear else 0,
+        "overcommitment_rate": overcommitted / gold_unclear if gold_unclear else 0,
+    }
+
+
 def load_json(path: Path) -> list[dict]:
     """Load a JSON list from disk."""
     return json.loads(path.read_text(encoding="utf-8"))

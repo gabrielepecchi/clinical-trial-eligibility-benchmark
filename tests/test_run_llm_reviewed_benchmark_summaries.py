@@ -205,3 +205,102 @@ def test_write_criterion_level_csv_rows_empty_creates_header_only(tmp_path):
     lines = out.read_text(encoding="utf-8").splitlines()
     assert len(lines) == 1
     assert "patient_id" in lines[0]
+
+
+# --- build_safety_uncertainty_summary ---
+
+from run_llm_reviewed_benchmark import build_safety_uncertainty_summary
+
+_SU_RECORDS = [
+    # correct eligible
+    {"gold_label": "eligible",     "predicted_label": "eligible"},
+    # overly_conservative: gold eligible, pred not_eligible
+    {"gold_label": "eligible",     "predicted_label": "not_eligible"},
+    # unsafe_eligible: gold not_eligible, pred eligible
+    {"gold_label": "not_eligible", "predicted_label": "eligible"},
+    # correct not_eligible
+    {"gold_label": "not_eligible", "predicted_label": "not_eligible"},
+    # uncertainty_error: gold unclear, pred eligible
+    {"gold_label": "unclear",      "predicted_label": "eligible"},
+    # uncertainty_error: gold unclear, pred not_eligible
+    {"gold_label": "unclear",      "predicted_label": "not_eligible"},
+    # correct unclear
+    {"gold_label": "unclear",      "predicted_label": "unclear"},
+    # predicted unclear, gold not_eligible (precision miss)
+    {"gold_label": "not_eligible", "predicted_label": "unclear"},
+]
+
+
+def test_build_safety_uncertainty_summary_empty():
+    result = build_safety_uncertainty_summary([])
+    assert result["total_predictions"] == 0
+    assert result["unsafe_eligible_errors"] == 0
+    assert result["uncertainty_errors"] == 0
+    assert result["overly_conservative_errors"] == 0
+
+
+def test_build_safety_uncertainty_summary_returns_dict():
+    assert isinstance(build_safety_uncertainty_summary(_SU_RECORDS), dict)
+
+
+def test_build_safety_uncertainty_summary_keys():
+    result = build_safety_uncertainty_summary(_SU_RECORDS)
+    for key in [
+        "total_predictions", "unsafe_eligible_errors", "uncertainty_errors",
+        "overly_conservative_errors", "unclear_recall", "unclear_precision",
+        "overcommitment_rate",
+    ]:
+        assert key in result
+
+
+def test_build_safety_uncertainty_summary_total():
+    assert build_safety_uncertainty_summary(_SU_RECORDS)["total_predictions"] == 8
+
+
+def test_build_safety_uncertainty_summary_unsafe_eligible_errors():
+    assert build_safety_uncertainty_summary(_SU_RECORDS)["unsafe_eligible_errors"] == 1
+
+
+def test_build_safety_uncertainty_summary_uncertainty_errors():
+    assert build_safety_uncertainty_summary(_SU_RECORDS)["uncertainty_errors"] == 2
+
+
+def test_build_safety_uncertainty_summary_overly_conservative_errors():
+    assert build_safety_uncertainty_summary(_SU_RECORDS)["overly_conservative_errors"] == 1
+
+
+def test_build_safety_uncertainty_summary_unclear_recall():
+    # gold unclear = 3 (indices 4,5,6); predicted unclear among those = 1
+    result = build_safety_uncertainty_summary(_SU_RECORDS)
+    assert result["unclear_recall"] == 1 / 3
+
+
+def test_build_safety_uncertainty_summary_unclear_precision():
+    # predicted unclear = 2 (indices 6,7); gold unclear among those = 1
+    result = build_safety_uncertainty_summary(_SU_RECORDS)
+    assert result["unclear_precision"] == 1 / 2
+
+
+def test_build_safety_uncertainty_summary_overcommitment_rate():
+    # gold unclear = 3; predicted eligible/not_eligible among those = 2
+    result = build_safety_uncertainty_summary(_SU_RECORDS)
+    assert result["overcommitment_rate"] == 2 / 3
+
+
+def test_build_safety_uncertainty_summary_no_unclear_gold_rates_are_zero():
+    records = [
+        {"gold_label": "eligible",     "predicted_label": "eligible"},
+        {"gold_label": "not_eligible", "predicted_label": "not_eligible"},
+    ]
+    result = build_safety_uncertainty_summary(records)
+    assert result["unclear_recall"] == 0
+    assert result["overcommitment_rate"] == 0
+
+
+def test_build_safety_uncertainty_summary_no_unclear_predicted_precision_is_zero():
+    records = [
+        {"gold_label": "eligible",     "predicted_label": "eligible"},
+        {"gold_label": "unclear",      "predicted_label": "eligible"},
+    ]
+    result = build_safety_uncertainty_summary(records)
+    assert result["unclear_precision"] == 0
