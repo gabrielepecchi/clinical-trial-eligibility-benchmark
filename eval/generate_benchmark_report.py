@@ -165,13 +165,19 @@ def render_error_severity(s: dict) -> str:
     return section("Error Severity Summary", kv_table(rows))
 
 
+def _fmt_cell(v: object) -> str:
+    """Format a table cell: round floats to 3 decimals, else str."""
+    if isinstance(v, float):
+        return fmt(v)
+    return str(v) if v is not None else ""
+
+
 def render_criterion_type_summary(rows: list[dict]) -> str:
     if not rows:
         return section("Criterion Type Summary", "<p>No data.</p>")
     all_keys = list(rows[0].keys())
-    headers = all_keys
-    table_rows = [[str(r.get(k, "")) for k in all_keys] for r in rows]
-    return section("Criterion Type Summary", generic_table(headers, table_rows))
+    table_rows = [[_fmt_cell(r.get(k, "")) for k in all_keys] for r in rows]
+    return section("Criterion Type Summary", generic_table(all_keys, table_rows))
 
 
 def render_errors_by_type(error_analysis: list[dict] | None, predictions: list[dict]) -> str:
@@ -235,6 +241,23 @@ def render_error_examples(predictions: list[dict], n: int = 15) -> str:
     return section(f"Error Examples (first {n})", "\n".join(cards))
 
 
+_GENERATED_FILES = [
+    "data/processed/results_llm_reviewed.json",
+    "data/processed/results_llm_reviewed.csv",
+    "data/processed/criterion_level_results.csv",
+    "data/processed/criterion_type_summary.json",
+    "data/processed/criterion_type_summary.csv",
+    "data/processed/error_analysis_llm_reviewed.json",
+    "data/processed/error_analysis_llm_reviewed.csv",
+    "reports/benchmark_report.html",
+]
+
+
+def render_generated_files() -> str:
+    items = "".join(f"<li><code>{esc(f)}</code></li>" for f in _GENERATED_FILES)
+    return section("Generated Files", f"<ul>{items}</ul>")
+
+
 def render_error_analysis(error_analysis: dict | list | None) -> str:
     if not error_analysis:
         return ""
@@ -274,6 +297,7 @@ def main() -> None:
     body += render_safety_uncertainty(safety)
     body += render_error_severity(error_severity)
     body += render_criterion_type_summary(criterion_type_summary or [])
+    body += render_generated_files()
     body += render_error_analysis(error_analysis)
     body += render_errors_by_type(error_analysis if isinstance(error_analysis, list) else None, predictions)
     body += render_error_examples(predictions)
