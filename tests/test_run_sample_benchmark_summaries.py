@@ -11,6 +11,26 @@ from run_sample_benchmark import (
     format_benchmark_metadata,
 )
 
+_TOP_LEVEL_KEYS = {"metadata", "coverage", "label_distribution", "confusion_matrix", "metrics", "predictions"}
+
+
+def _build_sample_output() -> dict:
+    patients = [{"patient_id": "P001"}]
+    trials = [{"trial_id": "T001"}]
+    labels = [{"patient_id": "P001", "trial_id": "T001", "label": "eligible"}]
+    prediction_records = [{"patient_id": "P001", "trial_id": "T001", "predicted_label": "eligible",
+                           "missing_information": [], "criterion_results": []}]
+    gold = ["eligible"]
+    predicted = ["eligible"]
+    return {
+        "metadata": build_benchmark_metadata(patients, trials, labels, prediction_records),
+        "coverage": build_coverage_summary(prediction_records),
+        "label_distribution": build_label_distribution(gold, predicted),
+        "confusion_matrix": build_confusion_matrix(gold, predicted),
+        "metrics": {"accuracy": 1.0, "macro_f1": 1.0, "per_class": {}},
+        "predictions": prediction_records,
+    }
+
 
 # ---------------------------------------------------------------------------
 # Shared helpers
@@ -471,3 +491,36 @@ def test_format_benchmark_metadata_all_zeros_does_not_crash():
     result = format_benchmark_metadata(_ZERO_METADATA)
     assert isinstance(result, str)
     assert "0" in result
+
+
+# ---------------------------------------------------------------------------
+# Benchmark output schema tests
+# ---------------------------------------------------------------------------
+
+def test_output_has_all_top_level_keys():
+    output = _build_sample_output()
+    assert _TOP_LEVEL_KEYS <= set(output)
+
+
+def test_output_metadata_is_dict():
+    assert isinstance(_build_sample_output()["metadata"], dict)
+
+
+def test_output_coverage_is_dict():
+    assert isinstance(_build_sample_output()["coverage"], dict)
+
+
+def test_output_label_distribution_is_dict():
+    assert isinstance(_build_sample_output()["label_distribution"], dict)
+
+
+def test_output_confusion_matrix_is_dict():
+    assert isinstance(_build_sample_output()["confusion_matrix"], dict)
+
+
+def test_output_metrics_is_dict():
+    assert isinstance(_build_sample_output()["metrics"], dict)
+
+
+def test_output_predictions_is_list():
+    assert isinstance(_build_sample_output()["predictions"], list)
