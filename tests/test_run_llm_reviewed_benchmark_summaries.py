@@ -313,38 +313,49 @@ from run_llm_reviewed_benchmark import build_benchmark_output
 _META = {"label_source": "labels.json", "evaluated_pairs": 10, "skipped_pairs": 0}
 _METRICS = {"accuracy": 0.9, "macro_f1": 0.88}
 _SU_SUMMARY = {"total_predictions": 10, "unsafe_eligible_errors": 1}
+_ES_SUMMARY = {"total_predictions": 10, "critical_errors": 1}
 _PREDS = [{"patient_id": "P001", "trial_id": "T001"}]
 
 
 def test_build_benchmark_output_returns_dict():
-    assert isinstance(build_benchmark_output(_META, _METRICS, _SU_SUMMARY, _PREDS), dict)
+    assert isinstance(build_benchmark_output(_META, _METRICS, _SU_SUMMARY, _ES_SUMMARY, _PREDS), dict)
 
 
 def test_build_benchmark_output_keys():
-    result = build_benchmark_output(_META, _METRICS, _SU_SUMMARY, _PREDS)
-    assert set(result.keys()) == {"metadata", "metrics", "safety_uncertainty_summary", "predictions"}
+    result = build_benchmark_output(_META, _METRICS, _SU_SUMMARY, _ES_SUMMARY, _PREDS)
+    assert set(result.keys()) == {"metadata", "metrics", "safety_uncertainty_summary", "error_severity_summary", "predictions"}
 
 
 def test_build_benchmark_output_metadata():
-    assert build_benchmark_output(_META, _METRICS, _SU_SUMMARY, _PREDS)["metadata"] is _META
+    assert build_benchmark_output(_META, _METRICS, _SU_SUMMARY, _ES_SUMMARY, _PREDS)["metadata"] is _META
 
 
 def test_build_benchmark_output_metrics():
-    assert build_benchmark_output(_META, _METRICS, _SU_SUMMARY, _PREDS)["metrics"] is _METRICS
+    assert build_benchmark_output(_META, _METRICS, _SU_SUMMARY, _ES_SUMMARY, _PREDS)["metrics"] is _METRICS
 
 
 def test_build_benchmark_output_safety_uncertainty_summary():
-    assert build_benchmark_output(_META, _METRICS, _SU_SUMMARY, _PREDS)["safety_uncertainty_summary"] is _SU_SUMMARY
+    assert build_benchmark_output(_META, _METRICS, _SU_SUMMARY, _ES_SUMMARY, _PREDS)["safety_uncertainty_summary"] is _SU_SUMMARY
+
+
+def test_build_benchmark_output_error_severity_summary():
+    assert build_benchmark_output(_META, _METRICS, _SU_SUMMARY, _ES_SUMMARY, _PREDS)["error_severity_summary"] is _ES_SUMMARY
 
 
 def test_build_benchmark_output_predictions():
-    assert build_benchmark_output(_META, _METRICS, _SU_SUMMARY, _PREDS)["predictions"] is _PREDS
+    assert build_benchmark_output(_META, _METRICS, _SU_SUMMARY, _ES_SUMMARY, _PREDS)["predictions"] is _PREDS
 
 
 def test_build_benchmark_output_summary_preserved_exactly():
     summary = {"total_predictions": 5, "unsafe_eligible_errors": 2, "unclear_recall": 0.5}
-    result = build_benchmark_output(_META, _METRICS, summary, _PREDS)
+    result = build_benchmark_output(_META, _METRICS, summary, _ES_SUMMARY, _PREDS)
     assert result["safety_uncertainty_summary"] == summary
+
+
+def test_build_benchmark_output_error_severity_preserved_exactly():
+    es = {"total_predictions": 5, "critical_errors": 2, "major_errors": 1}
+    result = build_benchmark_output(_META, _METRICS, _SU_SUMMARY, es, _PREDS)
+    assert result["error_severity_summary"] == es
 
 
 # --- build_error_severity_summary ---
