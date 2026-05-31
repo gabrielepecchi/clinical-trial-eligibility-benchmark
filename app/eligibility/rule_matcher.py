@@ -1992,6 +1992,134 @@ def _check_advanced_pd_requirement(patient: dict, trial: dict) -> tuple[str | No
 
 
 # ---------------------------------------------------------------------------
+# Missing specific inclusion details (uncertainty only)
+# ---------------------------------------------------------------------------
+
+_FOG_GAIT_TRIAL_PATTERNS = [
+    r"freezing.*of.*gait", r"\bfog\b", r"gait.*disturbance", r"gait.*impairment",
+    r"gait.*disorder", r"auditory.*cue", r"cueing.*gait", r"walking.*impairment",
+    r"balance.*impairment", r"gait.*specific", r"gait.*intervention",
+    r"gait.*rehabilitation", r"gait.*training",
+]
+_FOG_GAIT_PATIENT_PATTERNS = [
+    r"freezing.*gait", r"\bfog\b", r"gait.*disturbance", r"gait.*impairment",
+    r"gait.*difficulty", r"shuffling.*gait", r"festination", r"balance.*impairment",
+    r"walking.*impairment", r"gait.*disorder",
+]
+
+_COG_MCI_TRIAL_PATTERNS = [
+    r"\bpd.mci\b", r"mild.*cognitive.*impairment", r"cognitive.*impairment",
+    r"moca.*threshold", r"mmse.*threshold", r"moca\s*[<≤>=]+",
+    r"mmse\s*[<≤>=]+", r"cognitive.*training", r"cognitive.*telerehabilitation",
+    r"cognitive.*motor.*training", r"cognitive.*rehabilitation",
+]
+_COG_MCI_PATIENT_PATTERNS = [
+    r"\bmci\b", r"mild.*cognitive", r"cognitive.*impairment", r"mmse.*\d",
+    r"moca.*\d", r"\d+.*mmse", r"\d+.*moca", r"cognitive.*score",
+    r"dementia",
+]
+
+_SEVERITY_TRIAL_PATTERNS = [
+    r"hoehn.*(?:and|&).*yahr", r"\bh&y\b", r"\bhy\b\s*stage",
+    r"\bupdrs\b", r"\bmds.updrs\b", r"disease.*duration",
+    r"disease.*stage", r"pd.*stage", r"advanced.*pd", r"advanced.*parkinson",
+    r"early.*pd", r"early.*parkinson", r"motor.*fluctuation", r"off.*time",
+    r"\bdyskinesia\b", r"\blcig\b", r"intestinal.*gel", r"wearing.off",
+]
+_SEVERITY_PATIENT_PATTERNS = [
+    r"hoehn.*yahr", r"\bh&y\b", r"\bhy\b.*stage", r"\bupdrs\b",
+    r"disease.*duration", r"disease.*stage", r"advanced.*pd",
+    r"advanced.*parkinson", r"early.*pd", r"motor.*fluctuation",
+    r"off.*time", r"\bdyskinesia\b", r"\blcig\b", r"intestinal.*gel",
+    r"wearing.off", r"years.*parkinson", r"parkinson.*years",
+    r"diagnosed.*\d+.*year", r"\d+.*year.*pd", r"stage\s+[1-5]",
+]
+
+_MED_SPECIFIC_TRIAL_PATTERNS = [
+    r"levodopa.*response", r"stable.*levodopa", r"levodopa.*stable",
+    r"botulinum.*toxin", r"\bbtx\b", r"rotigotine", r"dopamine.*agonist",
+    r"comt.*inhibitor", r"mao.b.*inhibitor", r"medication.*free",
+    r"drug.*naive", r"medication.*washout", r"washout.*period",
+    r"prior.*medication.*exposure", r"medication.*exposure",
+]
+_MED_DOCUMENTED_PATIENT_PATTERNS = [
+    r"levodopa", r"carbidopa", r"rotigotine", r"pramipexole", r"ropinirole",
+    r"rasagiline", r"selegiline", r"safinamide", r"entacapone", r"opicapone",
+    r"amantadine", r"botulinum", r"medication.*stable", r"stable.*medication",
+    r"drug.*naive", r"medication.*free", r"no.*medication",
+]
+
+_LANG_SCALE_TRIAL_PATTERNS = [
+    r"\burdu\b", r"\bspanish\b", r"\bitalian\b", r"\bfrench\b", r"\bgerman\b",
+    r"\bportugues", r"\bchinese\b", r"\bjapanese\b", r"\bkorean\b",
+    r"questionnaire.*validation", r"scale.*validation", r"translated.*version",
+    r"translation.*stud", r"language.*specific", r"linguistic.*validation",
+]
+_LANG_PATIENT_PATTERNS = [
+    r"speak.*\w+", r"language.*\w+", r"\w+.*speaking", r"native.*language",
+    r"fluent", r"literate",
+]
+
+
+def _check_missing_specific_inclusion_details(
+    patient: dict, trial: dict
+) -> list[str]:
+    """Return uncertain criteria when trial requires specific details absent from patient profile."""
+    uncertain: list[str] = []
+
+    inclusion_text = _text(trial.get("inclusion_criteria", []))
+    title_text = _text(trial.get("title", "") or "")
+    official_title_text = _text(trial.get("official_title", "") or "")
+    trial_full = inclusion_text + " " + title_text + " " + official_title_text
+
+    patient_all = _text(
+        patient.get("key_features", [])
+        + patient.get("medications", [])
+        + patient.get("exclusions", [])
+        + [patient.get("summary", "") or ""]
+        + [patient.get("diagnosis", "") or ""]
+    )
+
+    # 1. FoG/gait-specific requirement
+    if _any_match(_FOG_GAIT_TRIAL_PATTERNS, inclusion_text):
+        if not _any_match(_FOG_GAIT_PATIENT_PATTERNS, patient_all):
+            uncertain.append(
+                "trial requires specific gait/FoG/balance features not documented in patient profile"
+            )
+
+    # 2. Cognitive/MCI requirement
+    if _any_match(_COG_MCI_TRIAL_PATTERNS, inclusion_text):
+        if not _any_match(_COG_MCI_PATIENT_PATTERNS, patient_all):
+            uncertain.append(
+                "trial requires cognitive/MCI status not documented in patient profile"
+            )
+
+    # 3. Disease severity/stage/duration requirement
+    if _any_match(_SEVERITY_TRIAL_PATTERNS, inclusion_text):
+        if not _any_match(_SEVERITY_PATIENT_PATTERNS, patient_all):
+            uncertain.append(
+                "trial requires disease severity/stage/duration not documented in patient profile"
+            )
+
+    # 4. Medication-specific requirement
+    if _any_match(_MED_SPECIFIC_TRIAL_PATTERNS, inclusion_text):
+        patient_meds_empty = not patient.get("medications")
+        if patient_meds_empty or not _any_match(_MED_DOCUMENTED_PATIENT_PATTERNS, patient_all):
+            uncertain.append(
+                "trial requires specific medication details not documented in patient profile"
+            )
+
+    # 5. Language/scale-validation requirement
+    if _any_match(_LANG_SCALE_TRIAL_PATTERNS, trial_full):
+        if not _any_match(_LANG_PATIENT_PATTERNS, patient_all):
+            uncertain.append(
+                "trial appears to be a language-specific or scale-validation study; patient language ability not documented"
+            )
+
+    return uncertain
+
+
+# ---------------------------------------------------------------------------
 # Main matcher
 # ---------------------------------------------------------------------------
 
@@ -2184,6 +2312,13 @@ def match_patient_to_trial(patient: dict, trial: dict) -> dict:
             " (e.g. device operation ability, home internet access,"
             " concurrent trial participation, physician clearance)"
         )
+
+    # --- Missing specific inclusion details (uncertainty only, runs when no blocking) ---
+    if not blocking_criteria:
+        missing_detail_uncertainties = _check_missing_specific_inclusion_details(patient, trial)
+        for unc in missing_detail_uncertainties:
+            if unc not in uncertain_criteria:
+                uncertain_criteria.append(unc)
 
     # --- Determine prediction ---
     if blocking_criteria:

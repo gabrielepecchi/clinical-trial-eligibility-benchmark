@@ -2684,3 +2684,143 @@ def test_cognitive_impairment_capacity_trial_not_eligible():
     assert result["prediction"] != "eligible", (
         f"prediction must not be 'eligible' for cognitively impaired patient in capacity trial."
     )
+
+
+# ---------------------------------------------------------------------------
+# Missing specific inclusion details — uncertainty helper
+# ---------------------------------------------------------------------------
+
+def test_fog_gait_trial_pd_patient_no_gait_docs_unclear():
+    """FoG/gait-specific trial + PD patient with no gait/FoG documentation -> unclear."""
+    patient = make_patient(
+        age=65,
+        diagnosis=["Parkinson disease"],
+        key_features=["idiopathic Parkinson disease"],
+    )
+    trial = make_trial(
+        inclusion_criteria=[
+            "Age 40 to 80 years",
+            "Parkinson disease diagnosis",
+            "Freezing of gait or gait disturbance documented",
+            "Auditory cueing responder",
+        ],
+        exclusion_criteria=[],
+    )
+    result = match_patient_to_trial(patient, trial)
+    assert result["prediction"] == "unclear", (
+        f"Expected 'unclear' for gait-specific trial with no gait data in patient. "
+        f"prediction={result['prediction']}, uncertain={result['uncertain_criteria']}"
+    )
+
+
+def test_cognitive_mci_trial_pd_patient_no_cognitive_docs_unclear():
+    """PD-MCI/cognitive trial + PD patient with no cognitive data -> unclear."""
+    patient = make_patient(
+        age=68,
+        diagnosis=["Parkinson disease"],
+        key_features=["idiopathic Parkinson disease"],
+    )
+    trial = make_trial(
+        inclusion_criteria=[
+            "Age 40 to 80 years",
+            "Parkinson disease with mild cognitive impairment (PD-MCI)",
+            "MoCA score >= 18",
+        ],
+        exclusion_criteria=[],
+    )
+    result = match_patient_to_trial(patient, trial)
+    assert result["prediction"] == "unclear", (
+        f"Expected 'unclear' for cognitive/MCI trial with no cognitive data in patient. "
+        f"prediction={result['prediction']}, uncertain={result['uncertain_criteria']}"
+    )
+
+
+def test_severity_stage_trial_pd_patient_no_severity_docs_unclear():
+    """H&Y/UPDRS/disease duration trial + PD patient with no severity documentation -> unclear."""
+    patient = make_patient(
+        age=63,
+        diagnosis=["Parkinson disease"],
+        key_features=["idiopathic Parkinson disease"],
+    )
+    trial = make_trial(
+        inclusion_criteria=[
+            "Age 40 to 80 years",
+            "Parkinson disease diagnosis",
+            "Hoehn and Yahr stage 2 to 3",
+            "Disease duration at least 3 years",
+        ],
+        exclusion_criteria=[],
+    )
+    result = match_patient_to_trial(patient, trial)
+    assert result["prediction"] == "unclear", (
+        f"Expected 'unclear' for severity/stage trial with no stage data in patient. "
+        f"prediction={result['prediction']}, uncertain={result['uncertain_criteria']}"
+    )
+
+
+def test_medication_specific_trial_pd_patient_no_medication_docs_unclear():
+    """Medication-specific trial + patient with no medication documentation -> unclear."""
+    patient = make_patient(
+        age=60,
+        diagnosis=["Parkinson disease"],
+        key_features=["idiopathic Parkinson disease"],
+        medications=[],
+    )
+    trial = make_trial(
+        inclusion_criteria=[
+            "Age 40 to 80 years",
+            "Parkinson disease diagnosis",
+            "Stable levodopa therapy for at least 4 weeks",
+            "Clear levodopa response documented",
+        ],
+        exclusion_criteria=[],
+    )
+    result = match_patient_to_trial(patient, trial)
+    assert result["prediction"] == "unclear", (
+        f"Expected 'unclear' for medication-specific trial with no medication data. "
+        f"prediction={result['prediction']}, uncertain={result['uncertain_criteria']}"
+    )
+
+
+def test_language_scale_validation_trial_pd_patient_no_language_docs_unclear():
+    """Language/scale-validation trial + patient with no language documentation -> unclear."""
+    patient = make_patient(
+        age=55,
+        diagnosis=["Parkinson disease"],
+        key_features=["idiopathic Parkinson disease"],
+    )
+    trial = make_trial(
+        inclusion_criteria=[
+            "Age 40 to 80 years",
+            "Parkinson disease diagnosis",
+            "Urdu-speaking patients for questionnaire validation",
+        ],
+        exclusion_criteria=[],
+        title="Urdu scale validation study for Parkinson disease",
+    )
+    result = match_patient_to_trial(patient, trial)
+    assert result["prediction"] == "unclear", (
+        f"Expected 'unclear' for language-specific validation trial with no language data. "
+        f"prediction={result['prediction']}, uncertain={result['uncertain_criteria']}"
+    )
+
+
+def test_simple_confirmed_pd_age_trial_remains_eligible():
+    """Simple age + confirmed PD trial with no special requirements stays eligible."""
+    patient = make_patient(
+        age=60,
+        diagnosis=["Parkinson disease"],
+        key_features=["idiopathic Parkinson disease"],
+    )
+    trial = make_trial(
+        inclusion_criteria=[
+            "Age 40 to 80 years",
+            "Confirmed Parkinson disease diagnosis",
+        ],
+        exclusion_criteria=[],
+    )
+    result = match_patient_to_trial(patient, trial)
+    assert result["prediction"] == "eligible", (
+        f"Simple confirmed-PD age-only trial must remain eligible. "
+        f"prediction={result['prediction']}, uncertain={result['uncertain_criteria']}"
+    )
