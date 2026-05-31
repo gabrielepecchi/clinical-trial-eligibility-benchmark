@@ -491,3 +491,103 @@ def test_unclear_when_multiple_unverifiable_inclusion_criteria():
         f"uncertain_criteria={result['uncertain_criteria']}, "
         f"missing_information={result.get('missing_information', [])}"
     )
+
+
+# ---------------------------------------------------------------------------
+# Comorbidity / protocol-risk — target-population exemption and contraindication escalation
+# ---------------------------------------------------------------------------
+
+def test_eligible_when_fog_patient_in_fog_device_trial():
+    patient = make_patient(
+        age=65,
+        diagnosis=["Parkinson disease"],
+        key_features=["freezing of gait episodes documented"],
+        medications=[],
+        exclusions=[],
+    )
+    trial = make_trial(
+        inclusion_criteria=[
+            "Age 40 to 80 years",
+            "Confirmed Parkinson disease diagnosis",
+            "Documented freezing of gait episodes",
+        ],
+        exclusion_criteria=[],
+    )
+    result = match_patient_to_trial(patient, trial)
+    assert result["prediction"] == "eligible", (
+        f"Expected 'eligible' for FoG patient in FoG trial, got '{result['prediction']}'. "
+        f"uncertain_criteria={result['uncertain_criteria']}"
+    )
+
+
+def test_eligible_when_dbs_patient_in_dbs_effects_study():
+    patient = make_patient(
+        age=62,
+        diagnosis=["Parkinson disease"],
+        key_features=["bilateral STN DBS implanted 2 years ago"],
+        medications=[],
+        exclusions=[],
+    )
+    trial = make_trial(
+        inclusion_criteria=[
+            "Age 40 to 80 years",
+            "Confirmed Parkinson disease diagnosis",
+            "DBS-implanted patients with directional lead hardware",
+        ],
+        exclusion_criteria=[],
+    )
+    result = match_patient_to_trial(patient, trial)
+    assert result["prediction"] == "eligible", (
+        f"Expected 'eligible' for DBS patient in DBS effects study, got '{result['prediction']}'. "
+        f"uncertain_criteria={result['uncertain_criteria']}"
+    )
+
+
+def test_eligible_when_frail_patient_in_frailty_physiotherapy_trial():
+    patient = make_patient(
+        age=78,
+        diagnosis=["Parkinson disease"],
+        key_features=["frailty noted, recurrent falls"],
+        medications=[],
+        exclusions=[],
+    )
+    trial = make_trial(
+        inclusion_criteria=[
+            "Age 40 to 80 years",
+            "Confirmed Parkinson disease diagnosis",
+            "Frailty present as defined by Fried criteria",
+            "Home physiotherapy frailty rehabilitation study",
+        ],
+        exclusion_criteria=[],
+    )
+    result = match_patient_to_trial(patient, trial)
+    assert result["prediction"] == "eligible", (
+        f"Expected 'eligible' for frail patient in frailty trial, got '{result['prediction']}'. "
+        f"uncertain_criteria={result['uncertain_criteria']}"
+    )
+
+
+def test_not_eligible_when_pacemaker_in_rtms_trial():
+    patient = make_patient(
+        age=68,
+        diagnosis=["Parkinson disease"],
+        key_features=["implanted cardiac pacemaker"],
+        medications=[],
+        exclusions=[],
+    )
+    trial = make_trial(
+        inclusion_criteria=[
+            "Age 40 to 80 years",
+            "Confirmed Parkinson disease diagnosis",
+        ],
+        exclusion_criteria=[
+            "Repetitive transcranial magnetic stimulation (rTMS) contraindications",
+        ],
+    )
+    result = match_patient_to_trial(patient, trial)
+    assert result["prediction"] == "not_eligible", (
+        f"Expected 'not_eligible' for pacemaker patient in rTMS trial, got '{result['prediction']}'. "
+        f"blocking_criteria={result['blocking_criteria']}, "
+        f"uncertain_criteria={result['uncertain_criteria']}"
+    )
+

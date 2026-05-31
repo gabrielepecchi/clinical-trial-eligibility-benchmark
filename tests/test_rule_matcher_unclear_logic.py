@@ -307,7 +307,12 @@ def test_pacemaker_stimulation_trial_returns_unclear():
         "exclusion_criteria": ["TMS stimulation study", "MRI compatible required"],
     }
     result = match_patient_to_trial(patient, trial)
-    assert result["prediction"] == "unclear"
+    assert result["prediction"] == "not_eligible"
+    assert any(
+        kw in c.lower()
+        for c in result["blocking_criteria"]
+        for kw in ("pacemaker", "cardiac", "contraindication", "transcranial", "stimulation")
+    )
 
 
 # ---------------------------------------------------------------------------

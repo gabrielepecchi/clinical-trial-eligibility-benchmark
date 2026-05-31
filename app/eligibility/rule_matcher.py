@@ -399,35 +399,6 @@ _TRIAL_WASHOUT_PATTERNS = [
     r"prior.*participation",
 ]
 
-_UNVERIFIABLE_INCLUSION_PATTERNS = [
-    r"ability to.*(?:operate|use).*(?:device|app|application|system|software|technology)",
-    r"(?:operate|use).*(?:device|app|application|system|software|technology).*independently",
-    r"home.*(?:wifi|wi.fi|wireless|internet|broadband|connectivity)",
-    r"(?:wifi|wi.fi|wireless|internet|broadband).*(?:access|connection|available|required)",
-    r"no.*concurrent.*(?:trial|study|participation|investigational)",
-    r"not.*(?:enrolled|participating).*(?:trial|study|investigational)",
-    r"concurrent.*(?:trial|study).*(?:exclusion|prohibited|not permitted)",
-    r"(?:medical|physician|doctor|clinician).*clearance",
-    r"clearance.*(?:from|by).*(?:physician|doctor|clinician|medical)",
-    r"written.*(?:clearance|approval|consent).*(?:physician|doctor)",
-    r"caregiver.*(?:available|present|willing|required)",
-    r"access to.*(?:transport|transportation|clinic|facility)",
-    r"ability to.*(?:attend|travel|commute|visit).*(?:clinic|site|centre|center)",
-    r"willing.*(?:to comply|to participate|to attend|to complete)",
-    r"able to.*(?:comply|participate|attend|complete).*(?:protocol|study|trial|visits)",
-]
-
-
-def _count_unverifiable_inclusion_criteria(trial: dict) -> int:
-    """Return the number of inclusion criteria that are logistical/external and cannot be verified from a patient profile."""
-    count = 0
-    for criterion in trial.get("inclusion_criteria", []):
-        c = criterion.lower()
-        if _any_match(_UNVERIFIABLE_INCLUSION_PATTERNS, c):
-            count += 1
-    return count
-
-
 _PATIENT_COMPLEX_COMORBIDITY_PATTERNS = [
     r"\bfrail",
     r"frailty",
@@ -488,10 +459,75 @@ _TRIAL_COMPLEX_FOCUS_PATTERNS = [
     r"neuropsychological",
 ]
 
+# Pairs: (patient comorbidity patterns, trial inclusion target patterns).
+# If a patient comorbidity matches AND the trial's *inclusion criteria* signal
+# that comorbidity is the enrolment target, suppress the uncertain flag.
+_COMORBIDITY_TARGET_PAIRS: list[tuple[list[str], list[str]]] = [
+    (
+        # FoG / gait patient in a FoG / gait trial
+        [r"freezing.*gait", r"\bfog\b", r"gait.*disturbance", r"gait.*impairment"],
+        [r"freezing.*gait", r"\bfog\b", r"gait.*study", r"gait.*trial",
+         r"somatosensory.*stimulation", r"auditory.*cue", r"gait.*cueing"],
+    ),
+    (
+        # DBS-implanted patient in a DBS-focused study
+        [r"\bdbs\b", r"deep brain stimulation", r"subthalamic", r"\bstn\b"],
+        [r"dbs.*effect", r"effect.*dbs", r"dbs.*patient", r"dbs.*implant",
+         r"deep brain stimulation.*effect", r"lfp.*sensing", r"directional.*lead",
+         r"dbs.*facial", r"dbs.*neuropsychiatric", r"dbs.*programming",
+         r"subthalamic.*steering", r"dbs.*optimization"],
+    ),
+    (
+        # Frail patient in a frailty / home physiotherapy trial
+        [r"\bfrail", r"frailty"],
+        [r"frailty.*trial", r"frailty.*study", r"frail.*patient",
+         r"home.*physiotherapy", r"home.*physical.*therapy",
+         r"frailty.*intervention", r"frailty.*rehabilitation"],
+    ),
+]
 
-# ---------------------------------------------------------------------------
-# Duration helpers
-# ---------------------------------------------------------------------------
+# Hard safety contraindications: (patient patterns, trial procedure patterns).
+# If matched, add a blocking criterion → not_eligible.
+_HARD_CONTRAINDICATION_PAIRS: list[tuple[list[str], list[str]]] = [
+    (
+        # Implanted cardiac device + electrical brain stimulation
+        [r"\bpacemaker\b", r"cardiac.*pacemaker", r"implanted.*cardiac",
+         r"cardiac.*device", r"implanted.*pacemaker"],
+        [r"\brtms\b", r"\btms\b", r"\btdcs\b",
+         r"transcranial.*magnetic", r"transcranial.*electrical",
+         r"repetitive.*transcranial", r"brain.*stimulation.*trial",
+         r"non.invasive.*brain.*stimulation"],
+    ),
+]
+
+_UNVERIFIABLE_INCLUSION_PATTERNS = [
+    r"ability to.*(?:operate|use).*(?:device|app|application|system|software|technology)",
+    r"(?:operate|use).*(?:device|app|application|system|software|technology).*independently",
+    r"home.*(?:wifi|wi.fi|wireless|internet|broadband|connectivity)",
+    r"(?:wifi|wi.fi|wireless|internet|broadband).*(?:access|connection|available|required)",
+    r"no.*concurrent.*(?:trial|study|participation|investigational)",
+    r"not.*(?:enrolled|participating).*(?:trial|study|investigational)",
+    r"concurrent.*(?:trial|study).*(?:exclusion|prohibited|not permitted)",
+    r"(?:medical|physician|doctor|clinician).*clearance",
+    r"clearance.*(?:from|by).*(?:physician|doctor|clinician|medical)",
+    r"written.*(?:clearance|approval|consent).*(?:physician|doctor)",
+    r"caregiver.*(?:available|present|willing|required)",
+    r"access to.*(?:transport|transportation|clinic|facility)",
+    r"ability to.*(?:attend|travel|commute|visit).*(?:clinic|site|centre|center)",
+    r"willing.*(?:to comply|to participate|to attend|to complete)",
+    r"able to.*(?:comply|participate|attend|complete).*(?:protocol|study|trial|visits)",
+]
+
+
+def _count_unverifiable_inclusion_criteria(trial: dict) -> int:
+    """Return the number of inclusion criteria that are logistical/external and cannot be verified from a patient profile."""
+    count = 0
+    for criterion in trial.get("inclusion_criteria", []):
+        if _any_match(_UNVERIFIABLE_INCLUSION_PATTERNS, criterion.lower()):
+            count += 1
+    return count
+
+
 
 def _to_weeks(amount: int, unit: str) -> int:
     """Convert a duration amount+unit to whole weeks (months = 4 weeks)."""
@@ -762,6 +798,20 @@ def _check_disease_stage_unclear(
         + [str(patient.get("disease_duration", ""))]
     )
 
+    # FoG exemption: if the trial requires FoG and the patient documents FoG,
+    # the only matched stage-severity pattern is FoG itself — don't flag as unclear.
+    _FOG_PATTERNS = [r"freezing.*gait", r"\bfog\b"]
+    _NON_FOG_STAGE_PATTERNS = [
+        p for p in _TRIAL_STAGE_SEVERITY_PATTERNS
+        if p not in (r"freezing of gait", r"\bfog\b", r"\bfog\s")
+    ]
+    if (
+        _any_match(_FOG_PATTERNS, trial_text)
+        and not _any_match(_NON_FOG_STAGE_PATTERNS, trial_text)
+        and _any_match(_FOG_PATTERNS, patient_all_text)
+    ):
+        return None, None
+
     if _any_match(_PATIENT_UNCLEAR_STAGE_PATTERNS, patient_all_text):
         return (
             "trial requires disease stage or severity information but patient data is unclear or missing",
@@ -878,8 +928,13 @@ def _check_recent_trial_participation(
 
 def _check_comorbidity_protocol_risk(
     patient: dict, trial: dict
-) -> tuple[str | None, str | None]:
-    """Return uncertain criterion if patient has complex comorbidities relevant to a protocol-sensitive trial."""
+) -> tuple[str | None, str | None, str | None]:
+    """Return (blocking_criterion, uncertain_criterion, matched_fact) for comorbidity/protocol risk.
+
+    Escalates to blocking when a hard safety contraindication applies.
+    Suppresses the uncertain signal when the comorbidity is the trial's target population.
+    Falls back to uncertain for genuinely ambiguous cases.
+    """
     patient_all_text = _text(
         patient.get("key_features", [])
         + patient.get("medications", [])
@@ -889,16 +944,31 @@ def _check_comorbidity_protocol_risk(
     )
 
     if not _any_match(_PATIENT_COMPLEX_COMORBIDITY_PATTERNS, patient_all_text):
-        return None, None
+        return None, None, None
 
-    trial_text = _text(
-        trial.get("inclusion_criteria", []) + trial.get("exclusion_criteria", [])
-    )
+    inclusion_text = _text(trial.get("inclusion_criteria", []))
+    trial_text = inclusion_text + " " + _text(trial.get("exclusion_criteria", []))
 
     if not _any_match(_TRIAL_COMPLEX_FOCUS_PATTERNS, trial_text):
-        return None, None
+        return None, None, None
 
+    # Hard safety contraindication → blocking
+    for patient_patterns, trial_patterns in _HARD_CONTRAINDICATION_PAIRS:
+        if _any_match(patient_patterns, patient_all_text) and _any_match(trial_patterns, trial_text):
+            return (
+                "hard safety contraindication: implanted cardiac device is incompatible with transcranial stimulation",
+                None,
+                "implanted cardiac device present; transcranial stimulation trial",
+            )
+
+    # Target-population exemption → suppress uncertain
+    for patient_patterns, trial_inclusion_patterns in _COMORBIDITY_TARGET_PAIRS:
+        if _any_match(patient_patterns, patient_all_text) and _any_match(trial_inclusion_patterns, inclusion_text):
+            return None, None, None
+
+    # Genuine ambiguity → uncertain
     return (
+        None,
         "patient has comorbidity or condition that may affect protocol compliance or safety in this trial type",
         "complex comorbidity noted in context of device/stimulation/imaging/rehabilitation/cognitive/gait-focused trial",
     )
@@ -1017,8 +1087,12 @@ def match_patient_to_trial(patient: dict, trial: dict) -> dict:
             matched_facts.append(trial_part_fact)
 
     # --- Extended: comorbidity risk in protocol-sensitive trial ---
-    comorbid_uncertain, comorbid_fact = _check_comorbidity_protocol_risk(patient, trial)
-    if comorbid_uncertain:
+    comorbid_block, comorbid_uncertain, comorbid_fact = _check_comorbidity_protocol_risk(patient, trial)
+    if comorbid_block:
+        blocking_criteria.append(comorbid_block)
+        if comorbid_fact:
+            matched_facts.append(comorbid_fact)
+    elif comorbid_uncertain:
         uncertain_criteria.append(comorbid_uncertain)
         if comorbid_fact:
             matched_facts.append(comorbid_fact)
