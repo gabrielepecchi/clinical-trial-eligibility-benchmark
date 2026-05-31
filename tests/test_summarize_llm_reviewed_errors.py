@@ -1,4 +1,4 @@
-"""Tests for CSV helpers in summarize_llm_reviewed_errors.py."""
+"""Tests for LLM-reviewed error analysis helpers."""
 
 from summarize_llm_reviewed_errors import (
     build_error_csv_rows,
