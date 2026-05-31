@@ -7,6 +7,7 @@ from run_sample_benchmark import (
     format_label_distribution,
     build_confusion_matrix,
     format_confusion_matrix,
+    build_benchmark_metadata,
 )
 
 
@@ -353,3 +354,56 @@ def test_format_confusion_matrix_all_zeros_does_not_crash():
     result = format_confusion_matrix(_ZERO_CM)
     assert isinstance(result, str)
     assert "0" in result
+
+
+# ---------------------------------------------------------------------------
+# Benchmark metadata tests
+# ---------------------------------------------------------------------------
+
+_PATIENTS = [{"patient_id": "P001"}, {"patient_id": "P002"}]
+_TRIALS = [{"trial_id": "T001"}]
+_LABELS = [{"patient_id": "P001", "trial_id": "T001", "label": "eligible"}]
+_PRED_RECORDS = [{"patient_id": "P001", "trial_id": "T001", "predicted_label": "eligible"}]
+
+
+def test_build_benchmark_metadata_returns_dict():
+    assert isinstance(build_benchmark_metadata(_PATIENTS, _TRIALS, _LABELS, _PRED_RECORDS), dict)
+
+
+def test_build_benchmark_metadata_benchmark_name():
+    result = build_benchmark_metadata(_PATIENTS, _TRIALS, _LABELS, _PRED_RECORDS)
+    assert result["benchmark_name"] == "sample_benchmark"
+
+
+def test_build_benchmark_metadata_num_patients():
+    result = build_benchmark_metadata(_PATIENTS, _TRIALS, _LABELS, _PRED_RECORDS)
+    assert result["num_patients"] == 2
+
+
+def test_build_benchmark_metadata_num_trials():
+    result = build_benchmark_metadata(_PATIENTS, _TRIALS, _LABELS, _PRED_RECORDS)
+    assert result["num_trials"] == 1
+
+
+def test_build_benchmark_metadata_num_label_records():
+    result = build_benchmark_metadata(_PATIENTS, _TRIALS, _LABELS, _PRED_RECORDS)
+    assert result["num_label_records"] == 1
+
+
+def test_build_benchmark_metadata_num_evaluated_pairs():
+    result = build_benchmark_metadata(_PATIENTS, _TRIALS, _LABELS, _PRED_RECORDS)
+    assert result["num_evaluated_pairs"] == 1
+
+
+def test_build_benchmark_metadata_all_keys_present():
+    result = build_benchmark_metadata(_PATIENTS, _TRIALS, _LABELS, _PRED_RECORDS)
+    assert {"benchmark_name", "num_patients", "num_trials", "num_label_records", "num_evaluated_pairs"} <= set(result)
+
+
+def test_build_benchmark_metadata_empty_inputs():
+    result = build_benchmark_metadata([], [], [], [])
+    assert result["benchmark_name"] == "sample_benchmark"
+    assert result["num_patients"] == 0
+    assert result["num_trials"] == 0
+    assert result["num_label_records"] == 0
+    assert result["num_evaluated_pairs"] == 0
