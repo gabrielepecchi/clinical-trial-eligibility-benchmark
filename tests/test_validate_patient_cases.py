@@ -75,12 +75,56 @@ def test_whitespace_patient_id_reported():
     assert "patient_id" in fields
 
 
-def test_missing_demographics_reported():
-    case = _minimal_valid()
-    del case["demographics"]
+def test_valid_case_with_top_level_age_and_sex_no_demographics_passes():
+    case = {
+        "patient_id": "P010",
+        "age": 62,
+        "sex": "male",
+        "diagnosis": "idiopathic Parkinson disease",
+        "clinical_summary": "62-year-old male with PD.",
+    }
+    issues = validate_patient_case(case)
+    assert issues == []
+
+
+def test_valid_case_with_top_level_age_and_gender_no_demographics_passes():
+    case = {
+        "patient_id": "P011",
+        "age": 55,
+        "gender": "female",
+        "diagnosis": "idiopathic Parkinson disease",
+        "clinical_summary": "55-year-old female with PD.",
+    }
+    issues = validate_patient_case(case)
+    assert issues == []
+
+
+def test_missing_demographics_reported_only_when_no_top_level_fields():
+    case = {
+        "patient_id": "P012",
+        "diagnosis": "PD",
+        "clinical_summary": "ok",
+        # no demographics dict, no age, no sex/gender
+    }
     issues = validate_patient_case(case)
     fields = [i["field"] for i in issues]
     assert "demographics" in fields
+
+
+def test_top_level_age_without_sex_still_reports_missing_demographics():
+    case = {
+        "patient_id": "P013",
+        "age": 60,
+        # no sex or gender, no demographics dict
+        "diagnosis": "PD",
+        "clinical_summary": "ok",
+    }
+    issues = validate_patient_case(case)
+    fields = [i["field"] for i in issues]
+    assert "demographics" in fields
+
+
+
 
 
 def test_demographics_not_dict_reported():

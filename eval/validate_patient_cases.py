@@ -106,10 +106,15 @@ def validate_patient_case(case: dict) -> list[dict]:
     if not isinstance(pid, str) or not pid.strip():
         issues.append(issue("error", "patient_id", "patient_id must be a non-empty string"))
 
-    # demographics
+    # demographics — accept a demographics dict OR top-level age + sex/gender fields
     demographics = case.get("demographics")
+    has_top_level_demographics = (
+        "age" in case and ("sex" in case or "gender" in case)
+    )
     if "demographics" not in case:
-        issues.append(issue("error", "demographics", "demographics field is missing"))
+        if not has_top_level_demographics:
+            issues.append(issue("error", "demographics",
+                                "demographics field is missing and no top-level age/sex fields found"))
     elif not isinstance(demographics, dict):
         issues.append(issue("error", "demographics", "demographics must be a dict"))
 
