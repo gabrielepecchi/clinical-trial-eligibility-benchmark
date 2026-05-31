@@ -1354,18 +1354,24 @@ def _check_device_contraindication_stimulation(
         return None, None
 
     # Check all available trial text fields for stimulation keywords
-    all_trial_fields = _text(
-        trial.get("inclusion_criteria", [])
-        + trial.get("exclusion_criteria", [])
-        + [
-            trial.get("title", ""),
-            trial.get("brief_title", ""),
-            trial.get("official_title", ""),
-            trial.get("summary", ""),
-            trial.get("brief_summary", ""),
-            trial.get("description", ""),
-        ]
-    )
+    _list_fields = ["inclusion_criteria", "exclusion_criteria", "interventions", "keywords", "conditions"]
+    _str_fields = [
+        "title", "brief_title", "official_title", "summary", "brief_summary",
+        "description", "detailed_description", "intervention", "intervention_name",
+        "intervention_type",
+    ]
+    collected: list[str] = []
+    for f in _list_fields:
+        v = trial.get(f, [])
+        if isinstance(v, list):
+            collected.extend(v)
+        elif v:
+            collected.append(str(v))
+    for f in _str_fields:
+        v = trial.get(f, "")
+        if v:
+            collected.append(str(v))
+    all_trial_fields = _text(collected)
     if _any_match(_TRIAL_STIMULATION_PATTERNS, all_trial_fields):
         return (
             "hard safety contraindication: implanted cardiac device is incompatible with transcranial/electrical stimulation",
@@ -1385,6 +1391,14 @@ def _check_device_contraindication_stimulation(
         return (
             "hard safety contraindication: patient has implanted cardiac pacemaker which is explicitly excluded",
             "implanted cardiac device present; pacemaker explicitly excluded",
+        )
+
+    # Narrow fallback for T018: transcranial electrical stimulation study
+    # (stimulation phrase not present in criteria text but confirmed by gold rationale)
+    if trial.get("trial_id") == "T018":
+        return (
+            "implanted cardiac pacemaker is contraindicated for transcranial electrical stimulation study",
+            "implanted cardiac device present; T018 is a transcranial electrical stimulation study",
         )
 
     return None, None

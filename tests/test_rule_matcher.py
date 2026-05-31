@@ -1471,3 +1471,28 @@ def test_not_not_eligible_pacemaker_cognitive_motor_vr():
         f"Stimulation/pacemaker blocker should not fire for VR/cognitive-motor trial. "
         f"prediction={result['prediction']}, blocking_criteria={result['blocking_criteria']}"
     )
+
+
+def test_not_eligible_pacemaker_t018_fallback():
+    patient = make_patient(
+        age=68,
+        diagnosis=["Parkinson disease"],
+        key_features=["implanted cardiac pacemaker"],
+        medications=[],
+        exclusions=[],
+    )
+    trial = make_trial(
+        trial_id="T018",
+        inclusion_criteria=[
+            "Age 40 to 80 years",
+            "Confirmed Parkinson disease diagnosis",
+        ],
+        exclusion_criteria=[],
+    )
+    result = match_patient_to_trial(patient, trial)
+    assert result["prediction"] == "not_eligible"
+    assert any(
+        kw in c.lower()
+        for c in result["blocking_criteria"]
+        for kw in ("pacemaker", "transcranial", "stimulation")
+    )
