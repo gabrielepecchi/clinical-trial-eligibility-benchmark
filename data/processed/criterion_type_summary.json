@@ -2,19 +2,23 @@
   {
     "criterion_type": "exclusion",
     "total_criteria": 1002,
-    "correct_criteria": 0,
-    "criterion_accuracy": 0.0,
     "decision_met": 13,
     "decision_not_met": 27,
-    "decision_unknown": 962
+    "decision_unclear": 0,
+    "decision_unknown": 962,
+    "correct_pairs": 101,
+    "total_pairs": 147,
+    "pair_accuracy": 0.6870748299319728
   },
   {
     "criterion_type": "inclusion",
     "total_criteria": 798,
-    "correct_criteria": 0,
-    "criterion_accuracy": 0.0,
     "decision_met": 221,
     "decision_not_met": 11,
-    "decision_unknown": 566
+    "decision_unclear": 0,
+    "decision_unknown": 566,
+    "correct_pairs": 103,
+    "total_pairs": 150,
+    "pair_accuracy": 0.6866666666666666
   }
 ]

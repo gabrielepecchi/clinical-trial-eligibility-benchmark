@@ -26,8 +26,28 @@ _CSV_FIELDNAMES = [
     "patient_id", "trial_id", "gold_label", "predicted_label",
     "correct", "label_status", "confidence",
     "matched_facts", "blocking_criteria", "uncertain_criteria",
-    "matcher_explanation", "gold_rationale",
+    "matcher_explanation", "gold_rationale", "reasoning_trace",
 ]
+
+
+def build_reasoning_trace(
+    predicted_label: str,
+    matched_facts: list[str] | None,
+    blocking_criteria: list[str] | None,
+    uncertain_criteria: list[str] | None,
+    explanation: str,
+) -> list[str]:
+    """Build a structured reasoning trace from existing prediction fields."""
+    trace: list[str] = [f"predicted: {predicted_label}"]
+    for f in matched_facts or []:
+        trace.append(f"matched_fact: {f}")
+    for c in blocking_criteria or []:
+        trace.append(f"blocking_criterion: {c}")
+    for c in uncertain_criteria or []:
+        trace.append(f"uncertain_criterion: {c}")
+    if explanation:
+        trace.append(f"explanation: {explanation}")
+    return trace
 
 
 def build_llm_reviewed_csv_rows(prediction_records: list[dict]) -> list[dict]:
@@ -48,6 +68,7 @@ def build_llm_reviewed_csv_rows(prediction_records: list[dict]) -> list[dict]:
             "uncertain_criteria": "; ".join(r.get("uncertain_criteria") or []),
             "matcher_explanation": r.get("matcher_explanation", ""),
             "gold_rationale": r.get("gold_rationale", ""),
+            "reasoning_trace": " | ".join(r.get("reasoning_trace") or []),
         })
     return rows
 
@@ -349,6 +370,14 @@ def main() -> None:
             for cr in match_patient_to_trial_criteria(patient, enriched_trial)
         ]
 
+        reasoning_trace = build_reasoning_trace(
+            predicted_label,
+            result["matched_facts"],
+            result["blocking_criteria"],
+            result["uncertain_criteria"],
+            result["explanation"],
+        )
+
         gold_labels.append(gold_label)
         predictions.append(predicted_label)
 
@@ -367,6 +396,7 @@ def main() -> None:
                 "gold_rationale": record.get("rationale", ""),
                 "gold_evidence": record.get("evidence", {}),
                 "criterion_results": criterion_results,
+                "reasoning_trace": reasoning_trace,
             }
         )
 
