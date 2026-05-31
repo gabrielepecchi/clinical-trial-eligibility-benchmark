@@ -2824,3 +2824,222 @@ def test_simple_confirmed_pd_age_trial_remains_eligible():
         f"Simple confirmed-PD age-only trial must remain eligible. "
         f"prediction={result['prediction']}, uncertain={result['uncertain_criteria']}"
     )
+
+
+# ---------------------------------------------------------------------------
+# Healthy control / comparator ambiguity
+# ---------------------------------------------------------------------------
+
+def test_healthy_control_pd_imaging_cohort_trial_unclear_not_not_eligible():
+    """Patient without PD + PD imaging/biomarker/control-cohort trial -> unclear, not not_eligible."""
+    patient = make_patient(
+        age=60,
+        diagnosis=["healthy volunteer"],
+        key_features=["no neurological diagnosis"],
+    )
+    trial = make_trial(
+        inclusion_criteria=[
+            "Age 40 to 80 years",
+            "Parkinson disease patients or healthy controls",
+            "Imaging cohort with age-matched healthy control group",
+        ],
+        exclusion_criteria=[],
+    )
+    result = match_patient_to_trial(patient, trial)
+    assert result["prediction"] != "not_eligible", (
+        f"Healthy control trial should not hard-block non-PD patient. "
+        f"prediction={result['prediction']}, blocking={result['blocking_criteria']}"
+    )
+    assert result["prediction"] == "unclear", (
+        f"Expected 'unclear' for non-PD patient in healthy-control comparator trial. "
+        f"prediction={result['prediction']}"
+    )
+
+
+# ---------------------------------------------------------------------------
+# Atypical parkinsonism
+# ---------------------------------------------------------------------------
+
+def test_atypical_parkinsonism_idiopathic_required_no_explicit_exclusion_not_eligible():
+    """Atypical parkinsonism + idiopathic PD required (no diagnostic study context) -> not_eligible."""
+    patient = make_patient(
+        age=65,
+        diagnosis=["atypical parkinsonism"],
+        key_features=["poor levodopa response", "suspected parkinsonism"],
+    )
+    trial = make_trial(
+        inclusion_criteria=[
+            "Confirmed idiopathic Parkinson disease diagnosis",
+            "Age 40 to 80 years",
+        ],
+        exclusion_criteria=[],
+    )
+    result = match_patient_to_trial(patient, trial)
+    assert result["prediction"] == "not_eligible", (
+        f"Expected 'not_eligible' for atypical parkinsonism in idiopathic-PD-required trial. "
+        f"prediction={result['prediction']}, blocking={result['blocking_criteria']}"
+    )
+
+
+def test_atypical_parkinsonism_idiopathic_neuroprotection_trial_not_eligible():
+    """Atypical parkinsonism + idiopathic PD neuroprotection/intervention trial -> not_eligible."""
+    patient = make_patient(
+        age=65,
+        diagnosis=["atypical parkinsonism"],
+        key_features=["poor levodopa response"],
+    )
+    trial = make_trial(
+        inclusion_criteria=[
+            "Confirmed idiopathic Parkinson disease diagnosis",
+            "Age 40 to 80 years",
+        ],
+        exclusion_criteria=[],
+        title="Neuroprotection intervention trial for idiopathic Parkinson disease",
+    )
+    result = match_patient_to_trial(patient, trial)
+    assert result["prediction"] == "not_eligible", (
+        f"Expected 'not_eligible' for atypical parkinsonism in neuroprotection/intervention trial. "
+        f"prediction={result['prediction']}"
+    )
+
+
+def test_suspected_parkinsonism_pd_vs_et_diagnostic_imaging_not_not_eligible():
+    """Atypical/suspected parkinsonism + PD vs essential tremor diagnostic imaging study -> unclear or eligible."""
+    patient = make_patient(
+        age=62,
+        diagnosis=["suspected parkinsonism"],
+        key_features=["unclear parkinsonism", "differential diagnosis ongoing"],
+    )
+    trial = make_trial(
+        inclusion_criteria=[
+            "Confirmed idiopathic Parkinson disease diagnosis",
+            "Age 40 to 80 years",
+            "PD vs essential tremor differential diagnosis imaging study",
+        ],
+        exclusion_criteria=[],
+    )
+    result = match_patient_to_trial(patient, trial)
+    assert result["prediction"] != "not_eligible", (
+        f"Suspected parkinsonism must not be hard-blocked in PD vs ET diagnostic imaging study. "
+        f"prediction={result['prediction']}, blocking={result['blocking_criteria']}"
+    )
+
+
+def test_atypical_parkinsonism_explicit_atypical_exclusion_not_eligible():
+    """Atypical parkinsonism + explicit atypical/secondary parkinsonism exclusion -> not_eligible."""
+    patient = make_patient(
+        age=65,
+        diagnosis=["atypical parkinsonism", "suspected MSA"],
+        key_features=["poor levodopa response"],
+    )
+    trial = make_trial(
+        inclusion_criteria=[
+            "Confirmed idiopathic Parkinson disease diagnosis",
+            "Age 40 to 80 years",
+        ],
+        exclusion_criteria=[
+            "Atypical parkinsonism or secondary parkinsonism",
+            "Multiple system atrophy (MSA), PSP, CBD, or DLB",
+        ],
+    )
+    result = match_patient_to_trial(patient, trial)
+    assert result["prediction"] == "not_eligible", (
+        f"Expected 'not_eligible' for atypical parkinsonism with explicit atypical exclusion. "
+        f"prediction={result['prediction']}"
+    )
+
+
+# ---------------------------------------------------------------------------
+# DBS ambiguity
+# ---------------------------------------------------------------------------
+
+def test_no_dbs_dbs_candidacy_effects_trial_unclear_not_not_eligible():
+    """No DBS + DBS candidacy/effects study -> unclear, not not_eligible."""
+    patient = make_patient(
+        age=63,
+        diagnosis=["Parkinson disease"],
+        key_features=["idiopathic Parkinson disease", "no prior surgery"],
+    )
+    trial = make_trial(
+        inclusion_criteria=[
+            "Parkinson disease diagnosis",
+            "DBS candidacy evaluation",
+            "Patients meeting criteria for DBS",
+        ],
+        exclusion_criteria=[],
+    )
+    result = match_patient_to_trial(patient, trial)
+    assert result["prediction"] != "not_eligible", (
+        f"DBS candidacy trial must not hard-block non-DBS patient. "
+        f"prediction={result['prediction']}, blocking={result['blocking_criteria']}"
+    )
+
+
+def test_prior_dbs_dbs_outcomes_study_not_blocking():
+    """Prior DBS + DBS effects/outcomes/implanted-patient study -> not not_eligible."""
+    patient = make_patient(
+        age=67,
+        diagnosis=["Parkinson disease"],
+        key_features=["bilateral STN DBS implanted 2 years ago", "DBS programming ongoing"],
+    )
+    trial = make_trial(
+        inclusion_criteria=[
+            "Parkinson disease diagnosis",
+            "Patients who have undergone DBS surgery",
+            "DBS effects and neuropsychiatric outcomes study",
+        ],
+        exclusion_criteria=[],
+    )
+    result = match_patient_to_trial(patient, trial)
+    assert result["prediction"] != "not_eligible", (
+        f"Prior DBS patient must not be blocked in a DBS outcomes study. "
+        f"prediction={result['prediction']}, blocking={result['blocking_criteria']}"
+    )
+
+
+# ---------------------------------------------------------------------------
+# Cognitive overblocking
+# ---------------------------------------------------------------------------
+
+def test_mci_dbs_neuropsychiatric_imaging_trial_no_numeric_cutoff_unclear():
+    """Mild cognitive impairment + DBS/neuropsychiatric/imaging outcome trial without numeric cutoff -> unclear."""
+    patient = make_patient(
+        age=70,
+        diagnosis=["Parkinson disease"],
+        key_features=["mild cognitive impairment", "MCI"],
+    )
+    trial = make_trial(
+        inclusion_criteria=[
+            "Parkinson disease diagnosis",
+            "Age 50 to 80 years",
+            "DBS neuropsychiatric outcomes study",
+        ],
+        exclusion_criteria=[],
+    )
+    result = match_patient_to_trial(patient, trial)
+    assert result["prediction"] != "not_eligible", (
+        f"MCI patient must not be hard-blocked in DBS/neuropsychiatric trial without numeric cutoff. "
+        f"prediction={result['prediction']}, blocking={result['blocking_criteria']}"
+    )
+    assert result["prediction"] in {"unclear", "eligible"}, (
+        f"Expected 'unclear' or 'eligible' for MCI in DBS/neuropsychiatric trial without numeric cutoff."
+    )
+
+
+def test_dementia_explicit_dementia_exclusion_not_eligible():
+    """Documented dementia + explicit dementia exclusion -> not_eligible."""
+    patient = make_patient(
+        age=74,
+        diagnosis=["Parkinson disease"],
+        key_features=["dementia", "significant cognitive decline"],
+        exclusions=["dementia"],
+    )
+    trial = make_trial(
+        inclusion_criteria=["Parkinson disease diagnosis", "Age 40 to 80 years"],
+        exclusion_criteria=["Dementia or significant cognitive impairment"],
+    )
+    result = match_patient_to_trial(patient, trial)
+    assert result["prediction"] == "not_eligible", (
+        f"Dementia patient must be not_eligible when trial explicitly excludes dementia. "
+        f"prediction={result['prediction']}"
+    )

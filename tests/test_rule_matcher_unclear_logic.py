@@ -156,10 +156,11 @@ def test_msa_generic_pd_trial_returns_unclear():
 
 
 # ---------------------------------------------------------------------------
-# 4. Atypical parkinsonism + idiopathic/confirmed PD criteria returns not_eligible
+# 4. Atypical parkinsonism + idiopathic/confirmed PD criteria
 # ---------------------------------------------------------------------------
 
-def test_atypical_parkinsonism_idiopathic_pd_required_returns_not_eligible():
+def test_atypical_parkinsonism_idiopathic_pd_treatment_trial_returns_not_eligible():
+    """Treatment/intervention trial with idiopathic PD requirement → not_eligible."""
     patient = {
         "diagnosis": "atypical parkinsonism",
         "age": 64,
@@ -172,10 +173,68 @@ def test_atypical_parkinsonism_idiopathic_pd_required_returns_not_eligible():
     }
     result = match_patient_to_trial(patient, trial)
     assert result["prediction"] == "not_eligible"
-    assert any("idiopathic" in c for c in result["blocking_criteria"])
+    assert any(
+        kw in c.lower()
+        for c in result["blocking_criteria"]
+        for kw in ("atypical", "idiopathic", "parkinsonism")
+    )
 
 
-def test_poor_levodopa_response_confirmed_pd_required_returns_not_eligible():
+def test_atypical_parkinsonism_idiopathic_pd_neuroprotection_trial_returns_not_eligible():
+    """Neuroprotection trial with idiopathic PD inclusion → not_eligible."""
+    patient = {
+        "diagnosis": "atypical parkinsonism",
+        "age": 64,
+        "key_features": [],
+        "medications": [],
+    }
+    trial = {
+        "inclusion_criteria": ["idiopathic Parkinson disease per UK Brain Bank criteria"],
+        "exclusion_criteria": [],
+        "title": "neuroprotection study in Parkinson disease",
+    }
+    result = match_patient_to_trial(patient, trial)
+    assert result["prediction"] == "not_eligible"
+
+
+def test_atypical_parkinsonism_idiopathic_pd_stimulation_trial_returns_not_eligible():
+    """Stimulation trial with idiopathic PD inclusion → not_eligible."""
+    patient = {
+        "diagnosis": "atypical parkinsonism",
+        "age": 60,
+        "key_features": [],
+        "medications": [],
+    }
+    trial = {
+        "inclusion_criteria": [
+            "idiopathic Parkinson disease",
+            "scheduled for DBS surgery",
+        ],
+        "exclusion_criteria": [],
+    }
+    result = match_patient_to_trial(patient, trial)
+    assert result["prediction"] == "not_eligible"
+
+
+def test_atypical_parkinsonism_idiopathic_pd_diagnostic_study_returns_unclear():
+    """Differential diagnosis study with idiopathic PD inclusion → unclear."""
+    patient = {
+        "diagnosis": "atypical parkinsonism",
+        "age": 64,
+        "key_features": [],
+        "medications": [],
+    }
+    trial = {
+        "inclusion_criteria": ["idiopathic Parkinson disease or suspected parkinsonism"],
+        "exclusion_criteria": [],
+        "title": "differential diagnosis study for parkinsonism",
+    }
+    result = match_patient_to_trial(patient, trial)
+    assert result["prediction"] in ("unclear", "eligible")
+
+
+def test_poor_levodopa_response_confirmed_pd_treatment_returns_not_eligible():
+    """Treatment trial with confirmed idiopathic PD requirement → not_eligible."""
     patient = {
         "diagnosis": "parkinsonism with poor levodopa response",
         "age": 69,
@@ -185,6 +244,22 @@ def test_poor_levodopa_response_confirmed_pd_required_returns_not_eligible():
     trial = {
         "inclusion_criteria": ["confirmed idiopathic Parkinson disease"],
         "exclusion_criteria": [],
+        "title": "randomized placebo-controlled treatment trial",
+    }
+    result = match_patient_to_trial(patient, trial)
+    assert result["prediction"] == "not_eligible"
+
+
+def test_atypical_parkinsonism_explicit_atypical_exclusion_returns_not_eligible():
+    patient = {
+        "diagnosis": "atypical parkinsonism",
+        "age": 64,
+        "key_features": [],
+        "medications": [],
+    }
+    trial = {
+        "inclusion_criteria": ["idiopathic Parkinson disease diagnosis"],
+        "exclusion_criteria": ["atypical parkinsonism or secondary parkinsonism excluded"],
     }
     result = match_patient_to_trial(patient, trial)
     assert result["prediction"] == "not_eligible"
@@ -295,7 +370,7 @@ def test_orthostatic_hypotension_rehabilitation_trial_returns_unclear():
     assert result["prediction"] == "unclear"
 
 
-def test_pacemaker_stimulation_trial_returns_unclear():
+def test_pacemaker_stimulation_trial_returns_not_eligible():
     patient = {
         "diagnosis": "Parkinson disease",
         "age": 68,
@@ -316,7 +391,158 @@ def test_pacemaker_stimulation_trial_returns_unclear():
 
 
 # ---------------------------------------------------------------------------
-# 8. Clear ordinary PD patient + broad PD trial returns eligible
+# 8. Healthy control patient
+# ---------------------------------------------------------------------------
+
+def test_healthy_control_explicit_control_group_trial_returns_unclear():
+    """Healthy control + trial with explicit healthy/control/comparator wording → unclear."""
+    patient = {
+        "diagnosis": "healthy control",
+        "age": 60,
+        "key_features": [],
+        "medications": [],
+    }
+    trial = {
+        "inclusion_criteria": [
+            "Parkinson disease diagnosis",
+            "age-matched healthy control group",
+        ],
+        "exclusion_criteria": [],
+    }
+    result = match_patient_to_trial(patient, trial)
+    assert result["prediction"] == "unclear"
+
+
+def test_healthy_control_explicit_comparator_group_returns_unclear():
+    """Healthy control + comparator group wording → unclear."""
+    patient = {
+        "diagnosis": "healthy control",
+        "age": 55,
+        "key_features": [],
+        "medications": [],
+    }
+    trial = {
+        "inclusion_criteria": [
+            "diagnosis of Parkinson disease",
+            "comparator group of healthy volunteers",
+        ],
+        "exclusion_criteria": [],
+    }
+    result = match_patient_to_trial(patient, trial)
+    assert result["prediction"] == "unclear"
+
+
+def test_healthy_control_pd_stimulation_trial_no_explicit_controls_returns_not_eligible():
+    """Healthy control + PD stimulation trial with no explicit control group → not_eligible."""
+    patient = {
+        "diagnosis": "healthy control",
+        "age": 62,
+        "key_features": [],
+        "medications": [],
+    }
+    trial = {
+        "inclusion_criteria": ["Parkinson disease diagnosis", "scheduled for DBS stimulation"],
+        "exclusion_criteria": [],
+    }
+    result = match_patient_to_trial(patient, trial)
+    assert result["prediction"] == "not_eligible"
+
+
+def test_healthy_control_pd_treadmill_trial_no_explicit_controls_returns_not_eligible():
+    """Healthy control + PD treadmill/training trial without control group wording → not_eligible."""
+    patient = {
+        "diagnosis": "healthy control",
+        "age": 58,
+        "key_features": [],
+        "medications": [],
+    }
+    trial = {
+        "inclusion_criteria": ["Parkinson disease", "treadmill training intervention"],
+        "exclusion_criteria": [],
+    }
+    result = match_patient_to_trial(patient, trial)
+    assert result["prediction"] == "not_eligible"
+
+
+# ---------------------------------------------------------------------------
+# 9. DBS: no DBS patient + DBS candidacy/evaluation wording → unclear
+# ---------------------------------------------------------------------------
+
+def test_no_dbs_dbs_candidacy_trial_returns_unclear():
+    """Patient without DBS + DBS candidacy trial → unclear, not not_eligible."""
+    patient = {
+        "diagnosis": "Parkinson disease",
+        "age": 60,
+        "key_features": ["no history of DBS"],
+        "medications": ["levodopa"],
+    }
+    trial = {
+        "inclusion_criteria": ["Parkinson disease", "meets criteria for DBS candidacy"],
+        "exclusion_criteria": [],
+    }
+    result = match_patient_to_trial(patient, trial)
+    assert result["prediction"] == "unclear"
+
+
+def test_no_dbs_scheduled_to_undergo_dbs_returns_unclear():
+    """Patient without DBS + scheduled-to-undergo DBS wording → unclear."""
+    patient = {
+        "diagnosis": "Parkinson disease",
+        "age": 63,
+        "key_features": [],
+        "medications": ["levodopa", "pramipexole"],
+    }
+    trial = {
+        "inclusion_criteria": [
+            "Parkinson disease",
+            "scheduled to undergo DBS surgery",
+        ],
+        "exclusion_criteria": [],
+    }
+    result = match_patient_to_trial(patient, trial)
+    assert result["prediction"] == "unclear"
+
+
+def test_no_dbs_lfp_sensing_directional_leads_returns_not_eligible():
+    """Patient without DBS + LFP sensing from directional leads (existing hardware required) → not_eligible."""
+    patient = {
+        "diagnosis": "Parkinson disease",
+        "age": 65,
+        "key_features": ["no DBS implant"],
+        "medications": ["levodopa"],
+    }
+    trial = {
+        "inclusion_criteria": [
+            "Parkinson disease",
+            "LFP sensing from directional lead hardware required",
+        ],
+        "exclusion_criteria": [],
+    }
+    result = match_patient_to_trial(patient, trial)
+    assert result["prediction"] == "not_eligible"
+
+
+def test_no_dbs_existing_dbs_hardware_required_returns_not_eligible():
+    """Patient without DBS + existing DBS hardware explicitly required → not_eligible."""
+    patient = {
+        "diagnosis": "Parkinson disease",
+        "age": 66,
+        "key_features": [],
+        "medications": ["levodopa"],
+    }
+    trial = {
+        "inclusion_criteria": [
+            "Parkinson disease",
+            "existing DBS hardware implanted",
+        ],
+        "exclusion_criteria": [],
+    }
+    result = match_patient_to_trial(patient, trial)
+    assert result["prediction"] == "not_eligible"
+
+
+# ---------------------------------------------------------------------------
+# 10. Clear ordinary PD patient + broad PD trial returns eligible
 # ---------------------------------------------------------------------------
 
 def test_clear_pd_patient_broad_trial_returns_eligible():

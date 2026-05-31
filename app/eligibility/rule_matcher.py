@@ -587,6 +587,10 @@ _TRIAL_DBS_REQUIRED_PATTERNS = [
     r"undergone.*deep brain stimulation",
     r"deep brain stimulation.*surgery.*required",
     r"previously.*implanted.*dbs",
+    r"lfp.*sensing.*(?:from|via|using).*(?:directional|lead|electrode)",
+    r"directional.*lead.*(?:hardware|implant|dbs)",
+    r"existing.*dbs.*hardware",
+    r"implanted.*dbs.*patient",
 ]
 
 # Broader transcranial/electrical stimulation patterns for device contraindication.
@@ -925,6 +929,23 @@ def _check_hy_stage(patient: dict, trial: dict) -> tuple[str | None, str | None]
     return None, None
 
 
+_HEALTHY_CONTROL_TRIAL_PATTERNS = [
+    r"healthy.*control", r"control.*group", r"healthy.*volunteer",
+    r"comparator.*group", r"reference.*group", r"matched.*control",
+    r"age.matched.*control", r"control.*subject", r"healthy.*subject",
+    r"non.pd.*control", r"control.*arm",
+]
+
+_INTERVENTIONAL_PD_ONLY_PATTERNS = [
+    r"\bstimulation\b", r"\brehabilitation\b", r"\bexercise\b", r"\btreadmill\b",
+    r"\btraining\b", r"\bintervention\b", r"\btreatment\b", r"\btherapy\b",
+    r"\bdbs\b", r"deep brain stimulation", r"\brtms\b", r"\btms\b", r"\btdcs\b",
+    r"\btacs\b", r"transcranial", r"neuroprotection", r"drug.*trial",
+    r"medication.*trial", r"randomized", r"randomised", r"placebo",
+    r"double.blind", r"single.blind", r"open.label.*treatment",
+]
+
+
 def _check_parkinson_diagnosis(patient: dict, trial: dict) -> tuple[str | None, str | None]:
     """Return (blocking_criterion, None) if Parkinson diagnosis is required but missing."""
     inclusion_text = _text(trial.get("inclusion_criteria", []))
@@ -934,6 +955,23 @@ def _check_parkinson_diagnosis(patient: dict, trial: dict) -> tuple[str | None, 
     patient_diagnosis_text = _text(patient.get("diagnosis", []))
     if _any_match(_PARKINSON_PATTERNS, patient_diagnosis_text):
         return None, None
+
+    _TRIAL_META_FIELDS = [
+        "title", "brief_title", "official_title", "summary", "brief_summary",
+        "description", "detailed_description",
+    ]
+    meta_text = " ".join(
+        _text(trial.get(f, "") or "") for f in _TRIAL_META_FIELDS
+    )
+    trial_full = inclusion_text + " " + _text(trial.get("exclusion_criteria", [])) + " " + meta_text
+
+    if _any_match(_HEALTHY_CONTROL_TRIAL_PATTERNS, trial_full):
+        if not _any_match(_INTERVENTIONAL_PD_ONLY_PATTERNS, trial_full):
+            return (
+                "__unclear__:trial may include healthy/control comparator participants; "
+                "Parkinson diagnosis requirement cannot be interpreted as a hard exclusion from available text",
+                None,
+            )
 
     return "Parkinson disease diagnosis required", None
 
@@ -1073,8 +1111,91 @@ def _check_atypical_parkinsonism(
         return None, None, None
 
     inclusion_text = _text(trial.get("inclusion_criteria", []))
+    exclusion_text = _text(trial.get("exclusion_criteria", []))
+
+    _EXPLICIT_ATYPICAL_EXCLUSION_PATTERNS = [
+        r"atypical.*parkinsonism", r"parkinsonism.*atypical",
+        r"secondary.*parkinsonism", r"parkinsonism.*secondary",
+        r"non.idiopathic", r"vascular.*parkinsonism", r"drug.induced.*parkinsonism",
+        r"multiple system atrophy", r"\bmsa\b", r"progressive supranuclear",
+        r"\bpsp\b", r"corticobasal", r"\bcbd\b", r"dementia with lewy", r"\bdlb\b",
+        r"parkinson.*plus",
+    ]
+
+    _DIAGNOSTIC_STUDY_PATTERNS = [
+        r"diagnostic\s+(?:imaging|study|trial|validation)",
+        r"imaging\s+diagnosis",
+        r"differential\s+diagnosis",
+        r"differential\s+parkinsonism",
+        r"pd\s+vs\.?\s+essential\s+tremor",
+        r"parkinson(?:'s)?\s+disease\s+vs\.?\s+essential\s+tremor",
+        r"essential\s+tremor\s+vs\.?\s+(?:pd|parkinson)",
+        r"biomarker\s+(?:diagnosis|diagnostic)",
+        r"diagnostic\s+biomarker",
+        r"suspected\s+parkinsonism",
+        r"prodromal",
+        r"early\s+diagnostic",
+    ]
+
+    _HARD_DIAGNOSTIC_PATTERNS = [
+        r"differential\s+diagnosis",
+        r"differential\s+parkinsonism",
+        r"pd\s+vs\.?\s+essential\s+tremor",
+        r"parkinson(?:'s)?\s+disease\s+vs\.?\s+essential\s+tremor",
+        r"essential\s+tremor\s+vs\.?\s+(?:pd|parkinson)",
+    ]
+
+    _TREATMENT_INTERVENTION_PATTERNS = [
+        r"neuroprotection", r"neuroprotective", r"disease.modifying",
+        r"\btreatment\b", r"\btherapy\b",
+        r"\bintervention\b", r"\bstimulation\b", r"\brehabilitation\b",
+        r"\bexercise\b", r"\btraining\b", r"\bsurgery\b", r"\bdbs\b",
+        r"deep brain stimulation", r"\btreadmill\b",
+        r"randomized", r"randomised", r"placebo",
+        r"double.blind",
+    ]
+
+    _TRIAL_SCOPE_META_FIELDS = [
+        "title", "brief_title", "official_title",
+        "summary", "brief_summary", "description", "detailed_description",
+        "intervention", "intervention_name", "intervention_type", "interventions",
+        "keywords", "conditions",
+    ]
+    _scope_parts = [inclusion_text, exclusion_text]
+    for _f in _TRIAL_SCOPE_META_FIELDS:
+        _v = trial.get(_f)
+        if _v:
+            _scope_parts.append(_text(_v))
+    trial_full = " ".join(_scope_parts)
 
     if _any_match(_IDIOPATHIC_PD_REQUIRED_PATTERNS, inclusion_text):
+        if _any_match(_EXPLICIT_ATYPICAL_EXCLUSION_PATTERNS, exclusion_text):
+            return (
+                "not_eligible",
+                None,
+                "trial requires idiopathic Parkinson disease; patient has atypical or unclear parkinsonism",
+            )
+        is_treatment = _any_match(_TREATMENT_INTERVENTION_PATTERNS, trial_full)
+        is_diagnostic = _any_match(_DIAGNOSTIC_STUDY_PATTERNS, trial_full)
+        is_hard_diagnostic = _any_match(_HARD_DIAGNOSTIC_PATTERNS, trial_full)
+        if is_diagnostic and not is_treatment and not is_hard_diagnostic:
+            return (
+                "unclear",
+                "patient has atypical or unclear parkinsonism; trial requires idiopathic Parkinson disease but appears to be a diagnostic/differential study",
+                None,
+            )
+        if is_hard_diagnostic and not is_treatment:
+            return (
+                "unclear",
+                "patient has atypical or unclear parkinsonism; trial requires idiopathic Parkinson disease but appears to be a diagnostic/differential study",
+                None,
+            )
+        if is_treatment:
+            return (
+                "not_eligible",
+                None,
+                "trial requires idiopathic Parkinson disease for treatment/intervention; patient has atypical or unclear parkinsonism",
+            )
         return (
             "not_eligible",
             None,
@@ -1425,10 +1546,8 @@ def _check_dbs_required(patient: dict, trial: dict) -> tuple[str | None, str | N
         r"dbs\s+candidacy",
         r"candidacy.*dbs",
         r"deep brain stimulation\s+candidacy",
-        r"dbs\s+(?:neuropsychiatric|effects|programming|optimization|facial|parameters)",
-        r"(?:neuropsychiatric|effects|programming|optimization|facial|parameters).*dbs",
-        r"lfp\s+sensing",
-        r"directional\s+lead",
+        r"dbs\s+(?:effects|programming|optimization|facial|parameters)",
+        r"(?:effects|programming|optimization|facial|parameters).*dbs",
         r"scheduled\s+to\s+undergo\s+dbs",
         r"dbs.*scheduled",
         r"meets\s+criteria\s+for.*dbs",
@@ -2187,6 +2306,29 @@ def match_patient_to_trial(patient: dict, trial: dict) -> dict:
         if cog_min_fact:
             matched_facts.append(cog_min_fact)
 
+    # --- MCI-only + DBS/neuropsychiatric/imaging trial: prefer unclear over not_eligible ---
+    if not blocking_criteria:
+        _MCI_ONLY_PAT = [r"\bmci\b", r"mild cognitive impairment", r"mild\s+cognitive"]
+        _DBS_NEURO_IMAGING_TRIAL_PAT = [
+            r"\bdbs\b", r"deep brain stimulation", r"neuropsychiatric", r"neuropsychological",
+            r"\bmri\b", r"imaging.*outcome", r"neuroimaging", r"cognitive.*outcome",
+        ]
+        patient_feat_text = _text(patient.get("key_features", []) + patient.get("exclusions", []))
+        _HARD_COG_PAT = [r"\bdementia\b", r"(?:significant|moderate|severe).*cognitive", r"low moca", r"low mmse", r"impaired cognition"]
+        trial_all_text = _text(trial.get("inclusion_criteria", []) + trial.get("exclusion_criteria", []))
+        _EXPLICIT_NUM_CUTOFF = bool(_MMSE_THRESHOLD_PATTERN.search(trial_all_text) or _MOCA_THRESHOLD_PATTERN.search(trial_all_text))
+        _EXPLICIT_DEMENTIA_EXCL = _any_match([r"\bdementia\b", r"cognitive impairment.*exclud", r"exclud.*cognitive impairment"], trial_all_text)
+        if (
+            _any_match(_MCI_ONLY_PAT, patient_feat_text)
+            and not _any_match(_HARD_COG_PAT, patient_feat_text)
+            and _any_match(_DBS_NEURO_IMAGING_TRIAL_PAT, trial_all_text)
+            and not _EXPLICIT_NUM_CUTOFF
+            and not _EXPLICIT_DEMENTIA_EXCL
+        ):
+            _unc = "patient has mild cognitive impairment; trial involves DBS/neuropsychiatric/imaging outcomes without explicit numeric cognitive cutoff or dementia exclusion — eligibility uncertain"
+            if _unc not in uncertain_criteria:
+                uncertain_criteria.append(_unc)
+
     # --- DBS required by inclusion ---
     dbs_req_block, dbs_req_fact = _check_dbs_required(patient, trial)
     if dbs_req_block:
@@ -2251,7 +2393,10 @@ def match_patient_to_trial(patient: dict, trial: dict) -> dict:
         # --- Parkinson diagnosis (standard check, skipped if atypical already flagged) ---
         pd_block, _ = _check_parkinson_diagnosis(patient, trial)
         if pd_block:
-            blocking_criteria.append(pd_block)
+            if pd_block.startswith("__unclear__:"):
+                uncertain_criteria.append(pd_block[len("__unclear__:"):])
+            else:
+                blocking_criteria.append(pd_block)
         else:
             patient_diag_text = _text(patient.get("diagnosis", []))
             if _any_match(_PARKINSON_PATTERNS, patient_diag_text):
