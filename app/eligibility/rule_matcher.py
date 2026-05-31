@@ -519,24 +519,30 @@ _PATIENT_COGNITIVE_IMPAIRMENT_PATTERNS = [
 # Must be explicit — vague words like "cognitive", "memory", or "neuropsychological" alone do not qualify.
 _TRIAL_COGNITIVE_EXCLUSION_GENERAL_PATTERNS = [
     r"\bdementia\b",
-    r"cognitive impairment",
+    r"\bcognitive impairment\b",
     r"neuropsychological impairment",
     r"inability to (?:give )?(?:informed )?consent",
     r"inability to cooperate",
     r"unable to (?:give )?(?:informed )?consent",
     r"unable to cooperate",
     r"lacks? (?:capacity|ability) to consent",
+    r"excluded.*(?:dementia|cognitive impairment)",
+    r"(?:dementia|cognitive impairment).*excluded",
 ]
 
-# Trial inclusion criteria requiring cognitive minimum (non-numeric)
+# Trial inclusion criteria requiring cognitive minimum (non-numeric).
+# Must be explicit capacity/intact-cognition language — not generic cognitive assessments.
 _TRIAL_COGNITIVE_INCLUSION_MIN_PATTERNS = [
     r"intact cognition",
-    r"capacity to consent",
+    r"capacity to (?:give )?(?:informed )?consent",
     r"capacity to cooperate",
-    r"ability to consent",
+    r"ability to (?:give )?(?:informed )?consent",
     r"cognitively intact",
     r"no cognitive impairment",
     r"normal cognition",
+    r"able to provide informed consent",
+    r"neuropsychological testing.*required",
+    r"patient.reported outcome.*(?:reliable|valid|required)",
 ]
 
 _MMSE_INCLUSION_MIN_PATTERN = re.compile(r"mmse\s*[≥>=]+\s*(\d+)", re.IGNORECASE)
@@ -561,34 +567,39 @@ _TRIAL_DBS_REQUIRED_PATTERNS = [
     r"previously.*implanted.*dbs",
 ]
 
-# Broader transcranial/electrical stimulation patterns for device contraindication
+# Broader transcranial/electrical stimulation patterns for device contraindication.
+# Intentionally excludes generic "brain stimulation", "electrical stimulation", or rehab wording.
 _TRIAL_STIMULATION_PATTERNS = [
     r"\brtms\b",
     r"\btms\b",
     r"\btdcs\b",
     r"transcranial.*magnetic",
     r"transcranial.*electrical",
-    r"transcranial.*direct",
+    r"transcranial.*direct.*current",
     r"repetitive.*transcranial",
-    r"brain.*stimulation",
     r"non.invasive.*brain.*stimulation",
-    r"electrical.*stimulation",
 ]
 
 # Parent / open-label extension study requirement patterns
 _TRIAL_PARENT_STUDY_REQUIRED_PATTERNS = [
-    r"completion of.*(?:parent|double.blind|preceding|prior|previous).*(?:study|trial|phase)",
+    r"(?:completed?|completion of).*(?:parent|double.blind|preceding|prior|previous|core).*(?:study|trial|phase)",
+    r"(?:parent|double.blind|preceding|prior|previous|core).*(?:study|trial|phase).*(?:completed?|completion)",
     r"participated? in.*(?:parent|core|preceding|double.blind).*(?:study|trial|phase)",
     r"enrolled? in.*(?:parent|core|preceding).*(?:study|trial)",
     r"prior.*participation.*(?:parent|core|double.blind).*(?:study|trial)",
-    r"open.label.*extension.*(?:eligib|qualif|complet)",
-    r"must have completed.*(?:study|trial|phase|treatment period)",
-    r"completed.*(?:double.blind|parent|core|maintenance).*(?:period|phase|study|trial)",
-    r"rollover.*(?:from|study|trial|phase)",
+    r"open.label.*extension",
+    r"eligible.*open.label.*extension",
+    r"eligible.*for.*extension.*(?:study|trial|phase)",
+    r"(?:rollover|roll.over).*(?:from|study|trial|phase)",
+    r"(?:from|of).*(?:rollover|roll.over)",
     r"continuation.*(?:from|of).*(?:parent|prior|previous).*(?:study|trial)",
-    r"extension.*(?:study|trial).*(?:prior|previous|parent).*(?:complet|participat)",
-    r"\bsp\d{3,}\b.*(?:complet|participat|enroll)",
-    r"(?:complet|participat|enroll).*\bsp\d{3,}\b",
+    r"\bsp\d{3,}\b",
+    r"parent.*(?:study|trial|protocol)",
+    r"double.blind.*(?:study|trial|phase).*(?:eligible|qualif|complet|enroll|participat)",
+    r"(?:eligible|qualif|complet|enroll|participat).*double.blind.*(?:study|trial|phase)",
+    r"prior.*(?:study|trial).*(?:complet|participat|enroll)",
+    r"must have completed.*(?:study|trial|phase|treatment period)",
+    r"maintenance.*(?:phase|period).*(?:prior|previous|complet)",
 ]
 
 _PATIENT_PRIOR_STUDY_PATTERNS = [
@@ -603,10 +614,11 @@ _PATIENT_PRIOR_STUDY_PATTERNS = [
 
 # Oncology-specific diagnosis required (advanced/metastatic solid tumor etc.)
 _TRIAL_ONCOLOGY_REQUIRED_PATTERNS = [
-    r"(?:advanced|metastatic).*(?:solid tumor|solid tumour|malignancy|cancer|carcinoma)",
-    r"(?:solid tumor|solid tumour).*(?:advanced|metastatic|confirmed|histolog|cytolog)",
-    r"histolog(?:ically)?.*(?:confirmed|proven).*(?:tumor|tumour|cancer|malignancy|carcinoma)",
-    r"cytolog(?:ically)?.*(?:confirmed|proven).*(?:tumor|tumour|cancer|malignancy|carcinoma)",
+    r"(?:advanced|metastatic).*(?:solid\s*tumou?r|malignancy|cancer|carcinoma)",
+    r"(?:solid\s*tumou?r|malignancy|cancer|carcinoma).*(?:advanced|metastatic)",
+    r"histolog(?:ically)?.*(?:confirmed|proven)",
+    r"cytolog(?:ically)?.*(?:confirmed|proven)",
+    r"(?:confirmed|proven).*(?:tumou?r|cancer|malignancy|carcinoma)",
     r"\bnsclc\b",
     r"\bsclc\b",
     r"\bhnscc\b",
@@ -614,9 +626,11 @@ _TRIAL_ONCOLOGY_REQUIRED_PATTERNS = [
     r"recist.*measurable",
     r"non.small.cell lung",
     r"small.cell lung",
-    r"(?:colorectal|colon|rectal).*cancer.*(?:advanced|metastatic)",
-    r"(?:melanoma|glioblastoma|glioma|hepatocellular|cholangiocarcinoma).*(?:advanced|metastatic|confirmed)",
-    r"unresectable.*(?:tumor|tumour|carcinoma|cancer|malignancy)",
+    r"(?:colorectal|colon|rectal).*cancer",
+    r"(?:advanced|metastatic).*(?:melanoma|glioblastoma|glioma|hepatocellular|cholangiocarcinoma)",
+    r"unresectable.*(?:tumou?r|carcinoma|cancer|malignancy)",
+    r"solid\s*tumou?r",
+    r"(?:cancer|oncology|malignancy|carcinoma).*(?:diagnosis|confirmed|required|must have)",
 ]
 
 _PATIENT_CANCER_PATTERNS = [
@@ -643,9 +657,9 @@ _PATIENT_CANCER_PATTERNS = [
 
 # High-demand physical exercise trial patterns
 _TRIAL_HIGH_DEMAND_EXERCISE_PATTERNS = [
-    r"treadmill.*(?:training|exercise|protocol|test|walking)",
-    r"(?:training|exercise|protocol|test|walking).*treadmill",
+    r"treadmill",
     r"agility.*training",
+    r"training.*agility",
     r"high.intensity.*(?:exercise|training|physical)",
     r"(?:exercise|training|physical).*high.intensity",
     r"vigorous.*(?:exercise|physical.*activity)",
@@ -654,6 +668,8 @@ _TRIAL_HIGH_DEMAND_EXERCISE_PATTERNS = [
     r"exercise.*capacity.*(?:test|required|minimum)",
     r"6.minute.*walk.*(?:test|distance|required)",
     r"physically.*(?:capable|able).*(?:to perform|to complete).*(?:exercise|training)",
+    r"able to.*(?:perform|complete|participate).*(?:exercise|training|physical.*activity)",
+    r"exercise.*(?:protocol|program|intervention).*(?:required|must)",
 ]
 
 _PATIENT_FRAILTY_FALL_PATTERNS = [
@@ -1180,9 +1196,9 @@ def _check_comorbidity_protocol_risk(
 def _check_cognitive_exclusion_general(
     patient: dict, trial: dict
 ) -> tuple[str | None, str | None]:
-    """Block when exclusion criteria mention dementia/cognitive impairment (no numeric threshold)
-    and patient documents cognitive impairment.  Numeric MMSE/MoCA thresholds are handled by
-    _check_cognitive; this covers the non-numeric case only."""
+    """Block when exclusion criteria explicitly exclude dementia/cognitive impairment (no numeric threshold)
+    and patient clearly documents dementia or significant cognitive impairment.
+    MCI/mild cognitive alone is not sufficient — requires explicit dementia or cognitive impairment."""
     exclusion_list = trial.get("exclusion_criteria", [])
     patient_features = _text(
         patient.get("key_features", [])
@@ -1190,7 +1206,20 @@ def _check_cognitive_exclusion_general(
         + [patient.get("summary", "")]
     )
 
-    if not _any_match(_PATIENT_COGNITIVE_IMPAIRMENT_PATTERNS, patient_features):
+    # Use stricter patient evidence — mild cognitive / MCI alone is not enough
+    _STRICT_COGNITIVE_IMPAIRMENT_PATTERNS = [
+        r"\bdementia\b",
+        r"cognitive impairment",
+        r"low moca",
+        r"low mmse",
+        r"impaired cognition",
+        r"cognitive decline",
+        r"neuropsychological impairment",
+        r"significant.*cognitive",
+        r"moderate.*cognitive",
+        r"severe.*cognitive",
+    ]
+    if not _any_match(_STRICT_COGNITIVE_IMPAIRMENT_PATTERNS, patient_features):
         return None, None
 
     for criterion in exclusion_list:
@@ -1230,7 +1259,7 @@ def _check_cognitive_inclusion_minimum(
                         f"cognitive inclusion minimum: MMSE >= {required} required; patient MMSE {score}",
                         f"patient MMSE {score} below required {required}",
                     )
-            elif _any_match(_PATIENT_COGNITIVE_IMPAIRMENT_PATTERNS, patient_features):
+            elif _any_match([r"\bdementia\b", r"cognitive impairment", r"low mmse", r"impaired cognition"], patient_features):
                 return (
                     f"cognitive inclusion minimum: MMSE >= {required} required; patient has documented cognitive impairment",
                     "cognitive impairment documented; MMSE score not available",
@@ -1249,16 +1278,25 @@ def _check_cognitive_inclusion_minimum(
                         f"cognitive inclusion minimum: MoCA >= {required} required; patient MoCA {score}",
                         f"patient MoCA {score} below required {required}",
                     )
-            elif _any_match(_PATIENT_COGNITIVE_IMPAIRMENT_PATTERNS, patient_features):
+            elif _any_match([r"\bdementia\b", r"cognitive impairment", r"low moca", r"impaired cognition"], patient_features):
                 return (
                     f"cognitive inclusion minimum: MoCA >= {required} required; patient has documented cognitive impairment",
                     "cognitive impairment documented; MoCA score not available",
                 )
             continue
 
-        # Non-numeric intact-cognition requirement
+        # Non-numeric intact-cognition requirement — require clear impairment, not just MCI
         if _any_match(_TRIAL_COGNITIVE_INCLUSION_MIN_PATTERNS, c):
-            if _any_match(_PATIENT_COGNITIVE_IMPAIRMENT_PATTERNS, patient_features):
+            _CLEAR_IMPAIRMENT_PATTERNS = [
+                r"\bdementia\b",
+                r"cognitive impairment",
+                r"low moca",
+                r"low mmse",
+                r"impaired cognition",
+                r"cognitive decline",
+                r"neuropsychological impairment",
+            ]
+            if _any_match(_CLEAR_IMPAIRMENT_PATTERNS, patient_features):
                 return (
                     "cognitive inclusion requirement: intact cognition or consent capacity required; patient has documented cognitive impairment",
                     "cognitive impairment documented",
@@ -1328,9 +1366,26 @@ def _check_device_contraindication_stimulation(
 def _check_parent_study_required(patient: dict, trial: dict) -> tuple[str | None, str | None]:
     """Block when trial requires prior completion/participation in a parent/extension study
     and patient has no documented prior participation."""
+    # Patterns that look like prior-participation language but are actually exclusions/washout — skip these.
+    _EXCLUSION_LIKE_PATTERNS = [
+        r"no concurrent",
+        r"not.*(?:enrolled|participating|enrolled).*(?:another|other)",
+        r"concurrent.*(?:trial|study).*(?:exclusion|prohibited|not permitted)",
+        r"(?:exclusion|excluded).*(?:concurrent|prior|previous).*(?:trial|study)",
+        r"washout",
+        r"not currently enrolled",
+        r"must not.*(?:enrolled|participat)",
+        # "prior to" as a timing phrase (before study/enrollment) — NOT prior study participation
+        r"prior\s+to\s+(?:study\s+)?(?:participation|enrollment|enrolment|entry|screening)",
+        r"before\s+(?:study\s+)?(?:participation|enrollment|enrolment|entry|screening)",
+        r"(?:medical|physician|clinician|doctor).*clearance.*(?:prior\s+to|before).*(?:study|participation|enrollment)",
+        r"(?:prior\s+to|before).*(?:study\s+)?(?:participation|enrollment).*(?:clearance|approval|consent)",
+    ]
     inclusion_list = trial.get("inclusion_criteria", [])
     has_requirement = any(
-        _any_match(_TRIAL_PARENT_STUDY_REQUIRED_PATTERNS, c.lower()) for c in inclusion_list
+        _any_match(_TRIAL_PARENT_STUDY_REQUIRED_PATTERNS, c.lower())
+        and not _any_match(_EXCLUSION_LIKE_PATTERNS, c.lower())
+        for c in inclusion_list
     )
     if not has_requirement:
         return None, None
@@ -1341,7 +1396,7 @@ def _check_parent_study_required(patient: dict, trial: dict) -> tuple[str | None
         + [patient.get("summary", "")]
     )
     if _any_match(_PATIENT_PRIOR_STUDY_PATTERNS, patient_text):
-        return None, None  # Prior participation documented
+        return None, None
 
     return (
         "prior parent/extension study participation required; patient has no documented prior participation",
@@ -1360,10 +1415,10 @@ def _check_oncology_required(patient: dict, trial: dict) -> tuple[str | None, st
         return None, None
 
     patient_text = _text(
-        patient.get("diagnosis", [])
-        + patient.get("key_features", [])
-        + patient.get("medications", [])
-        + patient.get("exclusions", [])
+        (patient.get("diagnosis", []) if isinstance(patient.get("diagnosis"), list) else [patient.get("diagnosis", "")])
+        + (patient.get("key_features", []) if isinstance(patient.get("key_features"), list) else [patient.get("key_features", "")])
+        + (patient.get("medications", []) if isinstance(patient.get("medications"), list) else [patient.get("medications", "")])
+        + (patient.get("exclusions", []) if isinstance(patient.get("exclusions"), list) else [patient.get("exclusions", "")])
         + [patient.get("summary", "")]
     )
     if _any_match(_PATIENT_CANCER_PATTERNS, patient_text):
