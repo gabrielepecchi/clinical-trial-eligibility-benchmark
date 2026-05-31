@@ -8,6 +8,7 @@ from run_sample_benchmark import (
     build_confusion_matrix,
     format_confusion_matrix,
     build_benchmark_metadata,
+    format_benchmark_metadata,
 )
 
 
@@ -407,3 +408,66 @@ def test_build_benchmark_metadata_empty_inputs():
     assert result["num_trials"] == 0
     assert result["num_label_records"] == 0
     assert result["num_evaluated_pairs"] == 0
+
+
+# ---------------------------------------------------------------------------
+# Benchmark metadata formatting tests
+# ---------------------------------------------------------------------------
+
+_SAMPLE_METADATA = {
+    "benchmark_name": "sample_benchmark",
+    "num_patients": 50,
+    "num_trials": 10,
+    "num_label_records": 200,
+    "num_evaluated_pairs": 195,
+}
+
+_ZERO_METADATA = {
+    "benchmark_name": "sample_benchmark",
+    "num_patients": 0,
+    "num_trials": 0,
+    "num_label_records": 0,
+    "num_evaluated_pairs": 0,
+}
+
+
+def test_format_benchmark_metadata_returns_string():
+    assert isinstance(format_benchmark_metadata(_SAMPLE_METADATA), str)
+
+
+def test_format_benchmark_metadata_contains_header():
+    assert "Benchmark metadata" in format_benchmark_metadata(_SAMPLE_METADATA)
+
+
+def test_format_benchmark_metadata_contains_benchmark_name():
+    assert "sample_benchmark" in format_benchmark_metadata(_SAMPLE_METADATA)
+
+
+def test_format_benchmark_metadata_contains_patients_label():
+    assert "Patients" in format_benchmark_metadata(_SAMPLE_METADATA)
+
+
+def test_format_benchmark_metadata_contains_trials_label():
+    assert "Trials" in format_benchmark_metadata(_SAMPLE_METADATA)
+
+
+def test_format_benchmark_metadata_contains_label_records_label():
+    assert "Label records" in format_benchmark_metadata(_SAMPLE_METADATA)
+
+
+def test_format_benchmark_metadata_contains_evaluated_pairs_label():
+    assert "Evaluated pairs" in format_benchmark_metadata(_SAMPLE_METADATA)
+
+
+def test_format_benchmark_metadata_contains_numeric_values():
+    result = format_benchmark_metadata(_SAMPLE_METADATA)
+    assert "50" in result
+    assert "10" in result
+    assert "200" in result
+    assert "195" in result
+
+
+def test_format_benchmark_metadata_all_zeros_does_not_crash():
+    result = format_benchmark_metadata(_ZERO_METADATA)
+    assert isinstance(result, str)
+    assert "0" in result

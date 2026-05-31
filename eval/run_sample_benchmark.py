@@ -63,6 +63,17 @@ def format_confusion_matrix(confusion_matrix: dict) -> str:
     return "\nConfusion matrix\n" + header + "\n" + rows
 
 
+def format_benchmark_metadata(metadata: dict) -> str:
+    return (
+        "\nBenchmark metadata\n"
+        f"  Benchmark name : sample_benchmark\n"
+        f"  Patients       : {metadata['num_patients']}\n"
+        f"  Trials         : {metadata['num_trials']}\n"
+        f"  Label records  : {metadata['num_label_records']}\n"
+        f"  Evaluated pairs: {metadata['num_evaluated_pairs']}"
+    )
+
+
 def build_confusion_matrix(gold_labels: list[str], predictions: list[str]) -> dict:
     labels = ["eligible", "not_eligible", "unclear"]
     matrix = {g: {p: 0 for p in labels} for g in labels}
@@ -162,6 +173,7 @@ def main() -> None:
     coverage = build_coverage_summary(prediction_records)
     label_distribution = build_label_distribution(gold_labels, predictions)
     confusion_matrix = build_confusion_matrix(gold_labels, predictions)
+    metadata = build_benchmark_metadata(patients, trials, labels, prediction_records)
 
     # Print summary
     print("\n=== Sample Benchmark Results ===")
@@ -171,13 +183,12 @@ def main() -> None:
     print("\nPer-class F1:")
     for label, values in metrics["per_class"].items():
         print(f"  {label:<15} {values['f1']:.3f}")
+    print(format_benchmark_metadata(metadata))
     print(format_label_distribution(label_distribution))
     print(format_confusion_matrix(confusion_matrix))
     print(format_coverage_summary(coverage))
 
     # Save results
-    metadata = build_benchmark_metadata(patients, trials, labels, prediction_records)
-
     output = {
         "metadata": metadata,
         "coverage": coverage,
