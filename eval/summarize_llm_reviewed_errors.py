@@ -12,7 +12,7 @@ ERROR_CSV_FILE = Path("data/processed/error_analysis_llm_reviewed.csv")
 
 _CSV_FIELDNAMES = [
     "case_id", "patient_id", "trial_id", "gold_label", "predicted_label",
-    "error_type", "explanation", "possible_fix",
+    "error_type", "severity", "explanation", "possible_fix",
     "blocking_criteria", "uncertain_criteria",
 ]
 
@@ -27,6 +27,7 @@ def build_error_csv_rows(error_records: list[dict]) -> list[dict]:
             "gold_label": r.get("gold_label", ""),
             "predicted_label": r.get("predicted_label", ""),
             "error_type": r.get("error_type", ""),
+            "severity": r.get("severity", ""),
             "explanation": r.get("matcher_explanation", ""),
             "possible_fix": "",
             "blocking_criteria": "; ".join(r.get("blocking_criteria") or []),
@@ -40,6 +41,23 @@ def write_error_csv_rows(rows: list[dict], output_path: Path) -> None:
         writer = csv.DictWriter(f, fieldnames=_CSV_FIELDNAMES, extrasaction="ignore")
         writer.writeheader()
         writer.writerows(rows)
+
+
+def classify_error_severity(record: dict) -> str:
+    """Assign a severity level based on gold/predicted labels."""
+    gold = record.get("gold_label", "")
+    pred = record.get("predicted_label", "")
+    if gold == pred:
+        return "none"
+    if gold == "not_eligible" and pred == "eligible":
+        return "critical"
+    if (gold == "unclear" and pred in {"eligible", "not_eligible"}) or \
+       (gold in {"eligible", "not_eligible"} and pred == "unclear"):
+        return "major"
+    if (gold == "eligible" and pred == "not_eligible") or \
+       (gold == "not_eligible" and pred == "unclear"):
+        return "minor"
+    return "other"
 
 
 def classify_error(record: dict) -> str:
@@ -110,6 +128,7 @@ def build_error_record(record: dict) -> dict:
         "gold_label": record.get("gold_label", ""),
         "predicted_label": record.get("predicted_label", ""),
         "error_type": classify_error(record),
+        "severity": classify_error_severity(record),
         "gold_rationale": record.get("gold_rationale", ""),
         "matcher_explanation": record.get("matcher_explanation", ""),
         "blocking_criteria": record.get("blocking_criteria", []),

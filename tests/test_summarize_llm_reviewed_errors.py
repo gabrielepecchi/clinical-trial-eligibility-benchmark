@@ -93,3 +93,48 @@ def test_write_error_csv_rows_empty_creates_header_only(tmp_path):
     lines = out.read_text(encoding="utf-8").splitlines()
     assert len(lines) == 1
     assert "patient_id" in lines[0]
+
+
+# --- classify_error_severity ---
+
+from summarize_llm_reviewed_errors import classify_error_severity
+
+
+def test_classify_error_severity_critical():
+    assert classify_error_severity({"gold_label": "not_eligible", "predicted_label": "eligible"}) == "critical"
+
+
+def test_classify_error_severity_major_unclear_eligible():
+    assert classify_error_severity({"gold_label": "unclear", "predicted_label": "eligible"}) == "major"
+
+
+def test_classify_error_severity_major_unclear_not_eligible():
+    assert classify_error_severity({"gold_label": "unclear", "predicted_label": "not_eligible"}) == "major"
+
+
+def test_classify_error_severity_major_eligible_unclear():
+    assert classify_error_severity({"gold_label": "eligible", "predicted_label": "unclear"}) == "major"
+
+
+def test_classify_error_severity_major_not_eligible_unclear():
+    assert classify_error_severity({"gold_label": "not_eligible", "predicted_label": "unclear"}) == "major"
+
+
+def test_classify_error_severity_minor():
+    assert classify_error_severity({"gold_label": "eligible", "predicted_label": "not_eligible"}) == "minor"
+
+
+def test_classify_error_severity_none():
+    assert classify_error_severity({"gold_label": "eligible", "predicted_label": "eligible"}) == "none"
+
+
+def test_build_error_csv_rows_includes_severity():
+    row = build_error_csv_rows([_ERROR_RECORD])[0]
+    assert "severity" in row
+
+
+def test_write_error_csv_rows_header_includes_severity(tmp_path):
+    out = tmp_path / "errors_sev.csv"
+    write_error_csv_rows(build_error_csv_rows([_ERROR_RECORD]), out)
+    first_line = out.read_text(encoding="utf-8").splitlines()[0]
+    assert "severity" in first_line
