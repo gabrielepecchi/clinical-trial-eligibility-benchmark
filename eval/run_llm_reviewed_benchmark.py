@@ -126,6 +126,21 @@ def build_safety_uncertainty_summary(prediction_records: list[dict]) -> dict:
     }
 
 
+def build_benchmark_output(
+    metadata: dict,
+    metrics: dict,
+    safety_uncertainty_summary: dict,
+    prediction_records: list[dict],
+) -> dict:
+    """Assemble the final benchmark output dict."""
+    return {
+        "metadata": metadata,
+        "metrics": metrics,
+        "safety_uncertainty_summary": safety_uncertainty_summary,
+        "predictions": prediction_records,
+    }
+
+
 def load_json(path: Path) -> list[dict]:
     """Load a JSON list from disk."""
     return json.loads(path.read_text(encoding="utf-8"))
@@ -192,16 +207,16 @@ def main() -> None:
 
     metrics = compute_metrics(gold_labels, predictions)
 
-    output = {
-        "metadata": {
-            "label_source": str(LABELS_FILE),
-            "label_status": "llm_reviewed_needs_spotcheck",
-            "evaluated_pairs": len(gold_labels),
-            "skipped_pairs": skipped,
-        },
-        "metrics": metrics,
-        "predictions": prediction_records,
+    safety_summary = build_safety_uncertainty_summary(prediction_records)
+
+    metadata = {
+        "label_source": str(LABELS_FILE),
+        "label_status": "llm_reviewed_needs_spotcheck",
+        "evaluated_pairs": len(gold_labels),
+        "skipped_pairs": skipped,
     }
+
+    output = build_benchmark_output(metadata, metrics, safety_summary, prediction_records)
 
     RESULTS_FILE.write_text(json.dumps(output, indent=2), encoding="utf-8")
 
@@ -224,6 +239,15 @@ def main() -> None:
     print(f"\nResults saved to {RESULTS_FILE}")
     print(f"Predictions CSV saved to {RESULTS_CSV_FILE}")
     print(f"Criterion-level CSV saved to {CRITERION_CSV_FILE}")
+
+    print("\n=== Safety & Uncertainty Summary ===")
+    print(f"Total predictions    : {safety_summary['total_predictions']}")
+    print(f"Unsafe eligible errors     : {safety_summary['unsafe_eligible_errors']}")
+    print(f"Overly conservative errors : {safety_summary['overly_conservative_errors']}")
+    print(f"Uncertainty errors         : {safety_summary['uncertainty_errors']}")
+    print(f"Unclear recall             : {safety_summary['unclear_recall']:.3f}")
+    print(f"Unclear precision          : {safety_summary['unclear_precision']:.3f}")
+    print(f"Overcommitment rate        : {safety_summary['overcommitment_rate']:.3f}")
 
 
 if __name__ == "__main__":
