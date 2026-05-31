@@ -130,6 +130,7 @@ def build_benchmark_output(
     metadata: dict,
     metrics: dict,
     safety_uncertainty_summary: dict,
+    error_severity_summary: dict,
     prediction_records: list[dict],
 ) -> dict:
     """Assemble the final benchmark output dict."""
@@ -137,6 +138,7 @@ def build_benchmark_output(
         "metadata": metadata,
         "metrics": metrics,
         "safety_uncertainty_summary": safety_uncertainty_summary,
+        "error_severity_summary": error_severity_summary,
         "predictions": prediction_records,
     }
 
@@ -242,6 +244,7 @@ def main() -> None:
     metrics = compute_metrics(gold_labels, predictions)
 
     safety_summary = build_safety_uncertainty_summary(prediction_records)
+    error_summary = build_error_severity_summary(prediction_records)
 
     metadata = {
         "label_source": str(LABELS_FILE),
@@ -250,7 +253,7 @@ def main() -> None:
         "skipped_pairs": skipped,
     }
 
-    output = build_benchmark_output(metadata, metrics, safety_summary, prediction_records)
+    output = build_benchmark_output(metadata, metrics, safety_summary, error_summary, prediction_records)
 
     RESULTS_FILE.write_text(json.dumps(output, indent=2), encoding="utf-8")
 
@@ -282,6 +285,15 @@ def main() -> None:
     print(f"Unclear recall             : {safety_summary['unclear_recall']:.3f}")
     print(f"Unclear precision          : {safety_summary['unclear_precision']:.3f}")
     print(f"Overcommitment rate        : {safety_summary['overcommitment_rate']:.3f}")
+
+    print("\n=== Error Severity Summary ===")
+    print(f"Total errors         : {error_summary['total_errors']}")
+    print(f"Critical errors      : {error_summary['critical_errors']}")
+    print(f"Major errors         : {error_summary['major_errors']}")
+    print(f"Minor errors         : {error_summary['minor_errors']}")
+    print(f"Critical error rate  : {error_summary['critical_error_rate']:.3f}")
+    print(f"Major error rate     : {error_summary['major_error_rate']:.3f}")
+    print(f"Minor error rate     : {error_summary['minor_error_rate']:.3f}")
 
 
 if __name__ == "__main__":
