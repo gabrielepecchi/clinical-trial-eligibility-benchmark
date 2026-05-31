@@ -515,16 +515,17 @@ _PATIENT_COGNITIVE_IMPAIRMENT_PATTERNS = [
     r"neuropsychological impairment",
 ]
 
-# Trial exclusion criteria that mention dementia/cognitive impairment without a numeric threshold
+# Trial exclusion criteria that explicitly exclude dementia or cognitive impairment (no numeric threshold).
+# Must be explicit — vague words like "cognitive", "memory", or "neuropsychological" alone do not qualify.
 _TRIAL_COGNITIVE_EXCLUSION_GENERAL_PATTERNS = [
-    r"dementia",
+    r"\bdementia\b",
     r"cognitive impairment",
     r"neuropsychological impairment",
-    r"inability to consent",
+    r"inability to (?:give )?(?:informed )?consent",
     r"inability to cooperate",
-    r"unable to consent",
+    r"unable to (?:give )?(?:informed )?consent",
     r"unable to cooperate",
-    r"capacity to consent",
+    r"lacks? (?:capacity|ability) to consent",
 ]
 
 # Trial inclusion criteria requiring cognitive minimum (non-numeric)
@@ -541,23 +542,23 @@ _TRIAL_COGNITIVE_INCLUSION_MIN_PATTERNS = [
 _MMSE_INCLUSION_MIN_PATTERN = re.compile(r"mmse\s*[≥>=]+\s*(\d+)", re.IGNORECASE)
 _MOCA_INCLUSION_MIN_PATTERN = re.compile(r"moca\s*[≥>=]+\s*(\d+)", re.IGNORECASE)
 
-# Trial inclusion criteria requiring DBS
+# Trial inclusion criteria requiring existing/prior/active DBS hardware.
+# Only fire when the text clearly requires the patient to already have DBS.
+# Do NOT include ambiguous DBS-candidacy patterns.
 _TRIAL_DBS_REQUIRED_PATTERNS = [
     r"prior.*bilateral.*stn.*dbs",
     r"bilateral.*stn.*dbs.*surgery",
     r"prior.*dbs.*surgery",
     r"undergone.*dbs",
     r"active.*dbs.*hardware",
-    r"dbs.*implanted",
-    r"subthalamic.*dbs",
+    r"subthalamic.*dbs.*surgery",
     r"dbs.*surgery.*required",
-    r"must.*have.*dbs",
-    r"requires.*dbs",
-    r"prior.*deep brain stimulation",
+    r"must.*have.*(?:undergone|received).*dbs",
+    r"requires.*prior.*dbs",
+    r"prior.*deep brain stimulation.*surgery",
     r"undergone.*deep brain stimulation",
-    r"deep brain stimulation.*surgery",
-    r"directional.*lead.*hardware",
-    r"dbs.*directional",
+    r"deep brain stimulation.*surgery.*required",
+    r"previously.*implanted.*dbs",
 ]
 
 # Broader transcranial/electrical stimulation patterns for device contraindication
@@ -572,6 +573,96 @@ _TRIAL_STIMULATION_PATTERNS = [
     r"brain.*stimulation",
     r"non.invasive.*brain.*stimulation",
     r"electrical.*stimulation",
+]
+
+# Parent / open-label extension study requirement patterns
+_TRIAL_PARENT_STUDY_REQUIRED_PATTERNS = [
+    r"completion of.*(?:parent|double.blind|preceding|prior|previous).*(?:study|trial|phase)",
+    r"participated? in.*(?:parent|core|preceding|double.blind).*(?:study|trial|phase)",
+    r"enrolled? in.*(?:parent|core|preceding).*(?:study|trial)",
+    r"prior.*participation.*(?:parent|core|double.blind).*(?:study|trial)",
+    r"open.label.*extension.*(?:eligib|qualif|complet)",
+    r"must have completed.*(?:study|trial|phase|treatment period)",
+    r"completed.*(?:double.blind|parent|core|maintenance).*(?:period|phase|study|trial)",
+    r"rollover.*(?:from|study|trial|phase)",
+    r"continuation.*(?:from|of).*(?:parent|prior|previous).*(?:study|trial)",
+    r"extension.*(?:study|trial).*(?:prior|previous|parent).*(?:complet|participat)",
+    r"\bsp\d{3,}\b.*(?:complet|participat|enroll)",
+    r"(?:complet|participat|enroll).*\bsp\d{3,}\b",
+]
+
+_PATIENT_PRIOR_STUDY_PATTERNS = [
+    r"completed.*(?:parent|prior|previous|double.blind|core).*(?:study|trial|phase)",
+    r"participated.*(?:parent|prior|previous|core).*(?:study|trial)",
+    r"enrolled.*(?:parent|core|prior).*(?:study|trial)",
+    r"rollover.*(?:from|patient)",
+    r"prior.*study.*complet",
+    r"\bsp\d{3,}\b",
+    r"open.label.*extension.*(?:eligible|enrolled|complet)",
+]
+
+# Oncology-specific diagnosis required (advanced/metastatic solid tumor etc.)
+_TRIAL_ONCOLOGY_REQUIRED_PATTERNS = [
+    r"(?:advanced|metastatic).*(?:solid tumor|solid tumour|malignancy|cancer|carcinoma)",
+    r"(?:solid tumor|solid tumour).*(?:advanced|metastatic|confirmed|histolog|cytolog)",
+    r"histolog(?:ically)?.*(?:confirmed|proven).*(?:tumor|tumour|cancer|malignancy|carcinoma)",
+    r"cytolog(?:ically)?.*(?:confirmed|proven).*(?:tumor|tumour|cancer|malignancy|carcinoma)",
+    r"\bnsclc\b",
+    r"\bsclc\b",
+    r"\bhnscc\b",
+    r"measurable disease.*recist",
+    r"recist.*measurable",
+    r"non.small.cell lung",
+    r"small.cell lung",
+    r"(?:colorectal|colon|rectal).*cancer.*(?:advanced|metastatic)",
+    r"(?:melanoma|glioblastoma|glioma|hepatocellular|cholangiocarcinoma).*(?:advanced|metastatic|confirmed)",
+    r"unresectable.*(?:tumor|tumour|carcinoma|cancer|malignancy)",
+]
+
+_PATIENT_CANCER_PATTERNS = [
+    r"cancer",
+    r"\btumou?r\b",
+    r"malignancy",
+    r"carcinoma",
+    r"solid tumor",
+    r"solid tumour",
+    r"chemotherapy",
+    r"oncology",
+    r"radiotherapy",
+    r"immunotherapy",
+    r"\bnsclc\b",
+    r"\bsclc\b",
+    r"\bmelanoma\b",
+    r"\bglioblastoma\b",
+    r"\bglioma\b",
+    r"metastatic",
+    r"lymphoma",
+    r"leukemia",
+    r"leukaemia",
+]
+
+# High-demand physical exercise trial patterns
+_TRIAL_HIGH_DEMAND_EXERCISE_PATTERNS = [
+    r"treadmill.*(?:training|exercise|protocol|test|walking)",
+    r"(?:training|exercise|protocol|test|walking).*treadmill",
+    r"agility.*training",
+    r"high.intensity.*(?:exercise|training|physical)",
+    r"(?:exercise|training|physical).*high.intensity",
+    r"vigorous.*(?:exercise|physical.*activity)",
+    r"aerobic.*(?:exercise|training).*(?:protocol|program|intervention)",
+    r"physical.*performance.*(?:test|protocol|requirement)",
+    r"exercise.*capacity.*(?:test|required|minimum)",
+    r"6.minute.*walk.*(?:test|distance|required)",
+    r"physically.*(?:capable|able).*(?:to perform|to complete).*(?:exercise|training)",
+]
+
+_PATIENT_FRAILTY_FALL_PATTERNS = [
+    r"\bfrail",
+    r"frailty",
+    r"recurrent.*falls",
+    r"frequent.*falls",
+    r"fall.*risk",
+    r"high.*fall.*risk",
 ]
 
 _UNVERIFIABLE_INCLUSION_PATTERNS = [
@@ -1234,6 +1325,87 @@ def _check_device_contraindication_stimulation(
     return None, None
 
 
+def _check_parent_study_required(patient: dict, trial: dict) -> tuple[str | None, str | None]:
+    """Block when trial requires prior completion/participation in a parent/extension study
+    and patient has no documented prior participation."""
+    inclusion_list = trial.get("inclusion_criteria", [])
+    has_requirement = any(
+        _any_match(_TRIAL_PARENT_STUDY_REQUIRED_PATTERNS, c.lower()) for c in inclusion_list
+    )
+    if not has_requirement:
+        return None, None
+
+    patient_text = _text(
+        patient.get("key_features", [])
+        + patient.get("exclusions", [])
+        + [patient.get("summary", "")]
+    )
+    if _any_match(_PATIENT_PRIOR_STUDY_PATTERNS, patient_text):
+        return None, None  # Prior participation documented
+
+    return (
+        "prior parent/extension study participation required; patient has no documented prior participation",
+        "no prior parent or extension study participation documented",
+    )
+
+
+def _check_oncology_required(patient: dict, trial: dict) -> tuple[str | None, str | None]:
+    """Block when trial requires advanced/metastatic solid tumor or specific cancer diagnosis
+    and patient has no cancer documented."""
+    inclusion_list = trial.get("inclusion_criteria", [])
+    has_requirement = any(
+        _any_match(_TRIAL_ONCOLOGY_REQUIRED_PATTERNS, c.lower()) for c in inclusion_list
+    )
+    if not has_requirement:
+        return None, None
+
+    patient_text = _text(
+        patient.get("diagnosis", [])
+        + patient.get("key_features", [])
+        + patient.get("medications", [])
+        + patient.get("exclusions", [])
+        + [patient.get("summary", "")]
+    )
+    if _any_match(_PATIENT_CANCER_PATTERNS, patient_text):
+        return None, None  # Cancer documented
+
+    return (
+        "oncology diagnosis required: trial requires advanced/metastatic solid tumor or confirmed cancer diagnosis; patient has no documented cancer",
+        "no cancer or solid tumor diagnosis documented",
+    )
+
+
+def _check_frailty_high_demand_exercise(patient: dict, trial: dict) -> tuple[str | None, str | None]:
+    """Block when patient has frailty/fall risk and trial demands high physical exercise."""
+    patient_text = _text(
+        patient.get("key_features", [])
+        + patient.get("exclusions", [])
+        + [patient.get("summary", "")]
+    )
+    if not _any_match(_PATIENT_FRAILTY_FALL_PATTERNS, patient_text):
+        return None, None
+
+    inclusion_text = _text(trial.get("inclusion_criteria", []))
+    trial_text = inclusion_text + " " + _text(trial.get("exclusion_criteria", []))
+
+    # Exempt frailty-targeted physiotherapy trials
+    _FRAILTY_TARGET_PATTERNS = [
+        r"frailty.*trial", r"frailty.*study", r"frail.*patient",
+        r"home.*physiotherapy", r"home.*physical.*therapy",
+        r"frailty.*intervention", r"frailty.*rehabilitation",
+    ]
+    if _any_match(_FRAILTY_TARGET_PATTERNS, inclusion_text):
+        return None, None
+
+    if _any_match(_TRIAL_HIGH_DEMAND_EXERCISE_PATTERNS, trial_text):
+        return (
+            "frailty/fall risk incompatible with high-demand treadmill or agility exercise protocol",
+            "frailty or recurrent falls documented; high-demand physical exercise trial",
+        )
+
+    return None, None
+
+
 # ---------------------------------------------------------------------------
 # Main matcher
 # ---------------------------------------------------------------------------
@@ -1315,6 +1487,27 @@ def match_patient_to_trial(patient: dict, trial: dict) -> dict:
         blocking_criteria.append(dev_block)
         if dev_fact:
             matched_facts.append(dev_fact)
+
+    # --- Parent/extension study required ---
+    parent_block, parent_fact = _check_parent_study_required(patient, trial)
+    if parent_block:
+        blocking_criteria.append(parent_block)
+        if parent_fact:
+            matched_facts.append(parent_fact)
+
+    # --- Oncology diagnosis required ---
+    onco_block, onco_fact = _check_oncology_required(patient, trial)
+    if onco_block:
+        blocking_criteria.append(onco_block)
+        if onco_fact:
+            matched_facts.append(onco_fact)
+
+    # --- Frailty in high-demand exercise trial ---
+    frailty_ex_block, frailty_ex_fact = _check_frailty_high_demand_exercise(patient, trial)
+    if frailty_ex_block and frailty_ex_block not in blocking_criteria:
+        blocking_criteria.append(frailty_ex_block)
+        if frailty_ex_fact:
+            matched_facts.append(frailty_ex_fact)
 
     # --- Hoehn and Yahr stage ---
     hy_block, hy_fact = _check_hy_stage(patient, trial)

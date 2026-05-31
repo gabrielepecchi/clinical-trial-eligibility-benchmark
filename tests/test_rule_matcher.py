@@ -756,3 +756,125 @@ def test_not_eligible_pacemaker_in_tdcs_trial():
         for c in result["blocking_criteria"]
         for kw in ("pacemaker", "cardiac", "stimulation", "contraindication")
     )
+
+
+# ---------------------------------------------------------------------------
+# New blocker tests — pass 2
+# ---------------------------------------------------------------------------
+
+def test_not_eligible_parent_study_required_no_prior_participation():
+    """Trial requires completion of a prior double-blind parent study; patient has no prior participation."""
+    patient = make_patient(
+        age=62,
+        diagnosis=["Parkinson disease"],
+        key_features=["idiopathic Parkinson disease, levodopa responsive"],
+        medications=["levodopa/carbidopa"],
+        exclusions=[],
+    )
+    trial = make_trial(
+        inclusion_criteria=[
+            "Age 18 to 80 years",
+            "Confirmed Parkinson disease diagnosis",
+            "Must have completed the double-blind parent study phase",
+        ],
+        exclusion_criteria=[],
+    )
+    result = match_patient_to_trial(patient, trial)
+    assert result["prediction"] == "not_eligible", (
+        f"Expected 'not_eligible' for parent-study requirement, got '{result['prediction']}'. "
+        f"blocking_criteria={result['blocking_criteria']}"
+    )
+    assert any(
+        kw in c.lower()
+        for c in result["blocking_criteria"]
+        for kw in ("prior", "parent", "extension", "completion", "participation")
+    )
+
+
+def test_not_eligible_oncology_solid_tumor_required_pd_patient():
+    """Trial requires advanced/metastatic solid tumor; patient only has Parkinson disease."""
+    patient = make_patient(
+        age=65,
+        diagnosis=["Parkinson disease"],
+        key_features=["idiopathic Parkinson disease"],
+        medications=["levodopa/carbidopa"],
+        exclusions=[],
+    )
+    trial = make_trial(
+        inclusion_criteria=[
+            "Age 18 years or older",
+            "Histologically confirmed advanced or metastatic solid tumor",
+            "Measurable disease per RECIST criteria",
+        ],
+        exclusion_criteria=[],
+    )
+    result = match_patient_to_trial(patient, trial)
+    assert result["prediction"] == "not_eligible", (
+        f"Expected 'not_eligible' for oncology solid tumor requirement, got '{result['prediction']}'. "
+        f"blocking_criteria={result['blocking_criteria']}"
+    )
+    assert any(
+        kw in c.lower()
+        for c in result["blocking_criteria"]
+        for kw in ("solid tumor", "cancer", "oncology", "malignancy", "tumor")
+    )
+
+
+def test_not_eligible_frailty_in_treadmill_trial():
+    """Frail patient with recurrent falls in a treadmill agility training trial."""
+    patient = make_patient(
+        age=78,
+        diagnosis=["Parkinson disease"],
+        key_features=["frailty noted", "recurrent falls"],
+        medications=[],
+        exclusions=[],
+    )
+    trial = make_trial(
+        inclusion_criteria=[
+            "Age 40 to 80 years",
+            "Confirmed Parkinson disease diagnosis",
+            "Able to perform treadmill walking exercise protocol",
+            "Agility training program participation required",
+        ],
+        exclusion_criteria=[],
+    )
+    result = match_patient_to_trial(patient, trial)
+    assert result["prediction"] == "not_eligible", (
+        f"Expected 'not_eligible' for frail patient in treadmill trial, got '{result['prediction']}'. "
+        f"blocking_criteria={result['blocking_criteria']}"
+    )
+    assert any(
+        kw in c.lower()
+        for c in result["blocking_criteria"]
+        for kw in ("frail", "fall", "physical", "treadmill", "agility", "exercise")
+    )
+
+
+def test_not_eligible_cognitive_blocker_does_not_fire_for_dbs_imaging_trial():
+    """Patient with mild cognitive impairment in a generic DBS/imaging trial without
+    explicit cognitive/cooperation requirements should not be blocked by the cognitive blocker."""
+    patient = make_patient(
+        age=66,
+        diagnosis=["Parkinson disease"],
+        key_features=["mild cognitive impairment", "bilateral STN DBS implanted 1 year ago"],
+        medications=[],
+        exclusions=[],
+    )
+    trial = make_trial(
+        inclusion_criteria=[
+            "Age 40 to 80 years",
+            "Confirmed Parkinson disease diagnosis",
+            "DBS-implanted patients eligible",
+            "MRI imaging study",
+        ],
+        exclusion_criteria=[],
+    )
+    result = match_patient_to_trial(patient, trial)
+    assert result["prediction"] != "not_eligible" or not any(
+        kw in c.lower()
+        for c in result["blocking_criteria"]
+        for kw in ("cognitive exclusion", "cognitive inclusion", "dementia")
+    ), (
+        f"Cognitive blocker should not fire for generic DBS/imaging trial. "
+        f"prediction={result['prediction']}, blocking_criteria={result['blocking_criteria']}"
+    )
