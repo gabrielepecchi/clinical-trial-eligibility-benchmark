@@ -188,3 +188,17 @@ def test_format_coverage_summary_all_zeros():
     result = format_coverage_summary(coverage)
     assert isinstance(result, str)
     assert "0" in result
+
+
+def test_format_coverage_summary_contains_missing_information_percentage():
+    assert "40.0%" in format_coverage_summary(_SAMPLE_COVERAGE)
+
+
+def test_format_coverage_summary_contains_criterion_results_percentage():
+    assert "70.0%" in format_coverage_summary(_SAMPLE_COVERAGE)
+
+
+def test_format_coverage_summary_all_zeros_does_not_crash():
+    coverage = {"total_predictions": 0, "with_missing_information": 0, "with_criterion_results": 0}
+    result = format_coverage_summary(coverage)
+    assert "0.0%" in result

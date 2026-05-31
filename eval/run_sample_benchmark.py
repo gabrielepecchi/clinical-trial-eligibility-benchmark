@@ -29,11 +29,13 @@ def build_coverage_summary(prediction_records: list[dict]) -> dict:
 
 
 def format_coverage_summary(coverage: dict) -> str:
+    total = coverage["total_predictions"]
+    pct = lambda n: 0.0 if total == 0 else round(n / total * 100, 1)
     return (
         "\nCoverage\n"
-        f"  Total predictions       : {coverage['total_predictions']}\n"
-        f"  With missing information: {coverage['with_missing_information']}\n"
-        f"  With criterion results  : {coverage['with_criterion_results']}"
+        f"  Total predictions       : {total}\n"
+        f"  With missing information: {coverage['with_missing_information']} ({pct(coverage['with_missing_information'])}%)\n"
+        f"  With criterion results  : {coverage['with_criterion_results']} ({pct(coverage['with_criterion_results'])}%)"
     )
 
 
