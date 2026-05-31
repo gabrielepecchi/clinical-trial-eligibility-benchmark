@@ -95,6 +95,17 @@ Label: `unclear` — arrhythmia type is unspecified; eligibility cannot be deter
 - Not-eligible F1: 0.436
 - Unclear F1: 0.397
 
+**Safety & Uncertainty Summary**
+- Unsafe eligible errors: 9 (critical over-commitment on exclusion criteria)
+- Overly conservative errors: 2
+- Uncertainty errors: 53
+- Unclear recall: 0.312 | Unclear precision: 0.545
+- Overcommitment rate: 0.688
+
+**Error Severity Summary**
+- Total errors: 84 | Critical: 9 | Major: 73 | Minor: 13
+- Critical error rate: 0.060 | Major error rate: 0.487 | Minor error rate: 0.087
+
 These results reflect the genuine difficulty of eligibility reasoning from free-text criteria. Criteria are often verbose, ambiguous, or require multi-step inference. Modest scores indicate room for improvement in clinical NLP, not a flaw in the benchmark design.
 
 ## How to Read the Results
@@ -102,6 +113,7 @@ These results reflect the genuine difficulty of eligibility reasoning from free-
 - **Macro F1 of ~0.44** signals that the task is genuinely difficult across all three labels — no single label dominates and the model cannot succeed by defaulting to a majority class
 - **Unclear cases matter** — the Uncertain label exists because missing or ambiguous information should not be guessed; a model that over-commits on unclear cases is failing in a meaningful way
 - **Future improvements should focus on** parser coverage for complex free-text criteria, uncertainty handling for incomplete patient profiles, and systematic reduction of the failure modes identified in the error taxonomy
+- **Safety/uncertainty metrics and severity counts** distinguish dangerous over-commitment (critical: predicting eligible when not eligible) from conservative errors (minor) and ambiguous cases (major), helping prioritize which failure modes to address first
 
 ## Key takeaway
 
@@ -143,7 +155,11 @@ The full pipeline produces the following files:
 | Review CSV | `data/processed/labels_seed_review.csv` |
 | LLM-reviewed draft labels | `data/processed/labels_llm_reviewed.json` |
 | Benchmark results | `data/processed/results_llm_reviewed.json` |
+| Benchmark predictions CSV | `data/processed/results_llm_reviewed.csv` |
+| Criterion-level results CSV | `data/processed/criterion_level_results.csv` |
 | Error analysis | `data/processed/error_analysis_llm_reviewed.json` |
+| Error analysis CSV | `data/processed/error_analysis_llm_reviewed.csv` |
+| Sample benchmark predictions CSV | `data/processed/results_sample_predictions.csv` |
 
 ## Running the pipeline
 
