@@ -209,3 +209,63 @@ def test_build_error_record_minimal_severity_populated():
 
 def test_build_error_record_blocking_criteria_preserved():
     assert build_error_record(_PRED_RECORD)["blocking_criteria"] == ["moca < 24"]
+
+
+# --- format_severity_breakdown ---
+
+from summarize_llm_reviewed_errors import format_severity_breakdown
+
+_SEV_ERRORS = [
+    {"severity": "critical"},
+    {"severity": "major"},
+    {"severity": "major"},
+    {"severity": "major_minor"},
+    {"severity": "minor"},
+]
+
+
+def test_format_severity_breakdown_returns_string():
+    assert isinstance(format_severity_breakdown(_SEV_ERRORS), str)
+
+
+def test_format_severity_breakdown_header():
+    assert "Errors by severity:" in format_severity_breakdown(_SEV_ERRORS)
+
+
+def test_format_severity_breakdown_contains_critical():
+    assert "critical" in format_severity_breakdown(_SEV_ERRORS)
+
+
+def test_format_severity_breakdown_contains_major():
+    assert "major" in format_severity_breakdown(_SEV_ERRORS)
+
+
+def test_format_severity_breakdown_contains_major_minor():
+    assert "major_minor" in format_severity_breakdown(_SEV_ERRORS)
+
+
+def test_format_severity_breakdown_contains_minor():
+    assert "minor" in format_severity_breakdown(_SEV_ERRORS)
+
+
+def test_format_severity_breakdown_contains_counts():
+    result = format_severity_breakdown(_SEV_ERRORS)
+    assert "2" in result  # major appears twice
+    assert "1" in result  # critical, major_minor, minor each once
+
+
+def test_format_severity_breakdown_empty_no_crash():
+    assert isinstance(format_severity_breakdown([]), str)
+
+
+def test_format_severity_breakdown_empty_no_absent_severities():
+    result = format_severity_breakdown([])
+    assert "critical" not in result
+    assert "major" not in result
+
+
+def test_format_severity_breakdown_only_present_severities():
+    errors = [{"severity": "critical"}, {"severity": "critical"}]
+    result = format_severity_breakdown(errors)
+    assert "critical" in result
+    assert "minor" not in result

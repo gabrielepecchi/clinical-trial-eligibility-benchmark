@@ -17,6 +17,17 @@ _CSV_FIELDNAMES = [
 ]
 
 
+def format_severity_breakdown(errors: list[dict]) -> str:
+    """Format severity breakdown as a printable string."""
+    counts = Counter(e["severity"] for e in errors)
+    if not counts:
+        return "Errors by severity:"
+    lines = ["Errors by severity:"]
+    for severity, count in counts.most_common():
+        lines.append(f"  {severity:<20} {count}")
+    return "\n".join(lines)
+
+
 def build_error_csv_rows(error_records: list[dict]) -> list[dict]:
     rows = []
     for i, r in enumerate(error_records, start=1):
@@ -161,9 +172,7 @@ def main() -> None:
     for error_type, count in Counter(e["error_type"] for e in errors).most_common():
         print(f"  {error_type:<40} {count}")
 
-    print("\nErrors by severity:")
-    for severity, count in Counter(e["severity"] for e in errors).most_common():
-        print(f"  {severity:<20} {count}")
+    print(format_severity_breakdown(errors))
 
     print("\nErrors by gold/predicted pair:")
     pair_counts = Counter((e["gold_label"], e["predicted_label"]) for e in errors)
