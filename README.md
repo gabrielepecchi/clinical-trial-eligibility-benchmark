@@ -138,7 +138,7 @@ This project demonstrates end-to-end local benchmark construction: ClinicalTrial
 
 Real trial dataset pipeline complete. LLM-reviewed benchmark complete.
 
-Local tests currently pass with 267 tests.
+Local tests currently pass with 579 tests.
 
 ## Data Pipeline
 
