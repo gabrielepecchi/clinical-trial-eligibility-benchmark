@@ -1473,7 +1473,8 @@ def test_not_not_eligible_pacemaker_cognitive_motor_vr():
     )
 
 
-def test_not_eligible_pacemaker_t018_fallback():
+def test_not_eligible_pacemaker_no_stimulation_text_not_blocked():
+    """Pacemaker patient + trial with no stimulation wording in any field -> no pacemaker block."""
     patient = make_patient(
         age=68,
         diagnosis=["Parkinson disease"],
@@ -1482,7 +1483,6 @@ def test_not_eligible_pacemaker_t018_fallback():
         exclusions=[],
     )
     trial = make_trial(
-        trial_id="T018",
         inclusion_criteria=[
             "Age 40 to 80 years",
             "Confirmed Parkinson disease diagnosis",
@@ -1490,11 +1490,13 @@ def test_not_eligible_pacemaker_t018_fallback():
         exclusion_criteria=[],
     )
     result = match_patient_to_trial(patient, trial)
-    assert result["prediction"] == "not_eligible"
-    assert any(
+    assert not any(
         kw in c.lower()
         for c in result["blocking_criteria"]
-        for kw in ("pacemaker", "transcranial", "stimulation")
+        for kw in ("stimulation", "transcranial", "pacemaker contraindication")
+    ), (
+        f"Pacemaker blocker must not fire when trial has no stimulation wording. "
+        f"prediction={result['prediction']}, blocking_criteria={result['blocking_criteria']}"
     )
 
 
@@ -1794,4 +1796,671 @@ def test_unclear_advanced_pd_lcig_continuation_trial():
     assert result["prediction"] != "not_eligible", (
         f"Expected 'unclear' (not 'not_eligible') for advanced PD/LCIG patient + continuation trial, "
         f"got '{result['prediction']}'. blocking_criteria={result['blocking_criteria']}"
+    )
+
+
+# ---------------------------------------------------------------------------
+# New regression tests — advanced PD required
+# ---------------------------------------------------------------------------
+
+def test_not_eligible_early_onset_pd_advanced_pd_safety_trial():
+    patient = make_patient(
+        age=45,
+        diagnosis=["Parkinson disease"],
+        key_features=["early-onset Parkinson disease", "levodopa responsive"],
+        medications=["levodopa/carbidopa"],
+        exclusions=[],
+    )
+    trial = make_trial(
+        inclusion_criteria=[
+            "Age 18 to 80 years",
+            "Advanced Parkinson disease required",
+            "Advanced motor complications present",
+        ],
+        exclusion_criteria=[],
+    )
+    result = match_patient_to_trial(patient, trial)
+    assert result["prediction"] == "not_eligible", (
+        f"Expected 'not_eligible' for early-onset PD in advanced PD safety trial, "
+        f"got '{result['prediction']}'. blocking_criteria={result['blocking_criteria']}"
+    )
+    assert any("advanced" in c.lower() for c in result["blocking_criteria"])
+
+
+def test_not_not_eligible_early_onset_pd_targets_early_pd_trial():
+    patient = make_patient(
+        age=38,
+        diagnosis=["Parkinson disease"],
+        key_features=["early-onset Parkinson disease"],
+        medications=["levodopa/carbidopa"],
+        exclusions=[],
+    )
+    trial = make_trial(
+        inclusion_criteria=[
+            "Age 18 to 60 years",
+            "Very early Parkinson disease or young-onset PD",
+        ],
+        exclusion_criteria=[],
+    )
+    result = match_patient_to_trial(patient, trial)
+    assert result["prediction"] != "not_eligible" or not any(
+        "advanced" in c.lower() for c in result["blocking_criteria"]
+    ), (
+        f"Advanced-PD blocker must not fire for early PD trial. "
+        f"prediction={result['prediction']}, blocking_criteria={result['blocking_criteria']}"
+    )
+
+
+def test_not_not_eligible_early_onset_pd_bone_density_trial():
+    patient = make_patient(
+        age=42,
+        diagnosis=["Parkinson disease"],
+        key_features=["early-onset Parkinson disease"],
+        medications=["levodopa/carbidopa"],
+        exclusions=[],
+    )
+    trial = make_trial(
+        inclusion_criteria=[
+            "Age 30 to 60 years",
+            "Parkinson disease diagnosis",
+            "Bone density assessment study",
+        ],
+        exclusion_criteria=[],
+    )
+    result = match_patient_to_trial(patient, trial)
+    assert result["prediction"] != "not_eligible" or not any(
+        "advanced" in c.lower() for c in result["blocking_criteria"]
+    ), (
+        f"Advanced-PD blocker must not fire for bone density trial. "
+        f"prediction={result['prediction']}, blocking_criteria={result['blocking_criteria']}"
+    )
+
+
+def test_not_blocked_advanced_pd_patient_with_advanced_markers():
+    patient = make_patient(
+        age=68,
+        diagnosis=["Parkinson disease"],
+        key_features=["advanced Parkinson disease", "motor fluctuations", "wearing-off"],
+        medications=["levodopa/carbidopa", "LCIG"],
+        exclusions=[],
+    )
+    trial = make_trial(
+        inclusion_criteria=[
+            "Age 40 to 80 years",
+            "Advanced Parkinson disease with motor fluctuations",
+        ],
+        exclusion_criteria=[],
+    )
+    result = match_patient_to_trial(patient, trial)
+    assert not any("advanced parkinson disease required" in c.lower() for c in result["blocking_criteria"]), (
+        f"Advanced-PD blocker must not fire for patient with advanced disease markers. "
+        f"blocking_criteria={result['blocking_criteria']}"
+    )
+
+
+# ---------------------------------------------------------------------------
+# New regression tests — composite advanced PD / DBS / frailty
+# ---------------------------------------------------------------------------
+
+def test_not_eligible_early_onset_pd_composite_severity_trial():
+    patient = make_patient(
+        age=45,
+        diagnosis=["Parkinson disease"],
+        key_features=["early-onset Parkinson disease", "levodopa responsive"],
+        medications=["levodopa/carbidopa"],
+        exclusions=[],
+    )
+    trial = make_trial(
+        inclusion_criteria=[
+            "Age 30 to 80 years",
+            "Confirmed Parkinson disease diagnosis",
+            "Disease course of at least 5 years",
+            "Modified Hoehn and Yahr stage >= 3 in OFF state",
+            "MDS-UPDRS Part III >= 30 in OFF period",
+            "At least 3 hours OFF time per day",
+            "Motor fluctuations documented",
+        ],
+        exclusion_criteria=[],
+    )
+    result = match_patient_to_trial(patient, trial)
+    assert result["prediction"] == "not_eligible", (
+        f"Expected 'not_eligible' for early-onset PD in composite-severity advanced PD trial, "
+        f"got '{result['prediction']}'. blocking_criteria={result['blocking_criteria']}"
+    )
+    assert any(
+        kw in c.lower() for c in result["blocking_criteria"]
+        for kw in ("advanced", "severity")
+    )
+
+
+def test_not_not_eligible_early_onset_pd_very_early_trial():
+    patient = make_patient(
+        age=38,
+        diagnosis=["Parkinson disease"],
+        key_features=["early-onset Parkinson disease"],
+        medications=["levodopa/carbidopa"],
+        exclusions=[],
+    )
+    trial = make_trial(
+        inclusion_criteria=[
+            "Age 18 to 60 years",
+            "Very early Parkinson disease or young-onset PD",
+        ],
+        exclusion_criteria=[],
+    )
+    result = match_patient_to_trial(patient, trial)
+    assert result["prediction"] != "not_eligible" or not any(
+        "advanced" in c.lower() for c in result["blocking_criteria"]
+    ), (
+        f"Advanced-PD blocker must not fire for very early PD trial. "
+        f"prediction={result['prediction']}, blocking_criteria={result['blocking_criteria']}"
+    )
+
+
+def test_not_not_eligible_early_onset_pd_bone_density_trial():
+    patient = make_patient(
+        age=42,
+        diagnosis=["Parkinson disease"],
+        key_features=["early-onset Parkinson disease"],
+        medications=["levodopa/carbidopa"],
+        exclusions=[],
+    )
+    trial = make_trial(
+        inclusion_criteria=[
+            "Age 30 to 70 years",
+            "Parkinson disease diagnosis",
+            "Bone density assessment study",
+        ],
+        exclusion_criteria=[],
+    )
+    result = match_patient_to_trial(patient, trial)
+    assert result["prediction"] != "not_eligible" or not any(
+        "advanced" in c.lower() for c in result["blocking_criteria"]
+    ), (
+        f"Advanced-PD blocker must not fire for bone density trial. "
+        f"prediction={result['prediction']}, blocking_criteria={result['blocking_criteria']}"
+    )
+
+
+def test_not_not_eligible_early_onset_pd_gait_cueing_trial():
+    patient = make_patient(
+        age=44,
+        diagnosis=["Parkinson disease"],
+        key_features=["early-onset Parkinson disease", "freezing of gait"],
+        medications=["levodopa/carbidopa"],
+        exclusions=[],
+    )
+    trial = make_trial(
+        inclusion_criteria=[
+            "Age 30 to 75 years",
+            "Parkinson disease diagnosis",
+            "Auditory gait cueing study",
+        ],
+        exclusion_criteria=[],
+    )
+    result = match_patient_to_trial(patient, trial)
+    assert result["prediction"] != "not_eligible" or not any(
+        "advanced" in c.lower() for c in result["blocking_criteria"]
+    ), (
+        f"Advanced-PD blocker must not fire for gait cueing trial. "
+        f"prediction={result['prediction']}, blocking_criteria={result['blocking_criteria']}"
+    )
+
+
+def test_not_blocked_advanced_pd_patient_motor_fluctuations():
+    patient = make_patient(
+        age=68,
+        diagnosis=["Parkinson disease"],
+        key_features=["advanced Parkinson disease", "motor fluctuations", "wearing-off"],
+        medications=["levodopa/carbidopa"],
+        exclusions=[],
+    )
+    trial = make_trial(
+        inclusion_criteria=[
+            "Age 40 to 80 years",
+            "Advanced Parkinson disease with motor fluctuations",
+            "Disease duration at least 5 years",
+            "Modified Hoehn and Yahr stage >= 3",
+        ],
+        exclusion_criteria=[],
+    )
+    result = match_patient_to_trial(patient, trial)
+    assert not any(
+        "advanced parkinson disease required" in c.lower() for c in result["blocking_criteria"]
+    ), (
+        f"Advanced-PD blocker must not fire for patient with advanced disease markers. "
+        f"blocking_criteria={result['blocking_criteria']}"
+    )
+
+
+def test_not_not_eligible_dbs_patient_dbs_candidacy_trial():
+    patient = make_patient(
+        age=62,
+        diagnosis=["Parkinson disease"],
+        key_features=["bilateral STN DBS implanted 2 years ago"],
+        medications=[],
+        exclusions=[],
+    )
+    trial = make_trial(
+        inclusion_criteria=[
+            "Age 40 to 80 years",
+            "Confirmed Parkinson disease diagnosis",
+            "DBS candidacy evaluation study",
+            "Surgical contraindications related to DBS assessed",
+        ],
+        exclusion_criteria=[
+            "Indication of DBS for PD",
+            "Surgical contraindications related to DBS",
+        ],
+    )
+    result = match_patient_to_trial(patient, trial)
+    assert result["prediction"] != "not_eligible" or not any(
+        kw in c.lower() for c in result["blocking_criteria"]
+        for kw in ("deep brain stimulation (dbs) implant is an exclusion",)
+    ), (
+        f"Generic DBS exclusion blocker must not hard-block in DBS candidacy study. "
+        f"prediction={result['prediction']}, blocking_criteria={result['blocking_criteria']}"
+    )
+
+
+def test_not_not_eligible_no_dbs_scheduled_to_undergo():
+    patient = make_patient(
+        age=60,
+        diagnosis=["Parkinson disease"],
+        key_features=["advanced Parkinson disease, scheduled to undergo DBS evaluation"],
+        medications=["levodopa/carbidopa"],
+        exclusions=[],
+    )
+    trial = make_trial(
+        inclusion_criteria=[
+            "Age 40 to 80 years",
+            "Confirmed Parkinson disease diagnosis",
+            "Scheduled to undergo DBS or meets criteria for STN-DBS",
+        ],
+        exclusion_criteria=[],
+    )
+    result = match_patient_to_trial(patient, trial)
+    assert result["prediction"] != "not_eligible" or not any(
+        "dbs required" in c.lower() for c in result["blocking_criteria"]
+    ), (
+        f"DBS-required blocker must not hard-block for scheduled-to-undergo DBS. "
+        f"prediction={result['prediction']}, blocking_criteria={result['blocking_criteria']}"
+    )
+
+
+def test_not_not_eligible_fog_gait_impairment_treadmill_agility():
+    patient = make_patient(
+        age=65,
+        diagnosis=["Parkinson disease"],
+        key_features=["freezing of gait", "gait impairment", "motor dysfunction"],
+        medications=["levodopa/carbidopa"],
+        exclusions=[],
+    )
+    trial = make_trial(
+        title="Treadmill versus agility training in Parkinson disease motor dysfunction",
+        inclusion_criteria=[
+            "Age 40 to 80 years",
+            "Confirmed Parkinson disease diagnosis",
+            "Gait impairment or motor dysfunction present",
+        ],
+        exclusion_criteria=[],
+    )
+    result = match_patient_to_trial(patient, trial)
+    assert result["prediction"] != "not_eligible" or not any(
+        kw in c.lower() for c in result["blocking_criteria"]
+        for kw in ("frail", "fall", "exercise")
+    ), (
+        f"Frailty blocker must not fire for FoG/gait patient in motor trial. "
+        f"prediction={result['prediction']}, blocking_criteria={result['blocking_criteria']}"
+    )
+
+
+# ---------------------------------------------------------------------------
+# Regression tests — advanced/severe PD composite criteria (bounded stage)
+# ---------------------------------------------------------------------------
+
+def test_not_eligible_early_onset_pd_hy1_composite_severity_trial():
+    """Early-onset PD age 45 with H&Y stage 1; trial requires composite severity criteria."""
+    patient = make_patient(
+        age=45,
+        diagnosis=["Parkinson disease"],
+        key_features=[
+            "early-onset idiopathic Parkinson disease",
+            "Hoehn and Yahr stage 1",
+            "levodopa responsive",
+        ],
+        medications=["levodopa/carbidopa"],
+        exclusions=[],
+        summary="A 45-year-old person with early-onset Parkinson disease",
+    )
+    trial = make_trial(
+        inclusion_criteria=[
+            "Clinically diagnosed Parkinson disease",
+            "Course of disease for at least 5 years",
+            "Modified Hoehn and Yahr stage >= 3 in OFF state",
+            "MDS-UPDRS part III >= 30 in the off period",
+            "At least 3-h off time every day",
+        ],
+        exclusion_criteria=[],
+    )
+    result = match_patient_to_trial(patient, trial)
+    assert result["prediction"] == "not_eligible", (
+        f"Expected 'not_eligible' for early-onset PD (H&Y 1) in composite-severity trial, "
+        f"got '{result['prediction']}'. blocking_criteria={result['blocking_criteria']}"
+    )
+    assert any(
+        kw in c.lower() for c in result["blocking_criteria"]
+        for kw in ("advanced", "severity", "composite")
+    )
+
+
+def test_not_not_eligible_early_onset_pd_hy1_simple_pd_trial():
+    """Same early-onset PD age 45 with H&Y 1; trial only requires confirmed PD and age."""
+    patient = make_patient(
+        age=45,
+        diagnosis=["Parkinson disease"],
+        key_features=[
+            "early-onset idiopathic Parkinson disease",
+            "Hoehn and Yahr stage 1",
+        ],
+        medications=["levodopa/carbidopa"],
+        exclusions=[],
+        summary="A 45-year-old person with early-onset Parkinson disease",
+    )
+    trial = make_trial(
+        inclusion_criteria=[
+            "Age 45 to 70 years",
+            "Confirmed Parkinson disease diagnosis",
+        ],
+        exclusion_criteria=[],
+    )
+    result = match_patient_to_trial(patient, trial)
+    assert result["prediction"] != "not_eligible" or not any(
+        kw in c.lower() for c in result["blocking_criteria"]
+        for kw in ("advanced", "severity", "composite")
+    ), (
+        f"Advanced-PD blocker must not fire for simple PD trial. "
+        f"prediction={result['prediction']}, blocking_criteria={result['blocking_criteria']}"
+    )
+
+
+def test_not_not_eligible_early_onset_pd_very_early_pd_trial_2():
+    """Early-onset PD + trial explicitly targeting very early PD -> not blocked."""
+    patient = make_patient(
+        age=40,
+        diagnosis=["Parkinson disease"],
+        key_features=["early-onset Parkinson disease"],
+        medications=["levodopa/carbidopa"],
+        exclusions=[],
+    )
+    trial = make_trial(
+        inclusion_criteria=[
+            "Age 20 to 55 years",
+            "Very early Parkinson disease or young-onset PD",
+        ],
+        exclusion_criteria=[],
+    )
+    result = match_patient_to_trial(patient, trial)
+    assert result["prediction"] != "not_eligible" or not any(
+        "advanced" in c.lower() for c in result["blocking_criteria"]
+    ), (
+        f"Advanced-PD blocker must not fire for very early PD trial. "
+        f"prediction={result['prediction']}, blocking_criteria={result['blocking_criteria']}"
+    )
+
+
+def test_not_not_eligible_early_onset_pd_bone_density_gait_trial():
+    """Early-onset PD + bone density or gait cueing trial without severity criteria -> not blocked."""
+    patient = make_patient(
+        age=42,
+        diagnosis=["Parkinson disease"],
+        key_features=["early-onset Parkinson disease"],
+        medications=["levodopa/carbidopa"],
+        exclusions=[],
+    )
+    trial = make_trial(
+        inclusion_criteria=[
+            "Age 30 to 70 years",
+            "Parkinson disease diagnosis",
+            "Bone density assessment and auditory gait cueing study",
+        ],
+        exclusion_criteria=[],
+    )
+    result = match_patient_to_trial(patient, trial)
+    assert result["prediction"] != "not_eligible" or not any(
+        "advanced" in c.lower() for c in result["blocking_criteria"]
+    ), (
+        f"Advanced-PD blocker must not fire for bone density/gait cueing trial. "
+        f"prediction={result['prediction']}, blocking_criteria={result['blocking_criteria']}"
+    )
+
+
+def test_advanced_pd_patient_not_blocked_by_advanced_pd_rule():
+    """Advanced PD patient with motor fluctuations + advanced PD trial -> not blocked by advanced PD rule."""
+    patient = make_patient(
+        age=65,
+        diagnosis=["Parkinson disease"],
+        key_features=[
+            "advanced Parkinson disease",
+            "motor fluctuations",
+            "dyskinesia",
+            "wearing-off",
+            "off time 4 hours per day",
+        ],
+        medications=["levodopa/carbidopa", "LCIG intestinal gel"],
+        exclusions=[],
+    )
+    trial = make_trial(
+        inclusion_criteria=[
+            "Clinically diagnosed Parkinson disease",
+            "Disease duration at least 5 years",
+            "Modified Hoehn and Yahr stage >= 3",
+            "Motor fluctuations present",
+            "Off time at least 2 hours per day",
+        ],
+        exclusion_criteria=[],
+    )
+    result = match_patient_to_trial(patient, trial)
+    assert not any(
+        "advanced parkinson disease required" in c.lower() for c in result["blocking_criteria"]
+    ), (
+        f"Advanced-PD rule must not block patient with confirmed advanced disease markers. "
+        f"blocking_criteria={result['blocking_criteria']}"
+    )
+
+
+# ---------------------------------------------------------------------------
+# Regression — exact T002-style wording with unicode ≥ and Hoehn & Yahr
+# ---------------------------------------------------------------------------
+
+def test_not_eligible_early_onset_pd_t002_exact_wording():
+    """Early-onset PD (H&Y stage 1); trial uses exact T002-style wording with ≥ and Hoehn & Yahr."""
+    patient = make_patient(
+        age=45,
+        diagnosis=["Parkinson disease"],
+        key_features=[
+            "early-onset idiopathic Parkinson disease",
+            "Hoehn and Yahr stage 1",
+        ],
+        medications=["levodopa/carbidopa"],
+        exclusions=[],
+        summary="A 45-year-old person with early-onset Parkinson disease",
+    )
+    trial = make_trial(
+        inclusion_criteria=[
+            "The patients with clinically diagnosed Parkinson's disease and the course of disease for at least 5 years at the time of screening.",
+            "The patients with the modified Hoehn & Yahr stage \u2265 3.",
+            "The patients with the score of MDS-UPDRS part III \u2265 30 in the off period.",
+            "There must be fluctuation of motor symptoms, defined as at least cumulatively 3-h off time in awake time every day.",
+            "The patients who are receiving Levodopa treatment with clear response to Levodopa treatment.",
+        ],
+        exclusion_criteria=[],
+    )
+    result = match_patient_to_trial(patient, trial)
+    assert result["prediction"] == "not_eligible", (
+        f"Expected 'not_eligible' for early-onset PD (H&Y 1) in T002-exact-wording severity trial, "
+        f"got '{result['prediction']}'. blocking_criteria={result['blocking_criteria']}"
+    )
+    assert any(
+        kw in c.lower() for c in result["blocking_criteria"]
+        for kw in ("advanced", "severity", "composite")
+    ), (
+        f"Blocking criterion must mention advanced/severity/composite. "
+        f"blocking_criteria={result['blocking_criteria']}"
+    )
+
+
+def test_not_not_eligible_early_onset_pd_t002_wording_simple_pd_trial():
+    """Same early-onset PD patient + trial only requires confirmed PD and age 45-70 -> not blocked."""
+    patient = make_patient(
+        age=45,
+        diagnosis=["Parkinson disease"],
+        key_features=[
+            "early-onset idiopathic Parkinson disease",
+            "Hoehn and Yahr stage 1",
+        ],
+        medications=["levodopa/carbidopa"],
+        exclusions=[],
+        summary="A 45-year-old person with early-onset Parkinson disease",
+    )
+    trial = make_trial(
+        inclusion_criteria=[
+            "Age 45 to 70 years",
+            "Confirmed Parkinson disease diagnosis",
+        ],
+        exclusion_criteria=[],
+    )
+    result = match_patient_to_trial(patient, trial)
+    assert result["prediction"] != "not_eligible" or not any(
+        kw in c.lower() for c in result["blocking_criteria"]
+        for kw in ("advanced", "severity", "composite")
+    ), (
+        f"Advanced-PD blocker must not fire for simple PD trial (age+diagnosis only). "
+        f"prediction={result['prediction']}, blocking_criteria={result['blocking_criteria']}"
+    )
+
+
+def test_not_not_eligible_early_onset_pd_t002_wording_very_early_trial():
+    """Same early-onset PD patient + trial targeting very early PD -> not blocked."""
+    patient = make_patient(
+        age=45,
+        diagnosis=["Parkinson disease"],
+        key_features=[
+            "early-onset idiopathic Parkinson disease",
+            "Hoehn and Yahr stage 1",
+        ],
+        medications=["levodopa/carbidopa"],
+        exclusions=[],
+    )
+    trial = make_trial(
+        inclusion_criteria=[
+            "Age 20 to 55 years",
+            "Very early Parkinson disease or young-onset PD",
+        ],
+        exclusion_criteria=[],
+    )
+    result = match_patient_to_trial(patient, trial)
+    assert result["prediction"] != "not_eligible" or not any(
+        "advanced" in c.lower() for c in result["blocking_criteria"]
+    ), (
+        f"Advanced-PD blocker must not fire for very early PD trial. "
+        f"prediction={result['prediction']}, blocking_criteria={result['blocking_criteria']}"
+    )
+
+
+def test_not_not_eligible_early_onset_pd_t002_wording_bone_gait_trial():
+    """Same early-onset PD patient + bone density / gait cueing trial without severity criteria -> not blocked."""
+    patient = make_patient(
+        age=45,
+        diagnosis=["Parkinson disease"],
+        key_features=[
+            "early-onset idiopathic Parkinson disease",
+            "Hoehn and Yahr stage 1",
+        ],
+        medications=["levodopa/carbidopa"],
+        exclusions=[],
+    )
+    trial = make_trial(
+        inclusion_criteria=[
+            "Age 30 to 70 years",
+            "Parkinson disease diagnosis",
+            "Bone density and auditory gait cueing assessment study",
+        ],
+        exclusion_criteria=[],
+    )
+    result = match_patient_to_trial(patient, trial)
+    assert result["prediction"] != "not_eligible" or not any(
+        "advanced" in c.lower() for c in result["blocking_criteria"]
+    ), (
+        f"Advanced-PD blocker must not fire for bone density/gait cueing trial. "
+        f"prediction={result['prediction']}, blocking_criteria={result['blocking_criteria']}"
+    )
+
+
+def test_advanced_pd_patient_t002_severity_trial_not_blocked_by_advanced_pd_rule():
+    """Advanced PD patient with motor fluctuations/OFF time/LCIG/DBS + T002-style severity trial -> not blocked."""
+    patient = make_patient(
+        age=65,
+        diagnosis=["Parkinson disease"],
+        key_features=[
+            "advanced Parkinson disease",
+            "motor fluctuations",
+            "OFF time 4 hours per day",
+            "dyskinesia",
+        ],
+        medications=["levodopa/carbidopa", "LCIG intestinal gel"],
+        exclusions=[],
+    )
+    trial = make_trial(
+        inclusion_criteria=[
+            "The patients with clinically diagnosed Parkinson's disease and the course of disease for at least 5 years at the time of screening.",
+            "The patients with the modified Hoehn & Yahr stage \u2265 3.",
+            "The patients with the score of MDS-UPDRS part III \u2265 30 in the off period.",
+            "There must be fluctuation of motor symptoms, defined as at least cumulatively 3-h off time in awake time every day.",
+            "The patients who are receiving Levodopa treatment with clear response to Levodopa treatment.",
+        ],
+        exclusion_criteria=[],
+    )
+    result = match_patient_to_trial(patient, trial)
+    assert not any(
+        "advanced parkinson disease required" in c.lower() for c in result["blocking_criteria"]
+    ), (
+        f"Advanced-PD rule must not block patient with confirmed advanced disease markers. "
+        f"blocking_criteria={result['blocking_criteria']}"
+    )
+
+
+def test_not_eligible_early_onset_pd_when_trial_requires_composite_advanced_severity():
+    patient = make_patient(
+        age=45,
+        diagnosis=["Parkinson disease"],
+        key_features=[
+            "early-onset idiopathic Parkinson disease",
+            "Hoehn and Yahr stage 1",
+        ],
+        summary="A 45-year-old person with early-onset Parkinson disease",
+    )
+    trial = make_trial(
+        inclusion_criteria=[
+            "The patients with clinically diagnosed Parkinson's disease and the course of disease for at least 5 years at the time of screening.",
+            "The patients who are receiving Levodopa treatment with clear response to Levodopa treatment.",
+            "The patients showing stable clinical symptoms within 1 month before baseline, with drug dosage remain the same.",
+            "The patients with the modified Hoehn \\& Yahr stage \u2265 3.",
+            "The patients with the score of MDS-UPDRS part III \u2265 30 in the off period.",
+            "There must be fluctuation of motor symptoms, which is defined as at least cumulatively 3-h off time in the awake time every day (confirmed by PD diary for 3 consecutive days).",
+        ],
+        exclusion_criteria=[],
+    )
+    result = match_patient_to_trial(patient, trial)
+    assert result["prediction"] == "not_eligible", (
+        f"Expected 'not_eligible' for early-onset PD (H&Y 1) vs composite advanced severity trial, "
+        f"got '{result['prediction']}'. blocking_criteria={result['blocking_criteria']}"
+    )
+    assert any(
+        kw in c.lower()
+        for c in result["blocking_criteria"]
+        for kw in ("advanced", "severe", "severity", "hoehn", "updrs", "off time")
+    ), (
+        f"Blocking criterion must mention advanced/severe/severity/hoehn/updrs/off time. "
+        f"blocking_criteria={result['blocking_criteria']}"
     )
