@@ -51,11 +51,12 @@ def classify_error_severity(record: dict) -> str:
         return "none"
     if gold == "not_eligible" and pred == "eligible":
         return "critical"
+    if gold == "not_eligible" and pred == "unclear":
+        return "major_minor"
     if (gold == "unclear" and pred in {"eligible", "not_eligible"}) or \
        (gold in {"eligible", "not_eligible"} and pred == "unclear"):
         return "major"
-    if (gold == "eligible" and pred == "not_eligible") or \
-       (gold == "not_eligible" and pred == "unclear"):
+    if gold == "eligible" and pred == "not_eligible":
         return "minor"
     return "other"
 

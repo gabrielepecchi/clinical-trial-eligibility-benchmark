@@ -117,7 +117,7 @@ def test_classify_error_severity_major_eligible_unclear():
 
 
 def test_classify_error_severity_major_not_eligible_unclear():
-    assert classify_error_severity({"gold_label": "not_eligible", "predicted_label": "unclear"}) == "major"
+    assert classify_error_severity({"gold_label": "not_eligible", "predicted_label": "unclear"}) == "major_minor"
 
 
 def test_classify_error_severity_minor():
