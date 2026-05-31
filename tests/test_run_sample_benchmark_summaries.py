@@ -15,15 +15,31 @@ from run_sample_benchmark import (
     format_error_summary,
 )
 
-_TOP_LEVEL_KEYS = {"metadata", "coverage", "label_distribution", "confusion_matrix", "metrics", "predictions", "error_cases", "error_summary"}
+_TOP_LEVEL_KEYS = {
+    "metadata",
+    "coverage",
+    "label_distribution",
+    "confusion_matrix",
+    "metrics",
+    "predictions",
+    "error_cases",
+    "error_summary",
+}
 
 
 def _build_sample_output() -> dict:
     patients = [{"patient_id": "P001"}]
     trials = [{"trial_id": "T001"}]
     labels = [{"patient_id": "P001", "trial_id": "T001", "label": "eligible"}]
-    prediction_records = [{"patient_id": "P001", "trial_id": "T001", "predicted_label": "eligible",
-                           "missing_information": [], "criterion_results": []}]
+    prediction_records = [
+        {
+            "patient_id": "P001",
+            "trial_id": "T001",
+            "predicted_label": "eligible",
+            "missing_information": [],
+            "criterion_results": [],
+        }
+    ]
     gold = ["eligible"]
     predicted = ["eligible"]
     return {
@@ -536,10 +552,27 @@ def test_output_predictions_is_list():
 # build_benchmark_output tests
 # ---------------------------------------------------------------------------
 
-_META = {"benchmark_name": "sample_benchmark", "num_patients": 1, "num_trials": 1, "num_label_records": 1, "num_evaluated_pairs": 1}
-_COV = {"total_predictions": 1, "with_missing_information": 0, "with_criterion_results": 0}
-_DIST = {"gold": {"eligible": 1, "not_eligible": 0, "unclear": 0}, "predicted": {"eligible": 1, "not_eligible": 0, "unclear": 0}}
-_CM = {"eligible": {"eligible": 1, "not_eligible": 0, "unclear": 0}, "not_eligible": {"eligible": 0, "not_eligible": 0, "unclear": 0}, "unclear": {"eligible": 0, "not_eligible": 0, "unclear": 0}}
+_META = {
+    "benchmark_name": "sample_benchmark",
+    "num_patients": 1,
+    "num_trials": 1,
+    "num_label_records": 1,
+    "num_evaluated_pairs": 1,
+}
+_COV = {
+    "total_predictions": 1,
+    "with_missing_information": 0,
+    "with_criterion_results": 0,
+}
+_DIST = {
+    "gold":      {"eligible": 1, "not_eligible": 0, "unclear": 0},
+    "predicted": {"eligible": 1, "not_eligible": 0, "unclear": 0},
+}
+_CM = {
+    "eligible":     {"eligible": 1, "not_eligible": 0, "unclear": 0},
+    "not_eligible": {"eligible": 0, "not_eligible": 0, "unclear": 0},
+    "unclear":      {"eligible": 0, "not_eligible": 0, "unclear": 0},
+}
 _METRICS = {"accuracy": 1.0, "macro_f1": 1.0, "per_class": {}}
 _PREDS = [{"patient_id": "P001", "trial_id": "T001", "predicted_label": "eligible"}]
 _ERROR_CASES = []
