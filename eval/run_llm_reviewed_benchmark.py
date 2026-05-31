@@ -6,6 +6,7 @@ The labels are benchmark draft labels and still need spot-checking.
 
 import csv
 import json
+from collections import defaultdict
 from pathlib import Path
 
 from app.eligibility.rule_matcher import match_patient_to_trial, match_patient_to_trial_criteria
@@ -17,6 +18,8 @@ LABELS_FILE = Path("data/processed/labels_llm_reviewed.json")
 RESULTS_FILE = Path("data/processed/results_llm_reviewed.json")
 RESULTS_CSV_FILE = Path("data/processed/results_llm_reviewed.csv")
 CRITERION_CSV_FILE = Path("data/processed/criterion_level_results.csv")
+CRITERION_TYPE_JSON_FILE = Path("data/processed/criterion_type_summary.json")
+CRITERION_TYPE_CSV_FILE = Path("data/processed/criterion_type_summary.csv")
 
 
 _CSV_FIELDNAMES = [
@@ -86,6 +89,88 @@ def write_criterion_level_csv_rows(rows: list[dict], output_path: Path) -> None:
         writer.writerows(rows)
 
 
+def build_criterion_type_summary(prediction_records: list[dict]) -> list[dict]:
+    """Aggregate criterion-level decisions by criterion_type."""
+    # decision counts per type
+    decision_counts: dict[str, dict[str, int]] = defaultdict(lambda: defaultdict(int))
+    # pairs that have at least one criterion of this type
+    pair_correct: dict[str, list[bool]] = defaultdict(list)
+
+    for r in prediction_records:
+        correct = r.get("gold_label", "") == r.get("predicted_label", "")
+        seen_types: set[str] = set()
+        for cr in r.get("criterion_results") or []:
+            ctype = cr.get("criterion_type") or "unknown"
+            decision = cr.get("decision") or "unknown"
+            decision_counts[ctype][decision] += 1
+            decision_counts[ctype]["total_criteria"] += 1
+            if ctype not in seen_types:
+                pair_correct[ctype].append(correct)
+                seen_types.add(ctype)
+
+    rows = []
+    for ctype, counts in sorted(decision_counts.items()):
+        pairs = pair_correct.get(ctype, [])
+        total_pairs = len(pairs)
+        correct_pairs = sum(pairs)
+        row: dict = {
+            "criterion_type": ctype,
+            "total_criteria": counts.get("total_criteria", 0),
+            "decision_met": counts.get("met", 0),
+            "decision_not_met": counts.get("not_met", 0),
+            "decision_unclear": counts.get("unclear", 0),
+        }
+        if "not_applicable" in counts:
+            row["decision_not_applicable"] = counts["not_applicable"]
+        known = {"total_criteria", "met", "not_met", "unclear", "not_applicable"}
+        for k, v in counts.items():
+            if k not in known:
+                row[f"decision_{k}"] = v
+        row["correct_pairs"] = correct_pairs
+        row["total_pairs"] = total_pairs
+        row["pair_accuracy"] = correct_pairs / total_pairs if total_pairs else 0.0
+        rows.append(row)
+    return rows
+
+
+_CRITERION_TYPE_CSV_BASE_FIELDNAMES = [
+    "criterion_type", "total_criteria",
+    "decision_met", "decision_not_met", "decision_unclear",
+    "correct_pairs", "total_pairs", "pair_accuracy",
+]
+
+
+def write_criterion_type_summary_csv(rows: list[dict], output_path: Path) -> None:
+    if not rows:
+        fieldnames = _CRITERION_TYPE_CSV_BASE_FIELDNAMES
+    else:
+        extra = sorted({k for r in rows for k in r if k not in _CRITERION_TYPE_CSV_BASE_FIELDNAMES})
+        fieldnames = _CRITERION_TYPE_CSV_BASE_FIELDNAMES[:5] + extra + _CRITERION_TYPE_CSV_BASE_FIELDNAMES[5:]
+    with output_path.open("w", newline="", encoding="utf-8") as f:
+        writer = csv.DictWriter(f, fieldnames=fieldnames, extrasaction="ignore")
+        writer.writeheader()
+        writer.writerows(rows)
+
+
+def format_criterion_type_summary(rows: list[dict]) -> str:
+    lines = ["\n=== Criterion Type Summary ==="]
+    if not rows:
+        lines.append("  (no criterion data)")
+        return "\n".join(lines)
+    header = f"  {'criterion_type':<30} {'total':>6} {'met':>6} {'not_met':>8} {'unclear':>8} {'pair_acc':>9}"
+    lines.append(header)
+    for r in rows:
+        lines.append(
+            f"  {r['criterion_type']:<30} "
+            f"{r['total_criteria']:>6} "
+            f"{r['decision_met']:>6} "
+            f"{r['decision_not_met']:>8} "
+            f"{r['decision_unclear']:>8} "
+            f"{r['pair_accuracy']:>9.3f}"
+        )
+    return "\n".join(lines)
+
+
 def build_safety_uncertainty_summary(prediction_records: list[dict]) -> dict:
     """Compute safety and uncertainty error counts and rates."""
     total = len(prediction_records)
@@ -132,15 +217,23 @@ def build_benchmark_output(
     safety_uncertainty_summary: dict,
     error_severity_summary: dict,
     prediction_records: list[dict],
+    criterion_type_summary: list[dict] | None = None,
 ) -> dict:
-    """Assemble the final benchmark output dict."""
-    return {
+    """Assemble the final benchmark output dict.
+
+    Keep prediction_records as the fifth argument for backward compatibility
+    with existing tests and callers.
+    """
+    output = {
         "metadata": metadata,
         "metrics": metrics,
         "safety_uncertainty_summary": safety_uncertainty_summary,
         "error_severity_summary": error_severity_summary,
         "predictions": prediction_records,
     }
+    if criterion_type_summary is not None:
+        output["criterion_type_summary"] = criterion_type_summary
+    return output
 
 
 def format_safety_uncertainty_summary(s: dict) -> str:
@@ -281,6 +374,7 @@ def main() -> None:
 
     safety_summary = build_safety_uncertainty_summary(prediction_records)
     error_summary = build_error_severity_summary(prediction_records)
+    criterion_type_summary = build_criterion_type_summary(prediction_records)
 
     metadata = {
         "label_source": str(LABELS_FILE),
@@ -289,7 +383,9 @@ def main() -> None:
         "skipped_pairs": skipped,
     }
 
-    output = build_benchmark_output(metadata, metrics, safety_summary, error_summary, prediction_records)
+    output = build_benchmark_output(
+        metadata, metrics, safety_summary, error_summary, prediction_records, criterion_type_summary
+    )
 
     RESULTS_FILE.write_text(json.dumps(output, indent=2), encoding="utf-8")
 
@@ -298,6 +394,9 @@ def main() -> None:
 
     criterion_rows = build_criterion_level_csv_rows(prediction_records)
     write_criterion_level_csv_rows(criterion_rows, CRITERION_CSV_FILE)
+
+    CRITERION_TYPE_JSON_FILE.write_text(json.dumps(criterion_type_summary, indent=2), encoding="utf-8")
+    write_criterion_type_summary_csv(criterion_type_summary, CRITERION_TYPE_CSV_FILE)
 
     print("\n=== LLM-Reviewed Draft Benchmark Results ===")
     print(f"Evaluated pairs : {len(gold_labels)}")
@@ -312,9 +411,12 @@ def main() -> None:
     print(f"\nResults saved to {RESULTS_FILE}")
     print(f"Predictions CSV saved to {RESULTS_CSV_FILE}")
     print(f"Criterion-level CSV saved to {CRITERION_CSV_FILE}")
+    print(f"Criterion type summary saved to {CRITERION_TYPE_JSON_FILE}")
+    print(f"Criterion type CSV saved to {CRITERION_TYPE_CSV_FILE}")
 
     print(format_safety_uncertainty_summary(safety_summary))
     print(format_error_severity_summary(error_summary))
+    print(format_criterion_type_summary(criterion_type_summary))
 
 
 if __name__ == "__main__":
