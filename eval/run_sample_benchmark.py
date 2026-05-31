@@ -106,6 +106,24 @@ def build_benchmark_metadata(
     }
 
 
+def build_benchmark_output(
+    metadata: dict,
+    coverage: dict,
+    label_distribution: dict,
+    confusion_matrix: dict,
+    metrics: dict,
+    prediction_records: list[dict],
+) -> dict:
+    return {
+        "metadata": metadata,
+        "coverage": coverage,
+        "confusion_matrix": confusion_matrix,
+        "label_distribution": label_distribution,
+        "metrics": metrics,
+        "predictions": prediction_records,
+    }
+
+
 def main() -> None:
     # Load data
     patients = load_json(PATIENTS_FILE)
@@ -189,14 +207,7 @@ def main() -> None:
     print(format_coverage_summary(coverage))
 
     # Save results
-    output = {
-        "metadata": metadata,
-        "coverage": coverage,
-        "confusion_matrix": confusion_matrix,
-        "label_distribution": label_distribution,
-        "metrics": metrics,
-        "predictions": prediction_records,
-    }
+    output = build_benchmark_output(metadata, coverage, label_distribution, confusion_matrix, metrics, prediction_records)
     RESULTS_FILE.write_text(json.dumps(output, indent=2), encoding="utf-8")
     print(f"\nResults saved to {RESULTS_FILE}")
 

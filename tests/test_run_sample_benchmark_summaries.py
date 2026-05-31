@@ -9,6 +9,7 @@ from run_sample_benchmark import (
     format_confusion_matrix,
     build_benchmark_metadata,
     format_benchmark_metadata,
+    build_benchmark_output,
 )
 
 _TOP_LEVEL_KEYS = {"metadata", "coverage", "label_distribution", "confusion_matrix", "metrics", "predictions"}
@@ -524,3 +525,54 @@ def test_output_metrics_is_dict():
 
 def test_output_predictions_is_list():
     assert isinstance(_build_sample_output()["predictions"], list)
+
+
+# ---------------------------------------------------------------------------
+# build_benchmark_output tests
+# ---------------------------------------------------------------------------
+
+_META = {"benchmark_name": "sample_benchmark", "num_patients": 1, "num_trials": 1, "num_label_records": 1, "num_evaluated_pairs": 1}
+_COV = {"total_predictions": 1, "with_missing_information": 0, "with_criterion_results": 0}
+_DIST = {"gold": {"eligible": 1, "not_eligible": 0, "unclear": 0}, "predicted": {"eligible": 1, "not_eligible": 0, "unclear": 0}}
+_CM = {"eligible": {"eligible": 1, "not_eligible": 0, "unclear": 0}, "not_eligible": {"eligible": 0, "not_eligible": 0, "unclear": 0}, "unclear": {"eligible": 0, "not_eligible": 0, "unclear": 0}}
+_METRICS = {"accuracy": 1.0, "macro_f1": 1.0, "per_class": {}}
+_PREDS = [{"patient_id": "P001", "trial_id": "T001", "predicted_label": "eligible"}]
+
+
+def test_build_benchmark_output_returns_dict():
+    assert isinstance(build_benchmark_output(_META, _COV, _DIST, _CM, _METRICS, _PREDS), dict)
+
+
+def test_build_benchmark_output_exact_keys():
+    result = build_benchmark_output(_META, _COV, _DIST, _CM, _METRICS, _PREDS)
+    assert set(result.keys()) == _TOP_LEVEL_KEYS
+
+
+def test_build_benchmark_output_metadata_value():
+    assert build_benchmark_output(_META, _COV, _DIST, _CM, _METRICS, _PREDS)["metadata"] is _META
+
+
+def test_build_benchmark_output_coverage_value():
+    assert build_benchmark_output(_META, _COV, _DIST, _CM, _METRICS, _PREDS)["coverage"] is _COV
+
+
+def test_build_benchmark_output_label_distribution_value():
+    assert build_benchmark_output(_META, _COV, _DIST, _CM, _METRICS, _PREDS)["label_distribution"] is _DIST
+
+
+def test_build_benchmark_output_confusion_matrix_value():
+    assert build_benchmark_output(_META, _COV, _DIST, _CM, _METRICS, _PREDS)["confusion_matrix"] is _CM
+
+
+def test_build_benchmark_output_metrics_value():
+    assert build_benchmark_output(_META, _COV, _DIST, _CM, _METRICS, _PREDS)["metrics"] is _METRICS
+
+
+def test_build_benchmark_output_predictions_equals_records():
+    assert build_benchmark_output(_META, _COV, _DIST, _CM, _METRICS, _PREDS)["predictions"] == _PREDS
+
+
+def test_build_benchmark_output_normal_case():
+    result = build_benchmark_output(_META, _COV, _DIST, _CM, _METRICS, _PREDS)
+    assert result["metadata"]["benchmark_name"] == "sample_benchmark"
+    assert result["predictions"][0]["patient_id"] == "P001"
