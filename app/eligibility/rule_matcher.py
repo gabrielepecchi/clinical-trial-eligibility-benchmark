@@ -574,7 +574,7 @@ _TRIAL_STIMULATION_PATTERNS = [
     r"\btms\b",
     r"\btdcs\b",
     r"transcranial.*magnetic",
-    r"transcranial.*electrical",
+    r"transcranial.*electric",
     r"transcranial.*direct.*current",
     r"repetitive.*transcranial",
     r"non.invasive.*brain.*stimulation",
@@ -613,11 +613,12 @@ _PATIENT_PRIOR_STUDY_PATTERNS = [
 ]
 
 # Oncology-specific diagnosis required (advanced/metastatic solid tumor etc.)
+# NOTE: histolog/cytolog confirmed alone must NOT trigger — only when paired with oncology terms.
 _TRIAL_ONCOLOGY_REQUIRED_PATTERNS = [
     r"(?:advanced|metastatic).*(?:solid\s*tumou?r|malignancy|cancer|carcinoma)",
     r"(?:solid\s*tumou?r|malignancy|cancer|carcinoma).*(?:advanced|metastatic)",
-    r"histolog(?:ically)?.*(?:confirmed|proven)",
-    r"cytolog(?:ically)?.*(?:confirmed|proven)",
+    r"histolog(?:ically)?.*(?:confirmed|proven).*(?:solid\s*tumou?r|malignancy|cancer|carcinoma|melanoma|nsclc|sclc|hnscc)",
+    r"cytolog(?:ically)?.*(?:confirmed|proven).*(?:solid\s*tumou?r|malignancy|cancer|carcinoma)",
     r"(?:confirmed|proven).*(?:tumou?r|cancer|malignancy|carcinoma)",
     r"\bnsclc\b",
     r"\bsclc\b",
@@ -1209,15 +1210,13 @@ def _check_cognitive_exclusion_general(
     # Use stricter patient evidence — mild cognitive / MCI alone is not enough
     _STRICT_COGNITIVE_IMPAIRMENT_PATTERNS = [
         r"\bdementia\b",
-        r"cognitive impairment",
+        r"(?:significant|moderate|severe|major|clear).*cognitive(?:\s+impairment)?",
+        r"cognitive impairment(?!\s+(?:mild|early|possible|suspected))",
         r"low moca",
         r"low mmse",
         r"impaired cognition",
         r"cognitive decline",
         r"neuropsychological impairment",
-        r"significant.*cognitive",
-        r"moderate.*cognitive",
-        r"severe.*cognitive",
     ]
     if not _any_match(_STRICT_COGNITIVE_IMPAIRMENT_PATTERNS, patient_features):
         return None, None
@@ -1363,9 +1362,12 @@ def _check_device_contraindication_stimulation(
     return None, None
 
 
-def _check_parent_study_required(patient: dict, trial: dict) -> tuple[str | None, str | None]:
-    """Block when trial requires prior completion/participation in a parent/extension study
-    and patient has no documented prior participation."""
+def _check_parent_study_required(patient: dict, trial: dict) -> tuple[str | None, str | None, str | None]:
+    """Check if trial requires prior parent/extension participation.
+
+    Returns (status, uncertain_criterion, blocking_criterion).
+    status: 'not_eligible' | 'unclear' | None
+    """
     # Patterns that look like prior-participation language but are actually exclusions/washout — skip these.
     _EXCLUSION_LIKE_PATTERNS = [
         r"no concurrent",
@@ -1388,7 +1390,7 @@ def _check_parent_study_required(patient: dict, trial: dict) -> tuple[str | None
         for c in inclusion_list
     )
     if not has_requirement:
-        return None, None
+        return None, None, None
 
     patient_text = _text(
         patient.get("key_features", [])
@@ -1396,11 +1398,42 @@ def _check_parent_study_required(patient: dict, trial: dict) -> tuple[str | None
         + [patient.get("summary", "")]
     )
     if _any_match(_PATIENT_PRIOR_STUDY_PATTERNS, patient_text):
-        return None, None
+        return None, None, None
+
+    # Check for ambiguity signals — if present, downgrade to unclear instead of hard block
+    patient_med_text = _text(
+        patient.get("medications", [])
+        + patient.get("key_features", [])
+        + [patient.get("summary", "")]
+    )
+    patient_all_text = patient_text + " " + patient_med_text + " " + _text(
+        (patient.get("diagnosis", []) if isinstance(patient.get("diagnosis"), list) else [patient.get("diagnosis", "")])
+        + patient.get("exclusions", [])
+    )
+
+    _AMBIGUITY_SIGNALS = [
+        # Unclear medication history
+        r"dose.*unclear", r"frequency.*unclear", r"unclear.*dose", r"unclear.*frequency",
+        r"no.*pharmacy records", r"medication.*unclear", r"medication.*details.*unavailable",
+        # Active cancer / major competing safety issue
+        r"active.*cancer", r"current.*chemotherapy", r"ongoing.*chemotherapy",
+        r"active.*malignancy", r"cancer.*treatment.*ongoing",
+        # Recent/concurrent trial participation
+        r"recent.*interventional.*trial", r"enrolled.*in.*(?:another|recent).*(?:trial|study)",
+        r"currently.*enrolled.*(?:trial|study)", r"concurrent.*(?:trial|study)",
+        r"participated.*in.*(?:recent|another).*(?:trial|study)",
+    ]
+    if _any_match(_AMBIGUITY_SIGNALS, patient_all_text):
+        return (
+            "unclear",
+            "trial requires prior parent/extension study participation; patient eligibility cannot be confirmed due to ambiguous context",
+            None,
+        )
 
     return (
+        "not_eligible",
+        None,
         "prior parent/extension study participation required; patient has no documented prior participation",
-        "no prior parent or extension study participation documented",
     )
 
 
@@ -1441,7 +1474,13 @@ def _check_frailty_high_demand_exercise(patient: dict, trial: dict) -> tuple[str
         return None, None
 
     inclusion_text = _text(trial.get("inclusion_criteria", []))
-    trial_text = inclusion_text + " " + _text(trial.get("exclusion_criteria", []))
+    # Include title/summary/description fields if available
+    extra_trial_text = _text([
+        trial.get("title", ""),
+        trial.get("summary", ""),
+        trial.get("description", ""),
+    ])
+    trial_text = inclusion_text + " " + _text(trial.get("exclusion_criteria", [])) + " " + extra_trial_text
 
     # Exempt frailty-targeted physiotherapy trials
     _FRAILTY_TARGET_PATTERNS = [
@@ -1544,11 +1583,11 @@ def match_patient_to_trial(patient: dict, trial: dict) -> dict:
             matched_facts.append(dev_fact)
 
     # --- Parent/extension study required ---
-    parent_block, parent_fact = _check_parent_study_required(patient, trial)
-    if parent_block:
+    parent_status, parent_uncertain, parent_block = _check_parent_study_required(patient, trial)
+    if parent_status == "not_eligible" and parent_block:
         blocking_criteria.append(parent_block)
-        if parent_fact:
-            matched_facts.append(parent_fact)
+    elif parent_status == "unclear" and parent_uncertain:
+        uncertain_criteria.append(parent_uncertain)
 
     # --- Oncology diagnosis required ---
     onco_block, onco_fact = _check_oncology_required(patient, trial)
