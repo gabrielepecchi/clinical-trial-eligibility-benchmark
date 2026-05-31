@@ -143,6 +143,21 @@ def build_benchmark_output(
     }
 
 
+def format_error_severity_summary(s: dict) -> str:
+    """Format error severity summary as a printable string."""
+    lines = [
+        "\n=== Error Severity Summary ===",
+        f"Total errors         : {s['total_errors']}",
+        f"Critical errors      : {s['critical_errors']}",
+        f"Major errors         : {s['major_errors']}",
+        f"Minor errors         : {s['minor_errors']}",
+        f"Critical error rate  : {s['critical_error_rate']:.3f}",
+        f"Major error rate     : {s['major_error_rate']:.3f}",
+        f"Minor error rate     : {s['minor_error_rate']:.3f}",
+    ]
+    return "\n".join(lines)
+
+
 def build_error_severity_summary(prediction_records: list[dict]) -> dict:
     """Compute error severity counts and rates."""
     total = len(prediction_records)
@@ -286,14 +301,7 @@ def main() -> None:
     print(f"Unclear precision          : {safety_summary['unclear_precision']:.3f}")
     print(f"Overcommitment rate        : {safety_summary['overcommitment_rate']:.3f}")
 
-    print("\n=== Error Severity Summary ===")
-    print(f"Total errors         : {error_summary['total_errors']}")
-    print(f"Critical errors      : {error_summary['critical_errors']}")
-    print(f"Major errors         : {error_summary['major_errors']}")
-    print(f"Minor errors         : {error_summary['minor_errors']}")
-    print(f"Critical error rate  : {error_summary['critical_error_rate']:.3f}")
-    print(f"Major error rate     : {error_summary['major_error_rate']:.3f}")
-    print(f"Minor error rate     : {error_summary['minor_error_rate']:.3f}")
+    print(format_error_severity_summary(error_summary))
 
 
 if __name__ == "__main__":

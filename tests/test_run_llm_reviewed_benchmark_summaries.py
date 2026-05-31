@@ -454,3 +454,79 @@ def test_build_error_severity_summary_no_errors():
     assert result["critical_errors"] == 0
     assert result["major_errors"] == 0
     assert result["minor_errors"] == 0
+
+
+# --- format_error_severity_summary ---
+
+from run_llm_reviewed_benchmark import format_error_severity_summary
+
+_ES_INPUT = {
+    "total_predictions": 10,
+    "total_errors": 6,
+    "critical_errors": 1,
+    "major_errors": 4,
+    "minor_errors": 2,
+    "critical_error_rate": 0.1,
+    "major_error_rate": 0.4,
+    "minor_error_rate": 0.2,
+}
+
+_ES_ZERO = {
+    "total_predictions": 0,
+    "total_errors": 0,
+    "critical_errors": 0,
+    "major_errors": 0,
+    "minor_errors": 0,
+    "critical_error_rate": 0,
+    "major_error_rate": 0,
+    "minor_error_rate": 0,
+}
+
+
+def test_format_error_severity_summary_returns_string():
+    assert isinstance(format_error_severity_summary(_ES_INPUT), str)
+
+
+def test_format_error_severity_summary_header():
+    assert "Error Severity Summary" in format_error_severity_summary(_ES_INPUT)
+
+
+def test_format_error_severity_summary_total_errors():
+    assert "Total errors" in format_error_severity_summary(_ES_INPUT)
+
+
+def test_format_error_severity_summary_critical_errors():
+    assert "Critical errors" in format_error_severity_summary(_ES_INPUT)
+
+
+def test_format_error_severity_summary_major_errors():
+    assert "Major errors" in format_error_severity_summary(_ES_INPUT)
+
+
+def test_format_error_severity_summary_minor_errors():
+    assert "Minor errors" in format_error_severity_summary(_ES_INPUT)
+
+
+def test_format_error_severity_summary_critical_error_rate():
+    assert "Critical error rate" in format_error_severity_summary(_ES_INPUT)
+
+
+def test_format_error_severity_summary_major_error_rate():
+    assert "Major error rate" in format_error_severity_summary(_ES_INPUT)
+
+
+def test_format_error_severity_summary_minor_error_rate():
+    assert "Minor error rate" in format_error_severity_summary(_ES_INPUT)
+
+
+def test_format_error_severity_summary_rate_three_decimals():
+    result = format_error_severity_summary(_ES_INPUT)
+    assert "0.100" in result
+    assert "0.400" in result
+    assert "0.200" in result
+
+
+def test_format_error_severity_summary_zero_no_crash():
+    result = format_error_severity_summary(_ES_ZERO)
+    assert isinstance(result, str)
+    assert "0.000" in result
