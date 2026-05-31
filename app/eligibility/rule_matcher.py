@@ -832,14 +832,6 @@ def _check_cognitive(patient: dict, trial: dict) -> tuple[str | None, str | None
                         f"cognitive exclusion: MMSE < {threshold}",
                         f"patient MMSE score {patient_score}",
                     )
-            else:
-                cog_text = _text(patient.get("exclusions", []) + [patient.get("diagnosis", "")])
-                if _any_match(_COGNITIVE_EXCLUSION_PATTERNS, cog_text):
-                    return (
-                        f"cognitive exclusion: MMSE < {threshold}",
-                        "cognitive impairment noted but MMSE score not available",
-                    )
-
         m = _MOCA_THRESHOLD_PATTERN.search(criterion)
         if m:
             threshold = int(m.group(1))
@@ -1209,17 +1201,47 @@ def _check_cognitive_exclusion_general(
         + [patient.get("summary", "")]
     )
 
-    # Use stricter patient evidence — mild cognitive / MCI alone is not enough
+    # Use stricter patient evidence — mild cognitive / MCI / early-onset PD alone is not enough
     _STRICT_COGNITIVE_IMPAIRMENT_PATTERNS = [
         r"\bdementia\b",
         r"(?:significant|moderate|severe|major|clear).*cognitive(?:\s+impairment)?",
-        r"cognitive impairment(?!\s+(?:mild|early|possible|suspected))",
+        r"(?<!mild\s)(?<!early\s)(?<!possible\s)(?<!suspected\s)(?<!mci\s)\bcognitive impairment\b(?!\s+(?:mild|early|possible|suspected))",
         r"low moca",
         r"low mmse",
         r"impaired cognition",
         r"cognitive decline",
         r"neuropsychological impairment",
     ]
+    _MCI_ONLY_PATTERNS = [
+        r"\bmci\b",
+        r"mild cognitive impairment",
+        r"mild\s+cognitive",
+    ]
+    _HARD_COGNITIVE_PATTERNS = [
+        r"\bdementia\b",
+        r"(?:significant|moderate|severe).*cognitive",
+        r"low moca",
+        r"low mmse",
+        r"impaired cognition",
+    ]
+    # If patient only has MCI/mild cognitive and nothing harder, do not hard-block
+    if _any_match(_MCI_ONLY_PATTERNS, patient_features) and not _any_match(
+        _HARD_COGNITIVE_PATTERNS, patient_features
+    ):
+        return None, None
+    _EARLY_PD_EXEMPTION_PATTERNS = [
+        r"early.onset.*parkinson",
+        r"parkinson.*early.onset",
+        r"very early.*parkinson",
+        r"parkinson.*very early",
+        r"early.*onset.*pd",
+        r"young.onset.*parkinson",
+        r"juvenile.*parkinson",
+    ]
+    if _any_match(_EARLY_PD_EXEMPTION_PATTERNS, patient_features) and not _any_match(
+        _HARD_COGNITIVE_PATTERNS, patient_features
+    ):
+        return None, None
     if not _any_match(_STRICT_COGNITIVE_IMPAIRMENT_PATTERNS, patient_features):
         return None, None
 
@@ -1245,6 +1267,19 @@ def _check_cognitive_inclusion_minimum(
     inclusion_list = trial.get("inclusion_criteria", [])
     patient_features = _text(patient.get("key_features", []))
 
+    _HARD_COG_PATTERNS = [
+        r"\bdementia\b",
+        r"(?:significant|moderate|severe).*cognitive",
+        r"low mmse",
+        r"low moca",
+        r"impaired cognition",
+    ]
+    _EARLY_PD_EXEMPT = [
+        r"early.onset.*parkinson", r"parkinson.*early.onset",
+        r"very early.*parkinson", r"young.onset.*parkinson",
+        r"juvenile.*parkinson", r"early.*onset.*pd",
+    ]
+
     for criterion in inclusion_list:
         c = criterion.lower()
 
@@ -1260,7 +1295,10 @@ def _check_cognitive_inclusion_minimum(
                         f"cognitive inclusion minimum: MMSE >= {required} required; patient MMSE {score}",
                         f"patient MMSE {score} below required {required}",
                     )
-            elif _any_match([r"\bdementia\b", r"(?:significant|moderate|severe).*cognitive", r"cognitive impairment(?!\s+(?:mild|early))", r"low mmse", r"impaired cognition"], patient_features):
+            elif (
+                _any_match(_HARD_COG_PATTERNS, patient_features)
+                and not _any_match(_EARLY_PD_EXEMPT, patient_features)
+            ):
                 return (
                     f"cognitive inclusion minimum: MMSE >= {required} required; patient has documented cognitive impairment",
                     "cognitive impairment documented; MMSE score not available",
@@ -1279,7 +1317,10 @@ def _check_cognitive_inclusion_minimum(
                         f"cognitive inclusion minimum: MoCA >= {required} required; patient MoCA {score}",
                         f"patient MoCA {score} below required {required}",
                     )
-            elif _any_match([r"\bdementia\b", r"(?:significant|moderate|severe).*cognitive", r"cognitive impairment(?!\s+(?:mild|early))", r"low moca", r"impaired cognition"], patient_features):
+            elif (
+                _any_match(_HARD_COG_PATTERNS, patient_features)
+                and not _any_match(_EARLY_PD_EXEMPT, patient_features)
+            ):
                 return (
                     f"cognitive inclusion minimum: MoCA >= {required} required; patient has documented cognitive impairment",
                     "cognitive impairment documented; MoCA score not available",
@@ -1298,7 +1339,10 @@ def _check_cognitive_inclusion_minimum(
                 r"cognitive decline",
                 r"neuropsychological impairment",
             ]
-            if _any_match(_CLEAR_IMPAIRMENT_PATTERNS, patient_features):
+            if (
+                _any_match(_CLEAR_IMPAIRMENT_PATTERNS, patient_features)
+                and not _any_match(_EARLY_PD_EXEMPT, patient_features)
+            ):
                 return (
                     "cognitive inclusion requirement: intact cognition or consent capacity required; patient has documented cognitive impairment",
                     "cognitive impairment documented",
@@ -1308,12 +1352,33 @@ def _check_cognitive_inclusion_minimum(
 
 
 def _check_dbs_required(patient: dict, trial: dict) -> tuple[str | None, str | None]:
-    """Block when inclusion criteria require DBS but patient has no documented DBS."""
+    """Block when inclusion criteria require DBS but patient has no documented DBS.
+    Returns (blocking_criterion, matched_fact) for hard block, or ('unclear', reason) for ambiguous."""
     inclusion_list = trial.get("inclusion_criteria", [])
-    has_dbs_requirement = any(
+
+    # Ambiguous DBS wording: candidacy, effects, neuropsychiatric, scheduled — return unclear not not_eligible
+    _AMBIGUOUS_DBS_PATTERNS = [
+        r"dbs\s+candidacy",
+        r"candidacy.*dbs",
+        r"deep brain stimulation\s+candidacy",
+        r"dbs\s+(?:neuropsychiatric|effects|programming|optimization|facial|parameters)",
+        r"(?:neuropsychiatric|effects|programming|optimization|facial|parameters).*dbs",
+        r"lfp\s+sensing",
+        r"directional\s+lead",
+        r"scheduled\s+to\s+undergo\s+dbs",
+        r"dbs.*scheduled",
+        r"meets\s+criteria\s+for.*dbs",
+        r"criteria\s+for\s+(?:treatment\s+with\s+)?(?:stn.)?dbs",
+    ]
+
+    has_hard_requirement = any(
         _any_match(_TRIAL_DBS_REQUIRED_PATTERNS, c.lower()) for c in inclusion_list
     )
-    if not has_dbs_requirement:
+    has_ambiguous = any(
+        _any_match(_AMBIGUOUS_DBS_PATTERNS, c.lower()) for c in inclusion_list
+    )
+
+    if not has_hard_requirement and not has_ambiguous:
         return None, None
 
     patient_text = _text(
@@ -1325,9 +1390,16 @@ def _check_dbs_required(patient: dict, trial: dict) -> tuple[str | None, str | N
     if _any_match(_DBS_PATTERNS, patient_text) and not _has_negated_dbs(patient_text):
         return None, None  # Patient has DBS — fine
 
+    if has_hard_requirement:
+        return (
+            "DBS required: trial requires prior or active DBS implant; patient has no documented DBS",
+            "no DBS documented",
+        )
+
+    # Ambiguous only — return unclear signal via uncertain (use special sentinel)
     return (
-        "DBS required: trial requires prior or active DBS implant; patient has no documented DBS",
-        "no DBS documented",
+        "__unclear__:DBS eligibility unclear: trial involves DBS effects/candidacy but patient has no confirmed DBS",
+        "no confirmed DBS; ambiguous DBS-related study",
     )
 
 
@@ -1457,6 +1529,7 @@ def _check_parent_study_required(patient: dict, trial: dict) -> tuple[str | None
         # Unclear medication history
         r"dose.*unclear", r"frequency.*unclear", r"unclear.*dose", r"unclear.*frequency",
         r"no.*pharmacy records", r"medication.*unclear", r"medication.*details.*unavailable",
+        r"medication.*details.*unavailable", r"medication.*not.*recorded",
         # Active cancer / major competing safety issue
         r"active.*cancer", r"current.*chemotherapy", r"ongoing.*chemotherapy",
         r"active.*malignancy", r"cancer.*treatment.*ongoing",
@@ -1464,6 +1537,10 @@ def _check_parent_study_required(patient: dict, trial: dict) -> tuple[str | None
         r"recent.*interventional.*trial", r"enrolled.*in.*(?:another|recent).*(?:trial|study)",
         r"currently.*enrolled.*(?:trial|study)", r"concurrent.*(?:trial|study)",
         r"participated.*in.*(?:recent|another).*(?:trial|study)",
+        # Advanced PD / LCIG context — ambiguous continuation eligibility
+        r"\blcig\b", r"intestinal.*gel", r"levodopa.*intestinal",
+        r"advanced.*parkinson", r"advanced.*pd",
+        r"continuous.*(?:infusion|delivery).*(?:levodopa|dopamine)",
     ]
     if _any_match(_AMBIGUITY_SIGNALS, patient_all_text):
         return (
@@ -1531,17 +1608,47 @@ def _check_oncology_required(patient: dict, trial: dict) -> tuple[str | None, st
 
 
 def _check_frailty_high_demand_exercise(patient: dict, trial: dict) -> tuple[str | None, str | None]:
-    """Block when patient has frailty/fall risk and trial demands high physical exercise."""
+    """Block when patient has explicit frailty/fall risk and trial demands high physical exercise.
+    FoG/gait impairment/motor dysfunction alone does NOT count as frailty."""
     patient_text = _text(
         patient.get("key_features", [])
         + patient.get("exclusions", [])
         + [patient.get("summary", "")]
     )
-    if not _any_match(_PATIENT_FRAILTY_FALL_PATTERNS, patient_text):
+
+    # Only fire for explicit frailty/fall risk — NOT for FoG or gait impairment
+    _STRICT_FRAILTY_PATTERNS = [
+        r"\bfrail\b",
+        r"\bfrailty\b",
+        r"recurrent.*falls",
+        r"frequent.*falls",
+        r"high.*fall.*risk",
+        r"wheelchair.*(?:bound|restricted|dependent)",
+        r"unable.*to.*walk",
+        r"cannot.*walk",
+    ]
+    _FOG_GAIT_ONLY_PATTERNS = [
+        r"freezing.*(?:of\s+)?gait",
+        r"\bfog\b",
+        r"gait.*(?:impairment|disturbance|dysfunction|disorder)",
+        r"motor.*dysfunction",
+        r"gait.*freezing",
+    ]
+
+    if not _any_match(_STRICT_FRAILTY_PATTERNS, patient_text):
+        return None, None
+
+    # If gait/FoG is present but no actual frailty word, do not block
+    has_explicit_frailty = _any_match(
+        [r"\bfrail\b", r"\bfrailty\b", r"recurrent.*falls", r"frequent.*falls",
+         r"high.*fall.*risk", r"wheelchair.*(?:bound|restricted|dependent)",
+         r"unable.*to.*walk", r"cannot.*walk"],
+        patient_text,
+    )
+    if not has_explicit_frailty:
         return None, None
 
     inclusion_text = _text(trial.get("inclusion_criteria", []))
-    # Include title/summary/description fields if available
     extra_trial_text = _text([
         trial.get("title", ""),
         trial.get("summary", ""),
@@ -1638,9 +1745,14 @@ def match_patient_to_trial(patient: dict, trial: dict) -> dict:
     # --- DBS required by inclusion ---
     dbs_req_block, dbs_req_fact = _check_dbs_required(patient, trial)
     if dbs_req_block:
-        blocking_criteria.append(dbs_req_block)
-        if dbs_req_fact:
-            matched_facts.append(dbs_req_fact)
+        if dbs_req_block.startswith("__unclear__:"):
+            uncertain_criteria.append(dbs_req_block[len("__unclear__:"):])
+            if dbs_req_fact:
+                matched_facts.append(dbs_req_fact)
+        else:
+            blocking_criteria.append(dbs_req_block)
+            if dbs_req_fact:
+                matched_facts.append(dbs_req_fact)
 
     # --- Device contraindication: pacemaker + stimulation (broad) ---
     dev_block, dev_fact = _check_device_contraindication_stimulation(patient, trial)
