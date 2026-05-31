@@ -475,7 +475,9 @@ _COMORBIDITY_TARGET_PAIRS: list[tuple[list[str], list[str]]] = [
         [r"dbs.*effect", r"effect.*dbs", r"dbs.*patient", r"dbs.*implant",
          r"deep brain stimulation.*effect", r"lfp.*sensing", r"directional.*lead",
          r"dbs.*facial", r"dbs.*neuropsychiatric", r"dbs.*programming",
-         r"subthalamic.*steering", r"dbs.*optimization"],
+         r"subthalamic.*steering", r"dbs.*optimization",
+         r"undergone.*dbs", r"dbs.*surgery", r"subthalamic.*dbs",
+         r"stn.*surgery", r"subthalamic nucleus.*dbs"],
     ),
     (
         # Frail patient in a frailty / home physiotherapy trial
@@ -903,13 +905,10 @@ def _check_active_cancer(
 def _check_recent_trial_participation(
     patient: dict, trial: dict
 ) -> tuple[str | None, str | None]:
-    """Return uncertain criterion if patient has recent trial participation and trial has washout/prior trial criteria."""
+    """Return uncertain criterion if patient has recent trial participation."""
     trial_text = _text(
         trial.get("inclusion_criteria", []) + trial.get("exclusion_criteria", [])
     )
-
-    if not _any_match(_TRIAL_WASHOUT_PATTERNS, trial_text):
-        return None, None
 
     patient_all_text = _text(
         patient.get("key_features", [])
@@ -917,13 +916,31 @@ def _check_recent_trial_participation(
         + [patient.get("summary", "")]
     )
 
-    if _any_match(_RECENT_TRIAL_PATTERNS, patient_all_text):
+    if not _any_match(_RECENT_TRIAL_PATTERNS, patient_all_text):
+        return None, None
+
+    # Existing path: trial explicitly states washout/prior-study requirements
+    if _any_match(_TRIAL_WASHOUT_PATTERNS, trial_text):
         return (
             "trial has washout or prior study requirements; patient has recent or concurrent trial participation",
             "recent or concurrent trial participation noted",
         )
 
-    return None, None
+    # Patient-side-only path: patient documents recent/concurrent participation
+    # but trial has no explicit washout language.
+    # Suppress only for explicitly observational / registry / scale-validation trials.
+    _OBSERVATIONAL_TRIAL_PATTERNS = [
+        r"\bobservational\b", r"\bregistry\b", r"natural history",
+        r"\bsurvey\b", r"\bquestionnaire\b", r"scale validation",
+        r"validation study", r"non.interventional",
+    ]
+    if _any_match(_OBSERVATIONAL_TRIAL_PATTERNS, trial_text):
+        return None, None
+
+    return (
+        "recent or concurrent interventional trial participation noted; washout or overlap eligibility cannot be confirmed",
+        "recent or concurrent trial participation noted",
+    )
 
 
 def _check_comorbidity_protocol_risk(
@@ -965,6 +982,25 @@ def _check_comorbidity_protocol_risk(
     for patient_patterns, trial_inclusion_patterns in _COMORBIDITY_TARGET_PAIRS:
         if _any_match(patient_patterns, patient_all_text) and _any_match(trial_inclusion_patterns, inclusion_text):
             return None, None, None
+
+    # Cognitive/MCI scope guard: if the only comorbidity trigger is mild cognitive uncertainty,
+    # only flag when the trial has explicit cognitive, neuropsychological, or compliance requirements.
+    _COGNITIVE_ONLY_PATTERNS = [r"cognitive.*impairment", r"mild.*cognitive", r"\bmci\b"]
+    _NON_COGNITIVE_COMORBIDITY_PATTERNS = [
+        p for p in _PATIENT_COMPLEX_COMORBIDITY_PATTERNS
+        if p not in (r"cognitive.*impairment", r"mild.*cognitive", r"\bmci\b")
+    ]
+    _COGNITIVE_TRIAL_REQUIREMENT_PATTERNS = [
+        r"cognitive.*assessment", r"cognitive.*trial", r"cognitive.*study",
+        r"neuropsychological", r"protocol.*compliance", r"compliance.*protocol",
+        r"adherence", r"cognitive.*task", r"informed consent capacity",
+    ]
+    if (
+        _any_match(_COGNITIVE_ONLY_PATTERNS, patient_all_text)
+        and not _any_match(_NON_COGNITIVE_COMORBIDITY_PATTERNS, patient_all_text)
+        and not _any_match(_COGNITIVE_TRIAL_REQUIREMENT_PATTERNS, trial_text)
+    ):
+        return None, None, None
 
     # Genuine ambiguity → uncertain
     return (

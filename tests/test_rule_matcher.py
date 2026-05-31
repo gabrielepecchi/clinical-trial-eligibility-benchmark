@@ -591,3 +591,54 @@ def test_not_eligible_when_pacemaker_in_rtms_trial():
         f"uncertain_criteria={result['uncertain_criteria']}"
     )
 
+
+def test_unclear_when_recent_trial_participation_no_washout_language():
+    patient = make_patient(
+        age=62,
+        diagnosis=["Parkinson disease"],
+        key_features=["enrolled in recent interventional trial"],
+        medications=[],
+        exclusions=[],
+    )
+    trial = make_trial(
+        inclusion_criteria=[
+            "Age 40 to 80 years",
+            "Confirmed Parkinson disease diagnosis",
+        ],
+        exclusion_criteria=[],
+    )
+    result = match_patient_to_trial(patient, trial)
+    assert result["prediction"] == "unclear", (
+        f"Expected 'unclear' for recent trial participation, got '{result['prediction']}'. "
+        f"uncertain_criteria={result['uncertain_criteria']}"
+    )
+    assert any(
+        kw in c.lower()
+        for c in result["uncertain_criteria"]
+        for kw in ("trial", "washout", "overlap", "participation", "eligibility")
+    )
+
+
+def test_eligible_when_dbs_patient_in_dbs_surgery_required_study():
+    patient = make_patient(
+        age=64,
+        diagnosis=["Parkinson disease"],
+        key_features=["bilateral STN DBS implanted 18 months ago"],
+        medications=[],
+        exclusions=[],
+    )
+    trial = make_trial(
+        inclusion_criteria=[
+            "Age 40 to 80 years",
+            "Confirmed Parkinson disease diagnosis",
+            "Must have undergone subthalamic nucleus DBS surgery",
+        ],
+        exclusion_criteria=[],
+    )
+    result = match_patient_to_trial(patient, trial)
+    assert result["prediction"] == "eligible", (
+        f"Expected 'eligible' for DBS patient in DBS surgery study, got '{result['prediction']}'. "
+        f"uncertain_criteria={result['uncertain_criteria']}"
+    )
+
+
