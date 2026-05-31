@@ -8,8 +8,10 @@ from eval.generate_benchmark_report import (
     generic_table,
     pct,
     render_confusion_matrix,
+    render_criterion_type_summary,
     render_error_examples,
     render_errors_by_type,
+    render_generated_files,
     render_title_and_disclaimer,
 )
 
@@ -265,3 +267,59 @@ def test_disclaimer_not_for_clinical_use():
 def test_disclaimer_label_source_shown():
     html = render_title_and_disclaimer({"label_source": "data/processed/labels.json"})
     assert "data/processed/labels.json" in html
+
+
+# ── render_criterion_type_summary ─────────────────────────────────────────────
+
+def test_criterion_type_summary_rounds_floats():
+    rows = [{"criterion_type": "inclusion", "pair_accuracy": 0.66666666}]
+    html = render_criterion_type_summary(rows)
+    assert "0.667" in html
+    assert "0.66666666" not in html
+
+
+def test_criterion_type_summary_integer_not_changed():
+    rows = [{"criterion_type": "exclusion", "total_criteria": 10}]
+    html = render_criterion_type_summary(rows)
+    assert ">10<" in html
+
+
+def test_criterion_type_summary_empty():
+    html = render_criterion_type_summary([])
+    assert "No data" in html
+
+
+def test_criterion_type_summary_multiple_float_columns():
+    rows = [{"criterion_type": "inclusion", "pair_accuracy": 0.1, "decision_met": 5}]
+    html = render_criterion_type_summary(rows)
+    assert "0.100" in html
+    assert ">5<" in html
+
+
+# ── render_generated_files ────────────────────────────────────────────────────
+
+def test_generated_files_results_json():
+    html = render_generated_files()
+    assert "data/processed/results_llm_reviewed.json" in html
+
+
+def test_generated_files_criterion_type_csv():
+    html = render_generated_files()
+    assert "data/processed/criterion_type_summary.csv" in html
+
+
+def test_generated_files_report_html():
+    html = render_generated_files()
+    assert "reports/benchmark_report.html" in html
+
+
+def test_generated_files_uses_code_tags():
+    html = render_generated_files()
+    assert "<code>" in html
+    assert "</code>" in html
+
+
+def test_generated_files_paths_inside_code_tags():
+    html = render_generated_files()
+    assert "<code>data/processed/results_llm_reviewed.json</code>" in html
+    assert "<code>reports/benchmark_report.html</code>" in html
