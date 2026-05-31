@@ -897,6 +897,104 @@ def test_worst_error_examples_escapes_explanation_and_rationale():
     assert "&lt;b&gt;" in html
 
 
+# ── per-example anchor ids ────────────────────────────────────────────────────
+
+def test_worst_error_examples_anchor_id():
+    predictions = [_make_pred("not_eligible", "eligible", pid="pat1", tid="trial1")]
+    html = render_worst_error_examples(predictions)
+    assert "id='worst-error-pat1-trial1'" in html
+
+
+def test_worst_error_examples_anchor_id_deterministic():
+    predictions = [_make_pred("not_eligible", "eligible", pid="pat99", tid="tr42")]
+    html = render_worst_error_examples(predictions)
+    assert "id='worst-error-pat99-tr42'" in html
+
+
+def test_error_examples_anchor_id():
+    predictions = [
+        {
+            "gold_label": "eligible", "predicted_label": "not_eligible",
+            "patient_id": "p5", "trial_id": "t7",
+            "matcher_explanation": "", "gold_rationale": "",
+            "blocking_criteria": [], "uncertain_criteria": [],
+        }
+    ]
+    html = render_error_examples(predictions)
+    assert "id='error-p5-t7'" in html
+
+
+def test_error_examples_anchor_id_deterministic():
+    predictions = [
+        {
+            "gold_label": "eligible", "predicted_label": "not_eligible",
+            "patient_id": "patX", "trial_id": "trialY",
+            "matcher_explanation": "", "gold_rationale": "",
+            "blocking_criteria": [], "uncertain_criteria": [],
+        }
+    ]
+    html = render_error_examples(predictions)
+    assert "id='error-patX-trialY'" in html
+
+
+def test_criterion_level_examples_anchor_id():
+    preds = [_make_crit_pred("p10", "t20", criteria=[_crit()])]
+    html = render_criterion_level_examples(preds)
+    assert "id='criterion-p10-t20'" in html
+
+
+def test_criterion_level_examples_anchor_id_deterministic():
+    preds = [_make_crit_pred("pA", "tB", criteria=[_crit()])]
+    html = render_criterion_level_examples(preds)
+    assert "id='criterion-pA-tB'" in html
+
+
+# ── reasoning_trace rendering ─────────────────────────────────────────────────
+
+def test_reasoning_trace_rendered_in_criterion_level_examples():
+    preds = [_make_crit_pred("p1", "t1", criteria=[_crit()], )]
+    preds[0]["reasoning_trace"] = ["predicted: eligible", "matched_fact: age 45"]
+    html = render_criterion_level_examples(preds)
+    assert "Reasoning trace" in html
+    assert "predicted: eligible" in html
+    assert "matched_fact: age 45" in html
+
+
+def test_reasoning_trace_missing_does_not_break_criterion_level_examples():
+    preds = [_make_crit_pred("p1", "t1", criteria=[_crit()])]
+    html = render_criterion_level_examples(preds)
+    assert "p1" in html
+
+
+def test_reasoning_trace_rendered_in_error_examples():
+    predictions = [
+        {
+            "gold_label": "eligible", "predicted_label": "not_eligible",
+            "patient_id": "p1", "trial_id": "t1",
+            "matcher_explanation": "x", "gold_rationale": "y",
+            "blocking_criteria": [], "uncertain_criteria": [],
+            "reasoning_trace": ["predicted: not_eligible", "blocking_criterion: no prior tx"],
+        }
+    ]
+    html = render_error_examples(predictions)
+    assert "Reasoning trace" in html
+    assert "predicted: not_eligible" in html
+    assert "blocking_criterion: no prior tx" in html
+
+
+def test_reasoning_trace_missing_does_not_break_error_examples():
+    predictions = [
+        {
+            "gold_label": "eligible", "predicted_label": "not_eligible",
+            "patient_id": "p1", "trial_id": "t1",
+            "matcher_explanation": "", "gold_rationale": "",
+            "blocking_criteria": [], "uncertain_criteria": [],
+        }
+    ]
+    html = render_error_examples(predictions)
+    assert "p1" in html
+
+
 # ── main() smoke test ─────────────────────────────────────────────────────────
 
 def test_main_generates_html_report(tmp_path, monkeypatch):

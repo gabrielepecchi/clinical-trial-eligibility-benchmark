@@ -80,11 +80,11 @@ pre { background: #f4f4f4; padding: .6rem; border-radius: 4px; white-space: pre-
 </section>
 <section id='criterion-type-summary'>
 <h2>Criterion Type Summary</h2>
-<table><thead><tr><th>criterion_type</th><th>total_criteria</th><th>correct_criteria</th><th>criterion_accuracy</th><th>decision_met</th><th>decision_not_met</th><th>decision_unknown</th></tr></thead><tbody><tr><td>exclusion</td><td>1002</td><td>0</td><td>0.000</td><td>13</td><td>27</td><td>962</td></tr><tr><td>inclusion</td><td>798</td><td>0</td><td>0.000</td><td>221</td><td>11</td><td>566</td></tr></tbody></table>
+<table><thead><tr><th>criterion_type</th><th>total_criteria</th><th>decision_met</th><th>decision_not_met</th><th>decision_unclear</th><th>decision_unknown</th><th>correct_pairs</th><th>total_pairs</th><th>pair_accuracy</th></tr></thead><tbody><tr><td>exclusion</td><td>1002</td><td>13</td><td>27</td><td>0</td><td>962</td><td>101</td><td>147</td><td>0.687</td></tr><tr><td>inclusion</td><td>798</td><td>221</td><td>11</td><td>0</td><td>566</td><td>103</td><td>150</td><td>0.687</td></tr></tbody></table>
 </section>
 <section id='criterion-level-examples'>
 <h2>Criterion-Level Examples</h2>
-<details><summary><strong>#1</strong> patient=P001 trial=T001 — gold=<span class='good'>eligible</span> predicted=<span class='bad'>eligible</span></summary><pre>  criterion_type : inclusion
+<details id='criterion-P001-T001'><summary><strong>#1</strong> patient=P001 trial=T001 — gold=<span class='good'>eligible</span> predicted=<span class='bad'>eligible</span></summary><pre>  criterion_type : inclusion
   decision       : met
   criterion      : Adult with a diagnosis of idiopathic PD by a physician or physician extender
 
@@ -103,8 +103,12 @@ pre { background: #f4f4f4; padding: .6rem; border-radius: 4px; white-space: pre-
   criterion_type : exclusion
   decision       : unknown
   criterion      : Participation in pharmaceutical or behavioral disease modifying PD-related clinical trial or study
-</pre></details>
-<details><summary><strong>#2</strong> patient=P006 trial=T001 — gold=<span class='good'>eligible</span> predicted=<span class='bad'>eligible</span></summary><pre>  criterion_type : inclusion
+
+Reasoning trace:
+  predicted: eligible
+  matched_fact: Parkinson disease diagnosis confirmed
+  explanation: No blocking or uncertain criteria identified. Matched facts: Parkinson disease diagnosis confirmed.</pre></details>
+<details id='criterion-P006-T001'><summary><strong>#2</strong> patient=P006 trial=T001 — gold=<span class='good'>eligible</span> predicted=<span class='bad'>eligible</span></summary><pre>  criterion_type : inclusion
   decision       : met
   criterion      : Adult with a diagnosis of idiopathic PD by a physician or physician extender
 
@@ -123,8 +127,12 @@ pre { background: #f4f4f4; padding: .6rem; border-radius: 4px; white-space: pre-
   criterion_type : exclusion
   decision       : unknown
   criterion      : Participation in pharmaceutical or behavioral disease modifying PD-related clinical trial or study
-</pre></details>
-<details><summary><strong>#3</strong> patient=P010 trial=T001 — gold=<span class='good'>unclear</span> predicted=<span class='bad'>unclear</span></summary><pre>  criterion_type : inclusion
+
+Reasoning trace:
+  predicted: eligible
+  matched_fact: Parkinson disease diagnosis confirmed
+  explanation: No blocking or uncertain criteria identified. Matched facts: Parkinson disease diagnosis confirmed.</pre></details>
+<details id='criterion-P010-T001'><summary><strong>#3</strong> patient=P010 trial=T001 — gold=<span class='good'>unclear</span> predicted=<span class='bad'>unclear</span></summary><pre>  criterion_type : inclusion
   decision       : met
   criterion      : Adult with a diagnosis of idiopathic PD by a physician or physician extender
 
@@ -143,8 +151,14 @@ pre { background: #f4f4f4; padding: .6rem; border-radius: 4px; white-space: pre-
   criterion_type : exclusion
   decision       : unknown
   criterion      : Participation in pharmaceutical or behavioral disease modifying PD-related clinical trial or study
-</pre></details>
-<details><summary><strong>#4</strong> patient=P002 trial=T002 — gold=<span class='good'>eligible</span> predicted=<span class='bad'>eligible</span></summary><pre>  criterion_type : inclusion
+
+Reasoning trace:
+  predicted: unclear
+  matched_fact: Parkinson disease diagnosis confirmed
+  matched_fact: complex comorbidity noted in context of device/stimulation/imaging/rehabilitation/cognitive/gait-focused trial
+  uncertain_criterion: patient has comorbidity or condition that may affect protocol compliance or safety in this trial type
+  explanation: Eligibility cannot be determined due to missing or unverifiable information. Uncertain criteria: patient has comorbidity or condition that may affect protocol compliance or safety in this trial type.</pre></details>
+<details id='criterion-P002-T002'><summary><strong>#4</strong> patient=P002 trial=T002 — gold=<span class='good'>eligible</span> predicted=<span class='bad'>eligible</span></summary><pre>  criterion_type : inclusion
   decision       : unknown
   criterion      : 1. The patients who voluntarily participate in the study, fully understand the content, process, and possible adverse events of the trial, can complete the study according to the requirements of the study protocol, and sign the informed consent form.
 
@@ -163,8 +177,13 @@ pre { background: #f4f4f4; padding: .6rem; border-radius: 4px; white-space: pre-
   criterion_type : inclusion
   decision       : unknown
   criterion      : 5. The patients showing stable clinical symptoms within 1 month before baseline, with drug dosage remain the same.
-</pre></details>
-<details><summary><strong>#5</strong> patient=P005 trial=T002 — gold=<span class='good'>unclear</span> predicted=<span class='bad'>unclear</span></summary><pre>  criterion_type : inclusion
+
+Reasoning trace:
+  predicted: eligible
+  matched_fact: patient age 70 within age 45-70
+  matched_fact: Parkinson disease diagnosis confirmed
+  explanation: No blocking or uncertain criteria identified. Matched facts: patient age 70 within age 45-70; Parkinson disease diagnosis confirmed.</pre></details>
+<details id='criterion-P005-T002'><summary><strong>#5</strong> patient=P005 trial=T002 — gold=<span class='good'>unclear</span> predicted=<span class='bad'>unclear</span></summary><pre>  criterion_type : inclusion
   decision       : unknown
   criterion      : 1. The patients who voluntarily participate in the study, fully understand the content, process, and possible adverse events of the trial, can complete the study according to the requirements of the study protocol, and sign the informed consent form.
 
@@ -183,8 +202,17 @@ pre { background: #f4f4f4; padding: .6rem; border-radius: 4px; white-space: pre-
   criterion_type : inclusion
   decision       : unknown
   criterion      : 5. The patients showing stable clinical symptoms within 1 month before baseline, with drug dosage remain the same.
-</pre></details>
-<details><summary><strong>#6</strong> patient=P009 trial=T002 — gold=<span class='good'>not_eligible</span> predicted=<span class='bad'>not_eligible</span></summary><pre>  criterion_type : inclusion
+
+Reasoning trace:
+  predicted: unclear
+  matched_fact: patient age 58 within age 45-70
+  matched_fact: Parkinson disease diagnosis confirmed
+  matched_fact: medication details unclear or missing
+  matched_fact: disease stage, severity, or duration unclear or missing
+  uncertain_criterion: trial requires specific medication details but patient medication data is unclear or missing
+  uncertain_criterion: trial requires disease stage or severity information but patient data is unclear or missing
+  explanation: Eligibility cannot be determined due to missing or unverifiable information. Uncertain criteria: trial requires specific medication details but patient medication data is unclear or missing; trial requires disease stage or severity information but patient data is unclear or missing.</pre></details>
+<details id='criterion-P009-T002'><summary><strong>#6</strong> patient=P009 trial=T002 — gold=<span class='good'>not_eligible</span> predicted=<span class='bad'>not_eligible</span></summary><pre>  criterion_type : inclusion
   decision       : unknown
   criterion      : 1. The patients who voluntarily participate in the study, fully understand the content, process, and possible adverse events of the trial, can complete the study according to the requirements of the study protocol, and sign the informed consent form.
 
@@ -203,8 +231,15 @@ pre { background: #f4f4f4; padding: .6rem; border-radius: 4px; white-space: pre-
   criterion_type : inclusion
   decision       : unknown
   criterion      : 5. The patients showing stable clinical symptoms within 1 month before baseline, with drug dosage remain the same.
-</pre></details>
-<details><summary><strong>#7</strong> patient=P004 trial=T003 — gold=<span class='good'>not_eligible</span> predicted=<span class='bad'>not_eligible</span></summary><pre>  criterion_type : inclusion
+
+Reasoning trace:
+  predicted: not_eligible
+  matched_fact: patient age 45 within age 45-70
+  matched_fact: early-onset or early-stage PD documented; no advanced disease markers present
+  matched_fact: Parkinson disease diagnosis confirmed
+  blocking_criterion: advanced/severe Parkinson disease required: trial requires composite advanced PD severity criteria; patient has early-onset/early-stage PD without advanced disease evidence
+  explanation: Patient does not meet eligibility requirements. Blocking criteria: advanced/severe Parkinson disease required: trial requires composite advanced PD severity criteria; patient has early-onset/early-stage PD without advanced disease evidence.</pre></details>
+<details id='criterion-P004-T003'><summary><strong>#7</strong> patient=P004 trial=T003 — gold=<span class='good'>not_eligible</span> predicted=<span class='bad'>not_eligible</span></summary><pre>  criterion_type : inclusion
   decision       : met
   criterion      : Diagnosis of Huntington's disease or Parkinson's disease
 
@@ -223,8 +258,15 @@ pre { background: #f4f4f4; padding: .6rem; border-radius: 4px; white-space: pre-
   criterion_type : exclusion
   decision       : met
   criterion      : Previously diagnosed with dementia
-</pre></details>
-<details><summary><strong>#8</strong> patient=P007 trial=T003 — gold=<span class='good'>not_eligible</span> predicted=<span class='bad'>not_eligible</span></summary><pre>  criterion_type : inclusion
+
+Reasoning trace:
+  predicted: not_eligible
+  matched_fact: patient age 76 within age &gt;= 21
+  matched_fact: cognitive impairment or dementia documented in patient
+  matched_fact: Parkinson disease diagnosis confirmed
+  blocking_criterion: cognitive exclusion: trial excludes patients with dementia or cognitive impairment
+  explanation: Patient does not meet eligibility requirements. Blocking criteria: cognitive exclusion: trial excludes patients with dementia or cognitive impairment.</pre></details>
+<details id='criterion-P007-T003'><summary><strong>#8</strong> patient=P007 trial=T003 — gold=<span class='good'>not_eligible</span> predicted=<span class='bad'>not_eligible</span></summary><pre>  criterion_type : inclusion
   decision       : met
   criterion      : Diagnosis of Huntington's disease or Parkinson's disease
 
@@ -243,8 +285,15 @@ pre { background: #f4f4f4; padding: .6rem; border-radius: 4px; white-space: pre-
   criterion_type : exclusion
   decision       : met
   criterion      : Previously diagnosed with dementia
-</pre></details>
-<details><summary><strong>#9</strong> patient=P008 trial=T003 — gold=<span class='good'>unclear</span> predicted=<span class='bad'>eligible</span></summary><pre>  criterion_type : inclusion
+
+Reasoning trace:
+  predicted: not_eligible
+  matched_fact: patient age 64 within age &gt;= 21
+  matched_fact: cognitive impairment or dementia documented in patient
+  matched_fact: Parkinson disease diagnosis confirmed
+  blocking_criterion: cognitive exclusion: trial excludes patients with dementia or cognitive impairment
+  explanation: Patient does not meet eligibility requirements. Blocking criteria: cognitive exclusion: trial excludes patients with dementia or cognitive impairment.</pre></details>
+<details id='criterion-P008-T003'><summary><strong>#9</strong> patient=P008 trial=T003 — gold=<span class='good'>unclear</span> predicted=<span class='bad'>eligible</span></summary><pre>  criterion_type : inclusion
   decision       : met
   criterion      : Diagnosis of Huntington's disease or Parkinson's disease
 
@@ -263,8 +312,13 @@ pre { background: #f4f4f4; padding: .6rem; border-radius: 4px; white-space: pre-
   criterion_type : exclusion
   decision       : unknown
   criterion      : Previously diagnosed with dementia
-</pre></details>
-<details><summary><strong>#10</strong> patient=P003 trial=T004 — gold=<span class='good'>unclear</span> predicted=<span class='bad'>unclear</span></summary><pre>  criterion_type : inclusion
+
+Reasoning trace:
+  predicted: eligible
+  matched_fact: patient age 69 within age &gt;= 21
+  matched_fact: Parkinson disease diagnosis confirmed
+  explanation: No blocking or uncertain criteria identified. Matched facts: patient age 69 within age &gt;= 21; Parkinson disease diagnosis confirmed.</pre></details>
+<details id='criterion-P003-T004'><summary><strong>#10</strong> patient=P003 trial=T004 — gold=<span class='good'>unclear</span> predicted=<span class='bad'>unclear</span></summary><pre>  criterion_type : inclusion
   decision       : met
   criterion      : diagnosis of PD according to the UK Brain Bank criteria;
 
@@ -283,7 +337,15 @@ pre { background: #f4f4f4; padding: .6rem; border-radius: 4px; white-space: pre-
   criterion_type : inclusion
   decision       : unknown
   criterion      : absence of psychiatric or severe systemic illnesses;
-</pre></details>
+
+Reasoning trace:
+  predicted: unclear
+  matched_fact: Parkinson disease diagnosis confirmed
+  matched_fact: complex comorbidity noted in context of device/stimulation/imaging/rehabilitation/cognitive/gait-focused trial
+  uncertain_criterion: patient has comorbidity or condition that may affect protocol compliance or safety in this trial type
+  uncertain_criterion: trial requires specific gait/FoG/balance features not documented in patient profile
+  uncertain_criterion: trial requires cognitive/MCI status not documented in patient profile
+  explanation: Eligibility cannot be determined due to missing or unverifiable information. Uncertain criteria: patient has comorbidity or condition that may affect protocol compliance or safety in this trial type; trial requires specific gait/FoG/balance features not documented in patient profile; trial requires cognitive/MCI status not documented in patient profile.</pre></details>
 </section>
 <section id='generated-files'>
 <h2>Generated Files</h2>
@@ -299,61 +361,61 @@ pre { background: #f4f4f4; padding: .6rem; border-radius: 4px; white-space: pre-
 </section>
 <section id='worst-error-examples-top-10'>
 <h2>Worst Error Examples (top 10)</h2>
-<details><summary><strong>#1</strong> patient=P008 trial=T003 — gold=<span class='good'>unclear</span> predicted=<span class='bad'>eligible</span> [<strong>major</strong>]</summary><pre>Severity          : major
+<details id='worst-error-P008-T003'><summary><strong>#1</strong> patient=P008 trial=T003 — gold=<span class='good'>unclear</span> predicted=<span class='bad'>eligible</span> [<strong>major</strong>]</summary><pre>Severity          : major
 Matcher explanation:
 No blocking or uncertain criteria identified. Matched facts: patient age 69 within age &gt;= 21; Parkinson disease diagnosis confirmed.
 
 Gold rationale:
 REM sleep behavior disorder symptoms are present; it is unclear whether this constitutes an exclusion in this neuropsychiatric protocol.</pre></details>
-<details><summary><strong>#2</strong> patient=P012 trial=T004 — gold=<span class='good'>unclear</span> predicted=<span class='bad'>not_eligible</span> [<strong>major</strong>]</summary><pre>Severity          : major
+<details id='worst-error-P012-T004'><summary><strong>#2</strong> patient=P012 trial=T004 — gold=<span class='good'>unclear</span> predicted=<span class='bad'>not_eligible</span> [<strong>major</strong>]</summary><pre>Severity          : major
 Matcher explanation:
 Patient does not meet eligibility requirements. Blocking criteria: Parkinson disease diagnosis required.
 
 Gold rationale:
 Patient is a healthy control; the E-RAS trial targets individuals with PD, but the summary does not clarify whether healthy controls are included as a comparator arm.</pre></details>
-<details><summary><strong>#3</strong> patient=P019 trial=T005 — gold=<span class='good'>unclear</span> predicted=<span class='bad'>not_eligible</span> [<strong>major</strong>]</summary><pre>Severity          : major
+<details id='worst-error-P019-T005'><summary><strong>#3</strong> patient=P019 trial=T005 — gold=<span class='good'>unclear</span> predicted=<span class='bad'>not_eligible</span> [<strong>major</strong>]</summary><pre>Severity          : major
 Matcher explanation:
 Patient does not meet eligibility requirements. Blocking criteria: cognitive exclusion: trial excludes patients with dementia or cognitive impairment.
 
 Gold rationale:
 No prior DBS confirmed; study requires DBS candidacy or implantation, but protocol details are unavailable to determine whether naive candidates qualify.</pre></details>
-<details><summary><strong>#4</strong> patient=P003 trial=T005 — gold=<span class='good'>unclear</span> predicted=<span class='bad'>not_eligible</span> [<strong>major</strong>]</summary><pre>Severity          : major
+<details id='worst-error-P003-T005'><summary><strong>#4</strong> patient=P003 trial=T005 — gold=<span class='good'>unclear</span> predicted=<span class='bad'>not_eligible</span> [<strong>major</strong>]</summary><pre>Severity          : major
 Matcher explanation:
 Patient does not meet eligibility requirements. Blocking criteria: deep brain stimulation (DBS) implant is an exclusion criterion.
 
 Gold rationale:
 Patient has prior bilateral DBS; whether the DBS international study targets already-implanted patients or new candidates cannot be determined from the summary.</pre></details>
-<details><summary><strong>#5</strong> patient=P013 trial=T006 — gold=<span class='good'>unclear</span> predicted=<span class='bad'>not_eligible</span> [<strong>major</strong>]</summary><pre>Severity          : major
+<details id='worst-error-P013-T006'><summary><strong>#5</strong> patient=P013 trial=T006 — gold=<span class='good'>unclear</span> predicted=<span class='bad'>not_eligible</span> [<strong>major</strong>]</summary><pre>Severity          : major
 Matcher explanation:
 Patient does not meet eligibility requirements. Blocking criteria: trial requires idiopathic Parkinson disease for treatment/intervention; patient has atypical or unclear parkinsonism.
 
 Gold rationale:
 Atypical parkinsonism with poor levodopa response may not meet inclusion criteria for a PD-specific intervention; confirmation of PD diagnosis is unclear.</pre></details>
-<details><summary><strong>#6</strong> patient=P012 trial=T007 — gold=<span class='good'>not_eligible</span> predicted=<span class='bad'>unclear</span> [<strong>major</strong>]</summary><pre>Severity          : major
+<details id='worst-error-P012-T007'><summary><strong>#6</strong> patient=P012 trial=T007 — gold=<span class='good'>not_eligible</span> predicted=<span class='bad'>unclear</span> [<strong>major</strong>]</summary><pre>Severity          : major
 Matcher explanation:
 Eligibility cannot be determined due to missing or unverifiable information. Uncertain criteria: patient is a healthy control/volunteer; Parkinson disease may be required but trial scope is ambiguous.
 
 Gold rationale:
 Healthy control without PD does not meet the inclusion criterion for a PD enteric nervous system study unless a control arm is specified, which is not confirmed.</pre></details>
-<details><summary><strong>#7</strong> patient=P014 trial=T008 — gold=<span class='good'>unclear</span> predicted=<span class='bad'>eligible</span> [<strong>major</strong>]</summary><pre>Severity          : major
+<details id='worst-error-P014-T008'><summary><strong>#7</strong> patient=P014 trial=T008 — gold=<span class='good'>unclear</span> predicted=<span class='bad'>eligible</span> [<strong>major</strong>]</summary><pre>Severity          : major
 Matcher explanation:
 No blocking or uncertain criteria identified. Matched facts: Parkinson disease diagnosis confirmed.
 
 Gold rationale:
 Patient has PD with autonomic dysfunction; it is unclear whether orthostatic hypotension is an exclusion for a general PD rehabilitation quality-of-life study.</pre></details>
-<details><summary><strong>#8</strong> patient=P020 trial=T008 — gold=<span class='good'>unclear</span> predicted=<span class='bad'>eligible</span> [<strong>major</strong>]</summary><pre>Severity          : major
+<details id='worst-error-P020-T008'><summary><strong>#8</strong> patient=P020 trial=T008 — gold=<span class='good'>unclear</span> predicted=<span class='bad'>eligible</span> [<strong>major</strong>]</summary><pre>Severity          : major
 Matcher explanation:
 No blocking or uncertain criteria identified. Matched facts: Parkinson disease diagnosis confirmed.
 
 Gold rationale:
 Missing disease duration and severity details prevent confirmation of key inclusion criteria for a rehabilitation quality-of-life trial.</pre></details>
-<details><summary><strong>#9</strong> patient=P018 trial=T009 — gold=<span class='good'>unclear</span> predicted=<span class='bad'>not_eligible</span> [<strong>major</strong>]</summary><pre>Severity          : major
+<details id='worst-error-P018-T009'><summary><strong>#9</strong> patient=P018 trial=T009 — gold=<span class='good'>unclear</span> predicted=<span class='bad'>not_eligible</span> [<strong>major</strong>]</summary><pre>Severity          : major
 Matcher explanation:
 Patient does not meet eligibility requirements. Blocking criteria: trial requires age &gt;= 60.
 
 Gold rationale:
 Cardiac pacemaker is present; home physiotherapy without electrical stimulation may not be contraindicated, but pacemaker safety in this specific protocol cannot be confirmed.</pre></details>
-<details><summary><strong>#10</strong> patient=P019 trial=T011 — gold=<span class='good'>unclear</span> predicted=<span class='bad'>eligible</span> [<strong>major</strong>]</summary><pre>Severity          : major
+<details id='worst-error-P019-T011'><summary><strong>#10</strong> patient=P019 trial=T011 — gold=<span class='good'>unclear</span> predicted=<span class='bad'>eligible</span> [<strong>major</strong>]</summary><pre>Severity          : major
 Matcher explanation:
 No blocking or uncertain criteria identified. Matched facts: Parkinson disease diagnosis confirmed.
 
@@ -362,111 +424,181 @@ Patient has PD with imaging workup; fMRI-DBS study may require active DBS candid
 </section>
 <section id='error-examples-first-15'>
 <h2>Error Examples (first 15)</h2>
-<details><summary><strong>#1</strong> patient=P008 trial=T003 — gold=<span class='good'>unclear</span> predicted=<span class='bad'>eligible</span></summary><pre>Blocking criteria : 
+<details id='error-P008-T003'><summary><strong>#1</strong> patient=P008 trial=T003 — gold=<span class='good'>unclear</span> predicted=<span class='bad'>eligible</span></summary><pre>Blocking criteria : 
 Uncertain criteria: 
 Matcher explanation:
 No blocking or uncertain criteria identified. Matched facts: patient age 69 within age &gt;= 21; Parkinson disease diagnosis confirmed.
 
 Gold rationale:
-REM sleep behavior disorder symptoms are present; it is unclear whether this constitutes an exclusion in this neuropsychiatric protocol.</pre></details>
-<details><summary><strong>#2</strong> patient=P012 trial=T004 — gold=<span class='good'>unclear</span> predicted=<span class='bad'>not_eligible</span></summary><pre>Blocking criteria : Parkinson disease diagnosis required
+REM sleep behavior disorder symptoms are present; it is unclear whether this constitutes an exclusion in this neuropsychiatric protocol.
+Reasoning trace:
+  predicted: eligible
+  matched_fact: patient age 69 within age &gt;= 21
+  matched_fact: Parkinson disease diagnosis confirmed
+  explanation: No blocking or uncertain criteria identified. Matched facts: patient age 69 within age &gt;= 21; Parkinson disease diagnosis confirmed.</pre></details>
+<details id='error-P012-T004'><summary><strong>#2</strong> patient=P012 trial=T004 — gold=<span class='good'>unclear</span> predicted=<span class='bad'>not_eligible</span></summary><pre>Blocking criteria : Parkinson disease diagnosis required
 Uncertain criteria: 
 Matcher explanation:
 Patient does not meet eligibility requirements. Blocking criteria: Parkinson disease diagnosis required.
 
 Gold rationale:
-Patient is a healthy control; the E-RAS trial targets individuals with PD, but the summary does not clarify whether healthy controls are included as a comparator arm.</pre></details>
-<details><summary><strong>#3</strong> patient=P019 trial=T005 — gold=<span class='good'>unclear</span> predicted=<span class='bad'>not_eligible</span></summary><pre>Blocking criteria : cognitive exclusion: trial excludes patients with dementia or cognitive impairment
+Patient is a healthy control; the E-RAS trial targets individuals with PD, but the summary does not clarify whether healthy controls are included as a comparator arm.
+Reasoning trace:
+  predicted: not_eligible
+  blocking_criterion: Parkinson disease diagnosis required
+  explanation: Patient does not meet eligibility requirements. Blocking criteria: Parkinson disease diagnosis required.</pre></details>
+<details id='error-P019-T005'><summary><strong>#3</strong> patient=P019 trial=T005 — gold=<span class='good'>unclear</span> predicted=<span class='bad'>not_eligible</span></summary><pre>Blocking criteria : cognitive exclusion: trial excludes patients with dementia or cognitive impairment
 Uncertain criteria: 
 Matcher explanation:
 Patient does not meet eligibility requirements. Blocking criteria: cognitive exclusion: trial excludes patients with dementia or cognitive impairment.
 
 Gold rationale:
-No prior DBS confirmed; study requires DBS candidacy or implantation, but protocol details are unavailable to determine whether naive candidates qualify.</pre></details>
-<details><summary><strong>#4</strong> patient=P003 trial=T005 — gold=<span class='good'>unclear</span> predicted=<span class='bad'>not_eligible</span></summary><pre>Blocking criteria : deep brain stimulation (DBS) implant is an exclusion criterion
+No prior DBS confirmed; study requires DBS candidacy or implantation, but protocol details are unavailable to determine whether naive candidates qualify.
+Reasoning trace:
+  predicted: not_eligible
+  matched_fact: cognitive impairment or dementia documented in patient
+  matched_fact: Parkinson disease diagnosis confirmed
+  blocking_criterion: cognitive exclusion: trial excludes patients with dementia or cognitive impairment
+  explanation: Patient does not meet eligibility requirements. Blocking criteria: cognitive exclusion: trial excludes patients with dementia or cognitive impairment.</pre></details>
+<details id='error-P003-T005'><summary><strong>#4</strong> patient=P003 trial=T005 — gold=<span class='good'>unclear</span> predicted=<span class='bad'>not_eligible</span></summary><pre>Blocking criteria : deep brain stimulation (DBS) implant is an exclusion criterion
 Uncertain criteria: 
 Matcher explanation:
 Patient does not meet eligibility requirements. Blocking criteria: deep brain stimulation (DBS) implant is an exclusion criterion.
 
 Gold rationale:
-Patient has prior bilateral DBS; whether the DBS international study targets already-implanted patients or new candidates cannot be determined from the summary.</pre></details>
-<details><summary><strong>#5</strong> patient=P013 trial=T006 — gold=<span class='good'>unclear</span> predicted=<span class='bad'>not_eligible</span></summary><pre>Blocking criteria : trial requires idiopathic Parkinson disease for treatment/intervention; patient has atypical or unclear parkinsonism
+Patient has prior bilateral DBS; whether the DBS international study targets already-implanted patients or new candidates cannot be determined from the summary.
+Reasoning trace:
+  predicted: not_eligible
+  matched_fact: DBS implant present
+  matched_fact: Parkinson disease diagnosis confirmed
+  blocking_criterion: deep brain stimulation (DBS) implant is an exclusion criterion
+  explanation: Patient does not meet eligibility requirements. Blocking criteria: deep brain stimulation (DBS) implant is an exclusion criterion.</pre></details>
+<details id='error-P013-T006'><summary><strong>#5</strong> patient=P013 trial=T006 — gold=<span class='good'>unclear</span> predicted=<span class='bad'>not_eligible</span></summary><pre>Blocking criteria : trial requires idiopathic Parkinson disease for treatment/intervention; patient has atypical or unclear parkinsonism
 Uncertain criteria: 
 Matcher explanation:
 Patient does not meet eligibility requirements. Blocking criteria: trial requires idiopathic Parkinson disease for treatment/intervention; patient has atypical or unclear parkinsonism.
 
 Gold rationale:
-Atypical parkinsonism with poor levodopa response may not meet inclusion criteria for a PD-specific intervention; confirmation of PD diagnosis is unclear.</pre></details>
-<details><summary><strong>#6</strong> patient=P012 trial=T007 — gold=<span class='good'>not_eligible</span> predicted=<span class='bad'>unclear</span></summary><pre>Blocking criteria : 
+Atypical parkinsonism with poor levodopa response may not meet inclusion criteria for a PD-specific intervention; confirmation of PD diagnosis is unclear.
+Reasoning trace:
+  predicted: not_eligible
+  matched_fact: patient age 66 within age 50-80
+  blocking_criterion: trial requires idiopathic Parkinson disease for treatment/intervention; patient has atypical or unclear parkinsonism
+  explanation: Patient does not meet eligibility requirements. Blocking criteria: trial requires idiopathic Parkinson disease for treatment/intervention; patient has atypical or unclear parkinsonism.</pre></details>
+<details id='error-P012-T007'><summary><strong>#6</strong> patient=P012 trial=T007 — gold=<span class='good'>not_eligible</span> predicted=<span class='bad'>unclear</span></summary><pre>Blocking criteria : 
 Uncertain criteria: patient is a healthy control/volunteer; Parkinson disease may be required but trial scope is ambiguous
 Matcher explanation:
 Eligibility cannot be determined due to missing or unverifiable information. Uncertain criteria: patient is a healthy control/volunteer; Parkinson disease may be required but trial scope is ambiguous.
 
 Gold rationale:
-Healthy control without PD does not meet the inclusion criterion for a PD enteric nervous system study unless a control arm is specified, which is not confirmed.</pre></details>
-<details><summary><strong>#7</strong> patient=P014 trial=T008 — gold=<span class='good'>unclear</span> predicted=<span class='bad'>eligible</span></summary><pre>Blocking criteria : 
+Healthy control without PD does not meet the inclusion criterion for a PD enteric nervous system study unless a control arm is specified, which is not confirmed.
+Reasoning trace:
+  predicted: unclear
+  matched_fact: patient age 60 within age 50-80
+  uncertain_criterion: patient is a healthy control/volunteer; Parkinson disease may be required but trial scope is ambiguous
+  explanation: Eligibility cannot be determined due to missing or unverifiable information. Uncertain criteria: patient is a healthy control/volunteer; Parkinson disease may be required but trial scope is ambiguous.</pre></details>
+<details id='error-P014-T008'><summary><strong>#7</strong> patient=P014 trial=T008 — gold=<span class='good'>unclear</span> predicted=<span class='bad'>eligible</span></summary><pre>Blocking criteria : 
 Uncertain criteria: 
 Matcher explanation:
 No blocking or uncertain criteria identified. Matched facts: Parkinson disease diagnosis confirmed.
 
 Gold rationale:
-Patient has PD with autonomic dysfunction; it is unclear whether orthostatic hypotension is an exclusion for a general PD rehabilitation quality-of-life study.</pre></details>
-<details><summary><strong>#8</strong> patient=P020 trial=T008 — gold=<span class='good'>unclear</span> predicted=<span class='bad'>eligible</span></summary><pre>Blocking criteria : 
+Patient has PD with autonomic dysfunction; it is unclear whether orthostatic hypotension is an exclusion for a general PD rehabilitation quality-of-life study.
+Reasoning trace:
+  predicted: eligible
+  matched_fact: Parkinson disease diagnosis confirmed
+  explanation: No blocking or uncertain criteria identified. Matched facts: Parkinson disease diagnosis confirmed.</pre></details>
+<details id='error-P020-T008'><summary><strong>#8</strong> patient=P020 trial=T008 — gold=<span class='good'>unclear</span> predicted=<span class='bad'>eligible</span></summary><pre>Blocking criteria : 
 Uncertain criteria: 
 Matcher explanation:
 No blocking or uncertain criteria identified. Matched facts: Parkinson disease diagnosis confirmed.
 
 Gold rationale:
-Missing disease duration and severity details prevent confirmation of key inclusion criteria for a rehabilitation quality-of-life trial.</pre></details>
-<details><summary><strong>#9</strong> patient=P018 trial=T009 — gold=<span class='good'>unclear</span> predicted=<span class='bad'>not_eligible</span></summary><pre>Blocking criteria : trial requires age &gt;= 60
+Missing disease duration and severity details prevent confirmation of key inclusion criteria for a rehabilitation quality-of-life trial.
+Reasoning trace:
+  predicted: eligible
+  matched_fact: Parkinson disease diagnosis confirmed
+  explanation: No blocking or uncertain criteria identified. Matched facts: Parkinson disease diagnosis confirmed.</pre></details>
+<details id='error-P018-T009'><summary><strong>#9</strong> patient=P018 trial=T009 — gold=<span class='good'>unclear</span> predicted=<span class='bad'>not_eligible</span></summary><pre>Blocking criteria : trial requires age &gt;= 60
 Uncertain criteria: patient has comorbidity or condition that may affect protocol compliance or safety in this trial type
 Matcher explanation:
 Patient does not meet eligibility requirements. Blocking criteria: trial requires age &gt;= 60.
 
 Gold rationale:
-Cardiac pacemaker is present; home physiotherapy without electrical stimulation may not be contraindicated, but pacemaker safety in this specific protocol cannot be confirmed.</pre></details>
-<details><summary><strong>#10</strong> patient=P019 trial=T011 — gold=<span class='good'>unclear</span> predicted=<span class='bad'>eligible</span></summary><pre>Blocking criteria : 
+Cardiac pacemaker is present; home physiotherapy without electrical stimulation may not be contraindicated, but pacemaker safety in this specific protocol cannot be confirmed.
+Reasoning trace:
+  predicted: not_eligible
+  matched_fact: Parkinson disease diagnosis confirmed
+  matched_fact: complex comorbidity noted in context of device/stimulation/imaging/rehabilitation/cognitive/gait-focused trial
+  blocking_criterion: trial requires age &gt;= 60
+  uncertain_criterion: patient has comorbidity or condition that may affect protocol compliance or safety in this trial type
+  explanation: Patient does not meet eligibility requirements. Blocking criteria: trial requires age &gt;= 60.</pre></details>
+<details id='error-P019-T011'><summary><strong>#10</strong> patient=P019 trial=T011 — gold=<span class='good'>unclear</span> predicted=<span class='bad'>eligible</span></summary><pre>Blocking criteria : 
 Uncertain criteria: 
 Matcher explanation:
 No blocking or uncertain criteria identified. Matched facts: Parkinson disease diagnosis confirmed.
 
 Gold rationale:
-Patient has PD with imaging workup; fMRI-DBS study may require active DBS candidacy or hardware that is not confirmed in this summary.</pre></details>
-<details><summary><strong>#11</strong> patient=P004 trial=T011 — gold=<span class='good'>unclear</span> predicted=<span class='bad'>eligible</span></summary><pre>Blocking criteria : 
+Patient has PD with imaging workup; fMRI-DBS study may require active DBS candidacy or hardware that is not confirmed in this summary.
+Reasoning trace:
+  predicted: eligible
+  matched_fact: Parkinson disease diagnosis confirmed
+  explanation: No blocking or uncertain criteria identified. Matched facts: Parkinson disease diagnosis confirmed.</pre></details>
+<details id='error-P004-T011'><summary><strong>#11</strong> patient=P004 trial=T011 — gold=<span class='good'>unclear</span> predicted=<span class='bad'>eligible</span></summary><pre>Blocking criteria : 
 Uncertain criteria: 
 Matcher explanation:
 No blocking or uncertain criteria identified. Matched facts: Parkinson disease diagnosis confirmed.
 
 Gold rationale:
-Cognitive impairment is present; it is unclear whether this triggers exclusion for an fMRI-DBS study that may require intact capacity.</pre></details>
-<details><summary><strong>#12</strong> patient=P012 trial=T012 — gold=<span class='good'>not_eligible</span> predicted=<span class='bad'>unclear</span></summary><pre>Blocking criteria : 
+Cognitive impairment is present; it is unclear whether this triggers exclusion for an fMRI-DBS study that may require intact capacity.
+Reasoning trace:
+  predicted: eligible
+  matched_fact: Parkinson disease diagnosis confirmed
+  explanation: No blocking or uncertain criteria identified. Matched facts: Parkinson disease diagnosis confirmed.</pre></details>
+<details id='error-P012-T012'><summary><strong>#12</strong> patient=P012 trial=T012 — gold=<span class='good'>not_eligible</span> predicted=<span class='bad'>unclear</span></summary><pre>Blocking criteria : 
 Uncertain criteria: patient is a healthy control/volunteer; Parkinson disease may be required but trial scope is ambiguous
 Matcher explanation:
 Eligibility cannot be determined due to missing or unverifiable information. Uncertain criteria: patient is a healthy control/volunteer; Parkinson disease may be required but trial scope is ambiguous.
 
 Gold rationale:
-Healthy control without PD does not meet inclusion for a PD-specific virtual reality task study unless a comparator arm is confirmed.</pre></details>
-<details><summary><strong>#13</strong> patient=P020 trial=T013 — gold=<span class='good'>unclear</span> predicted=<span class='bad'>eligible</span></summary><pre>Blocking criteria : 
+Healthy control without PD does not meet inclusion for a PD-specific virtual reality task study unless a comparator arm is confirmed.
+Reasoning trace:
+  predicted: unclear
+  uncertain_criterion: patient is a healthy control/volunteer; Parkinson disease may be required but trial scope is ambiguous
+  explanation: Eligibility cannot be determined due to missing or unverifiable information. Uncertain criteria: patient is a healthy control/volunteer; Parkinson disease may be required but trial scope is ambiguous.</pre></details>
+<details id='error-P020-T013'><summary><strong>#13</strong> patient=P020 trial=T013 — gold=<span class='good'>unclear</span> predicted=<span class='bad'>eligible</span></summary><pre>Blocking criteria : 
 Uncertain criteria: 
 Matcher explanation:
 No blocking or uncertain criteria identified. Matched facts: Parkinson disease diagnosis confirmed.
 
 Gold rationale:
-Missing disease duration and severity data prevent determining whether the patient meets FoG-specific inclusion criteria.</pre></details>
-<details><summary><strong>#14</strong> patient=P001 trial=T013 — gold=<span class='good'>unclear</span> predicted=<span class='bad'>eligible</span></summary><pre>Blocking criteria : 
+Missing disease duration and severity data prevent determining whether the patient meets FoG-specific inclusion criteria.
+Reasoning trace:
+  predicted: eligible
+  matched_fact: Parkinson disease diagnosis confirmed
+  explanation: No blocking or uncertain criteria identified. Matched facts: Parkinson disease diagnosis confirmed.</pre></details>
+<details id='error-P001-T013'><summary><strong>#14</strong> patient=P001 trial=T013 — gold=<span class='good'>unclear</span> predicted=<span class='bad'>eligible</span></summary><pre>Blocking criteria : 
 Uncertain criteria: 
 Matcher explanation:
 No blocking or uncertain criteria identified. Matched facts: Parkinson disease diagnosis confirmed.
 
 Gold rationale:
-Patient has mild tremor without documented freezing of gait; FoG study inclusion typically requires confirmed FoG episodes.</pre></details>
-<details><summary><strong>#15</strong> patient=P007 trial=T014 — gold=<span class='good'>unclear</span> predicted=<span class='bad'>eligible</span></summary><pre>Blocking criteria : 
+Patient has mild tremor without documented freezing of gait; FoG study inclusion typically requires confirmed FoG episodes.
+Reasoning trace:
+  predicted: eligible
+  matched_fact: Parkinson disease diagnosis confirmed
+  explanation: No blocking or uncertain criteria identified. Matched facts: Parkinson disease diagnosis confirmed.</pre></details>
+<details id='error-P007-T014'><summary><strong>#15</strong> patient=P007 trial=T014 — gold=<span class='good'>unclear</span> predicted=<span class='bad'>eligible</span></summary><pre>Blocking criteria : 
 Uncertain criteria: 
 Matcher explanation:
 No blocking or uncertain criteria identified. Matched facts: Parkinson disease diagnosis confirmed.
 
 Gold rationale:
-Depression is present; a LCIG non-motor symptoms trial may or may not exclude psychiatric comorbidities depending on scope.</pre></details>
+Depression is present; a LCIG non-motor symptoms trial may or may not exclude psychiatric comorbidities depending on scope.
+Reasoning trace:
+  predicted: eligible
+  matched_fact: Parkinson disease diagnosis confirmed
+  explanation: No blocking or uncertain criteria identified. Matched facts: Parkinson disease diagnosis confirmed.</pre></details>
 </section>
 <footer style='margin-top:3rem;padding-top:1rem;border-top:1px solid #ddd;font-size:.85rem;color:#666;'><p>This report was <strong>generated locally</strong> from benchmark results. All patient data consists of <strong>synthetic patients</strong> only. Labels are <strong>draft LLM-reviewed labels</strong> that have not been fully validated. <strong>Not for clinical use.</strong></p></footer>
 

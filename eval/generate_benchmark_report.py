@@ -438,10 +438,11 @@ def render_worst_error_examples(predictions: list[dict], n: int = 10) -> str:
         _, severity = _error_severity(r.get("gold_label", ""), r.get("predicted_label", ""))
         pid = esc(r.get("patient_id", ""))
         tid = esc(r.get("trial_id", ""))
+        anchor = f"worst-error-{esc(r.get('patient_id', ''))}-{esc(r.get('trial_id', ''))}"
         explanation = esc(r.get("matcher_explanation", ""))
         rationale = esc(r.get("gold_rationale", ""))
         cards.append(
-            f"<details><summary><strong>#{i}</strong> patient={pid} trial={tid} "
+            f"<details id='{anchor}'><summary><strong>#{i}</strong> patient={pid} trial={tid} "
             f"— gold=<span class='good'>{gold}</span> predicted=<span class='bad'>{pred}</span> "
             f"[<strong>{esc(severity)}</strong>]</summary>"
             f"<pre>"
@@ -463,18 +464,24 @@ def render_error_examples(predictions: list[dict], n: int = 15) -> str:
         pred = esc(r.get("predicted_label", ""))
         pid = esc(r.get("patient_id", ""))
         tid = esc(r.get("trial_id", ""))
+        anchor = f"error-{esc(r.get('patient_id', ''))}-{esc(r.get('trial_id', ''))}"
         explanation = esc(r.get("matcher_explanation", ""))
         rationale = esc(r.get("gold_rationale", ""))
         blocking = esc("; ".join(r.get("blocking_criteria") or []))
         uncertain = esc("; ".join(r.get("uncertain_criteria") or []))
+        trace = (r.get("reasoning_trace") or [])
+        trace_block = ""
+        if trace:
+            trace_block = "\nReasoning trace:\n" + "\n".join(f"  {esc(step)}" for step in trace)
         cards.append(
-            f"<details><summary><strong>#{i}</strong> patient={pid} trial={tid} "
+            f"<details id='{anchor}'><summary><strong>#{i}</strong> patient={pid} trial={tid} "
             f"— gold=<span class='good'>{gold}</span> predicted=<span class='bad'>{pred}</span></summary>"
             f"<pre>"
             f"Blocking criteria : {blocking}\n"
             f"Uncertain criteria: {uncertain}\n"
             f"Matcher explanation:\n{explanation}\n\n"
             f"Gold rationale:\n{rationale}"
+            f"{trace_block}"
             f"</pre></details>"
         )
     return section(f"Error Examples (first {n})", "\n".join(cards))
@@ -572,10 +579,15 @@ def render_criterion_level_examples(predictions: list[dict], n: int = 10) -> str
                 row += f"  confidence     : {confidence}\n"
             rows.append(row)
         cblock = "\n".join(rows)
+        trace = (r.get("reasoning_trace") or [])
+        trace_block = ""
+        if trace:
+            trace_block = "\nReasoning trace:\n" + "\n".join(f"  {esc(step)}" for step in trace)
+        anchor = f"criterion-{esc(r.get('patient_id', ''))}-{esc(r.get('trial_id', ''))}"
         cards.append(
-            f"<details><summary><strong>#{i}</strong> patient={pid} trial={tid} "
+            f"<details id='{anchor}'><summary><strong>#{i}</strong> patient={pid} trial={tid} "
             f"— gold=<span class='good'>{gold}</span> predicted=<span class='bad'>{pred}</span>"
-            f"</summary><pre>{cblock}</pre></details>"
+            f"</summary><pre>{cblock}{trace_block}</pre></details>"
         )
     return section("Criterion-Level Examples", "\n".join(cards))
 
