@@ -28,6 +28,15 @@ def build_coverage_summary(prediction_records: list[dict]) -> dict:
     }
 
 
+def format_coverage_summary(coverage: dict) -> str:
+    return (
+        "\nCoverage\n"
+        f"  Total predictions       : {coverage['total_predictions']}\n"
+        f"  With missing information: {coverage['with_missing_information']}\n"
+        f"  With criterion results  : {coverage['with_criterion_results']}"
+    )
+
+
 def main() -> None:
     # Load data
     patients = load_json(PATIENTS_FILE)
@@ -91,6 +100,9 @@ def main() -> None:
     # Compute metrics
     metrics = compute_metrics(gold_labels, predictions)
 
+    # Compute coverage
+    coverage = build_coverage_summary(prediction_records)
+
     # Print summary
     print("\n=== Sample Benchmark Results ===")
     print(f"Evaluated pairs : {len(gold_labels)}")
@@ -99,10 +111,11 @@ def main() -> None:
     print("\nPer-class F1:")
     for label, values in metrics["per_class"].items():
         print(f"  {label:<15} {values['f1']:.3f}")
+    print(format_coverage_summary(coverage))
 
     # Save results
     output = {
-        "coverage": build_coverage_summary(prediction_records),
+        "coverage": coverage,
         "metrics": metrics,
         "predictions": prediction_records,
     }

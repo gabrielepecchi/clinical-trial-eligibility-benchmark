@@ -2,7 +2,7 @@
 
 import json
 
-from run_sample_benchmark import load_json, build_coverage_summary
+from run_sample_benchmark import load_json, build_coverage_summary, format_coverage_summary
 
 
 def test_load_json_returns_list(tmp_path):
@@ -138,3 +138,53 @@ def test_build_coverage_summary_with_criterion_results_counts_non_empty():
 def test_build_coverage_summary_with_criterion_results_all_empty():
     predictions = [_make_prediction(), _make_prediction()]
     assert build_coverage_summary(predictions)["with_criterion_results"] == 0
+
+
+# ---------------------------------------------------------------------------
+# Coverage summary formatting tests
+# ---------------------------------------------------------------------------
+
+_SAMPLE_COVERAGE = {
+    "total_predictions": 10,
+    "with_missing_information": 4,
+    "with_criterion_results": 7,
+}
+
+
+def test_format_coverage_summary_returns_string():
+    assert isinstance(format_coverage_summary(_SAMPLE_COVERAGE), str)
+
+
+def test_format_coverage_summary_contains_header():
+    assert "Coverage" in format_coverage_summary(_SAMPLE_COVERAGE)
+
+
+def test_format_coverage_summary_contains_total_predictions_label():
+    assert "Total predictions" in format_coverage_summary(_SAMPLE_COVERAGE)
+
+
+def test_format_coverage_summary_contains_with_missing_information_label():
+    assert "With missing information" in format_coverage_summary(_SAMPLE_COVERAGE)
+
+
+def test_format_coverage_summary_contains_with_criterion_results_label():
+    assert "With criterion results" in format_coverage_summary(_SAMPLE_COVERAGE)
+
+
+def test_format_coverage_summary_contains_total_value():
+    assert "10" in format_coverage_summary(_SAMPLE_COVERAGE)
+
+
+def test_format_coverage_summary_contains_missing_information_value():
+    assert "4" in format_coverage_summary(_SAMPLE_COVERAGE)
+
+
+def test_format_coverage_summary_contains_criterion_results_value():
+    assert "7" in format_coverage_summary(_SAMPLE_COVERAGE)
+
+
+def test_format_coverage_summary_all_zeros():
+    coverage = {"total_predictions": 0, "with_missing_information": 0, "with_criterion_results": 0}
+    result = format_coverage_summary(coverage)
+    assert isinstance(result, str)
+    assert "0" in result
