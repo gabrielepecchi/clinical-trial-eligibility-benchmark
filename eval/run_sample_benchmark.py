@@ -66,7 +66,7 @@ def format_confusion_matrix(confusion_matrix: dict) -> str:
 def format_benchmark_metadata(metadata: dict) -> str:
     return (
         "\nBenchmark metadata\n"
-        f"  Benchmark name : sample_benchmark\n"
+        f"  Benchmark name : {metadata['benchmark_name']}\n"
         f"  Patients       : {metadata['num_patients']}\n"
         f"  Trials         : {metadata['num_trials']}\n"
         f"  Label records  : {metadata['num_label_records']}\n"
