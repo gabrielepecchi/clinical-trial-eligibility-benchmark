@@ -11,6 +11,7 @@ from run_sample_benchmark import (
     format_benchmark_metadata,
     build_benchmark_output,
     build_error_cases,
+    format_error_summary,
 )
 
 _TOP_LEVEL_KEYS = {"metadata", "coverage", "label_distribution", "confusion_matrix", "metrics", "predictions", "error_cases"}
@@ -626,3 +627,35 @@ def test_build_error_cases_mixed():
     assert len(result) == 2
     assert result[0]["patient_id"] == "P002"
     assert result[1]["patient_id"] == "P003"
+
+
+# ---------------------------------------------------------------------------
+# format_error_summary tests
+# ---------------------------------------------------------------------------
+
+_TWO_ERRORS = [
+    {"patient_id": "P001", "gold_label": "eligible", "predicted_label": "not_eligible"},
+    {"patient_id": "P002", "gold_label": "not_eligible", "predicted_label": "unclear"},
+]
+
+
+def test_format_error_summary_returns_string():
+    assert isinstance(format_error_summary(_TWO_ERRORS), str)
+
+
+def test_format_error_summary_contains_errors_label():
+    assert "Errors" in format_error_summary(_TWO_ERRORS)
+
+
+def test_format_error_summary_contains_error_cases_label():
+    assert "Error cases" in format_error_summary(_TWO_ERRORS)
+
+
+def test_format_error_summary_contains_count():
+    assert "2" in format_error_summary(_TWO_ERRORS)
+
+
+def test_format_error_summary_zero_cases():
+    result = format_error_summary([])
+    assert "0" in result
+    assert "Error cases" in result

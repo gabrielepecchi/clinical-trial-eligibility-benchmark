@@ -106,6 +106,17 @@ def build_benchmark_metadata(
     }
 
 
+def build_error_cases(prediction_records: list[dict]) -> list[dict]:
+    return [r for r in prediction_records if r.get("gold_label") != r.get("predicted_label")]
+
+
+def format_error_summary(error_cases: list[dict]) -> str:
+    return (
+        "\nErrors\n"
+        f"  Error cases: {len(error_cases)}"
+    )
+
+
 def build_benchmark_output(
     metadata: dict,
     coverage: dict,
@@ -113,6 +124,7 @@ def build_benchmark_output(
     confusion_matrix: dict,
     metrics: dict,
     prediction_records: list[dict],
+    error_cases: list[dict],
 ) -> dict:
     return {
         "metadata": metadata,
@@ -121,6 +133,7 @@ def build_benchmark_output(
         "label_distribution": label_distribution,
         "metrics": metrics,
         "predictions": prediction_records,
+        "error_cases": error_cases,
     }
 
 
@@ -192,6 +205,7 @@ def main() -> None:
     label_distribution = build_label_distribution(gold_labels, predictions)
     confusion_matrix = build_confusion_matrix(gold_labels, predictions)
     metadata = build_benchmark_metadata(patients, trials, labels, prediction_records)
+    error_cases = build_error_cases(prediction_records)
 
     # Print summary
     print("\n=== Sample Benchmark Results ===")
@@ -204,6 +218,7 @@ def main() -> None:
     print(format_benchmark_metadata(metadata))
     print(format_label_distribution(label_distribution))
     print(format_confusion_matrix(confusion_matrix))
+    print(format_error_summary(error_cases))
     print(format_coverage_summary(coverage))
 
     # Save results
@@ -214,6 +229,7 @@ def main() -> None:
         confusion_matrix,
         metrics,
         prediction_records,
+        error_cases,
     )
     RESULTS_FILE.write_text(json.dumps(output, indent=2), encoding="utf-8")
     print(f"\nResults saved to {RESULTS_FILE}")
