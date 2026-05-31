@@ -17,48 +17,350 @@ table.kv th { width: 40%; background: #f8f8f8; }
 .bad  { color: #c0392b; font-weight: bold; }
 .warn { color: #e67e22; font-weight: bold; }
 pre { background: #f4f4f4; padding: .6rem; border-radius: 4px; white-space: pre-wrap; font-size: .82rem; }
+.cards { display: flex; flex-wrap: wrap; gap: .8rem; margin: .8rem 0; }
+.card { background: #f8f8f8; border: 1px solid #ddd; border-radius: 6px; padding: .7rem 1.1rem; min-width: 160px; flex: 1 1 160px; }
+.card .card-label { font-size: .8rem; color: #555; margin-bottom: .25rem; }
+.card .card-value { font-size: 1.4rem; font-weight: bold; color: #222; }
 </style>
 </head>
 <body>
 <h1>LLM-Reviewed Benchmark Report</h1>
 <div class='disclaimer'><strong>⚠ Disclaimer:</strong> This report is based on <strong>synthetic patient cases</strong> and <strong>draft LLM-reviewed labels</strong> that have not been fully validated. Results are for research and development purposes only. <strong>Not for clinical use.</strong> Label source: <code>data\processed\labels_llm_reviewed.json</code></div>
-<section>
+<section id='benchmark-metadata'>
 <h2>Benchmark Metadata</h2>
 <table class='kv'><tr><th>label_source</th><td>data\processed\labels_llm_reviewed.json</td></tr><tr><th>label_status</th><td>llm_reviewed_needs_spotcheck</td></tr><tr><th>evaluated_pairs</th><td>150</td></tr><tr><th>skipped_pairs</th><td>0</td></tr></table>
 </section>
-<section>
+<section id='report-navigation'>
+<h2>Report Navigation</h2>
+<ul><li><a href='#benchmark-metadata'>Benchmark Metadata</a></li><li><a href='#report-navigation'>Report Navigation</a></li><li><a href='#quick-metrics'>Quick Metrics</a></li><li><a href='#global-metrics'>Global Metrics</a></li><li><a href='#label-distribution'>Label Distribution</a></li><li><a href='#model-behavior-summary'>Model Behavior Summary</a></li><li><a href='#top-error-types'>Top Error Types</a></li><li><a href='#key-takeaways'>Key Takeaways</a></li><li><a href='#safety-critical-summary'>Safety-Critical Summary</a></li><li><a href='#missing-information-uncertainty-signals'>Missing Information / Uncertainty Signals</a></li><li><a href='#confusion-matrix'>Confusion Matrix</a></li><li><a href='#safety-uncertainty-summary'>Safety &amp; Uncertainty Summary</a></li><li><a href='#error-severity-summary'>Error Severity Summary</a></li><li><a href='#criterion-type-summary'>Criterion Type Summary</a></li><li><a href='#criterion-level-examples'>Criterion-Level Examples</a></li><li><a href='#generated-files'>Generated Files</a></li><li><a href='#error-analysis-from-error_analysis_llm_reviewedjson'>Error Analysis (from error_analysis_llm_reviewed.json)</a></li><li><a href='#errors-by-type'>Errors by Type</a></li><li><a href='#worst-error-examples'>Worst Error Examples</a></li><li><a href='#error-examples'>Error Examples</a></li></ul>
+</section>
+<section id='quick-metrics'>
+<h2>Quick Metrics</h2>
+<div class='cards'><div class='card'><div class='card-label'>Accuracy</div><div class='card-value'>68.7%</div></div><div class='card'><div class='card-label'>Macro F1</div><div class='card-value'>0.694</div></div><div class='card'><div class='card-label'>Unsafe Eligible Errors</div><div class='card-value'>0</div></div><div class='card'><div class='card-label'>Critical Errors</div><div class='card-value'>0</div></div><div class='card'><div class='card-label'>Major Errors</div><div class='card-value'>43</div></div><div class='card'><div class='card-label'>Overcommitment Rate</div><div class='card-value'>45.5%</div></div></div>
+</section>
+<section id='global-metrics'>
 <h2>Global Metrics</h2>
 <table class='kv'><tr><th>Accuracy</th><td>68.7%</td></tr><tr><th>Macro Precision</th><td>0.689</td></tr><tr><th>Macro Recall</th><td>0.744</td></tr><tr><th>Macro F1</th><td>0.694</td></tr></table><h3>Per-class metrics</h3><table><thead><tr><th>Label</th><th>Precision</th><th>Recall</th><th>F1</th></tr></thead><tbody><tr><td>eligible</td><td>0.582</td><td>0.780</td><td>0.667</td></tr><tr><td>not_eligible</td><td>0.644</td><td>0.906</td><td>0.753</td></tr><tr><td>unclear</td><td>0.840</td><td>0.545</td><td>0.661</td></tr></tbody></table>
 </section>
-<section>
+<section id='label-distribution'>
+<h2>Label Distribution</h2>
+<table><thead><tr><th>label</th><th>gold_count</th><th>predicted_count</th></tr></thead><tbody><tr><td>eligible</td><td>41</td><td>55</td></tr><tr><td>not_eligible</td><td>32</td><td>45</td></tr><tr><td>unclear</td><td>77</td><td>50</td></tr></tbody></table>
+</section>
+<section id='model-behavior-summary'>
+<h2>Model Behavior Summary</h2>
+<table class='kv'><tr><th>Total predictions</th><td>150</td></tr><tr><th>Predicted eligible</th><td>55</td></tr><tr><th>Predicted not_eligible</th><td>45</td></tr><tr><th>Predicted unclear</th><td>50</td></tr><tr><th>Eligible prediction rate</th><td>36.7%</td></tr><tr><th>Unclear prediction rate</th><td>33.3%</td></tr></table>
+</section>
+<section id='top-error-types'>
+<h2>Top Error Types</h2>
+<table><thead><tr><th>error_type</th><th>count</th></tr></thead><tbody><tr><td>missed_uncertainty_missing_detail</td><td>16</td></tr><tr><td>overcalled_not_eligible_instead_of_unclear</td><td>12</td></tr><tr><td>overcalled_unclear</td><td>5</td></tr><tr><td>undercalled_not_eligible_as_unclear</td><td>3</td></tr><tr><td>overcalled_eligible</td><td>3</td></tr></tbody></table>
+</section>
+<section id='key-takeaways'>
+<h2>Key Takeaways</h2>
+<ul><li>Overall accuracy is <strong>68.7%</strong> with a macro F1 of <strong>0.694</strong>.</li><li>Unsafe eligible errors (predicted eligible when gold is not_eligible): <strong>0</strong> of 150 pairs (0.0%).</li><li>Overcommitment rate on unclear gold labels: <strong>0.455</strong>.</li><li>The most frequent error type in the analysis set is <strong>missed_uncertainty_missing_detail</strong> (16 records).</li></ul>
+</section>
+<section id='safety-critical-summary'>
+<h2>Safety-Critical Summary</h2>
+<table class='kv'><tr><th>Unsafe eligible errors (not_eligible → eligible)</th><td>0</td></tr><tr><th>Critical errors</th><td>0</td></tr><tr><th>Critical error rate</th><td>0.0%</td></tr><tr><th>Major errors</th><td>43</td></tr><tr><th>Major error rate</th><td>28.7%</td></tr><tr><th>Overcommitment rate</th><td>45.5%</td></tr></table>
+</section>
+<section id='missing-information-uncertainty-signals'>
+<h2>Missing Information / Uncertainty Signals</h2>
+<table class='kv'><tr><th>Total uncertain criteria items</th><td>92</td></tr><tr><th>Predictions with uncertain criteria</th><td>61</td></tr><tr><th>Unclear gold label predictions</th><td>77</td></tr><tr><th>Unclear predicted label predictions</th><td>50</td></tr><tr><th>Overcommitted on unclear gold (predicted eligible/not_eligible)</th><td>35</td></tr></table>
+</section>
+<section id='confusion-matrix'>
 <h2>Confusion Matrix</h2>
 <table><thead><tr><th>Gold \ Predicted</th><th>eligible</th><th>not_eligible</th><th>unclear</th></tr></thead><tbody><tr><td>eligible</td><td>32</td><td>4</td><td>5</td></tr><tr><td>not_eligible</td><td>0</td><td>29</td><td>3</td></tr><tr><td>unclear</td><td>23</td><td>12</td><td>42</td></tr></tbody></table>
 </section>
-<section>
+<section id='safety-uncertainty-summary'>
 <h2>Safety &amp; Uncertainty Summary</h2>
 <table class='kv'><tr><th>Total predictions</th><td>150</td></tr><tr><th>Unsafe eligible errors (not_eligible → eligible)</th><td>0</td></tr><tr><th>Overly conservative errors (eligible → not_eligible)</th><td>4</td></tr><tr><th>Uncertainty errors (unclear → eligible/not_eligible)</th><td>35</td></tr><tr><th>Unclear recall</th><td>0.545</td></tr><tr><th>Unclear precision</th><td>0.840</td></tr><tr><th>Overcommitment rate</th><td>0.455</td></tr></table>
 </section>
-<section>
+<section id='error-severity-summary'>
 <h2>Error Severity Summary</h2>
 <table class='kv'><tr><th>Total predictions</th><td>150</td></tr><tr><th>Total errors</th><td>47</td></tr><tr><th>Critical errors (not_eligible → eligible)</th><td>0</td></tr><tr><th>Major errors</th><td>43</td></tr><tr><th>Minor errors</th><td>7</td></tr><tr><th>Critical error rate</th><td>0.0%</td></tr><tr><th>Major error rate</th><td>28.7%</td></tr><tr><th>Minor error rate</th><td>4.7%</td></tr></table>
 </section>
-<section>
+<section id='criterion-type-summary'>
 <h2>Criterion Type Summary</h2>
 <table><thead><tr><th>criterion_type</th><th>total_criteria</th><th>decision_met</th><th>decision_not_met</th><th>decision_unclear</th><th>decision_unknown</th><th>correct_pairs</th><th>total_pairs</th><th>pair_accuracy</th></tr></thead><tbody><tr><td>exclusion</td><td>1002</td><td>13</td><td>27</td><td>0</td><td>962</td><td>101</td><td>147</td><td>0.687</td></tr><tr><td>inclusion</td><td>798</td><td>221</td><td>11</td><td>0</td><td>566</td><td>103</td><td>150</td><td>0.687</td></tr></tbody></table>
 </section>
-<section>
+<section id='criterion-level-examples'>
+<h2>Criterion-Level Examples</h2>
+<details><summary><strong>#1</strong> patient=P001 trial=T001 — gold=<span class='good'>eligible</span> predicted=<span class='bad'>eligible</span></summary><pre>  criterion_type : inclusion
+  decision       : met
+  criterion      : Adult with a diagnosis of idiopathic PD by a physician or physician extender
+
+  criterion_type : inclusion
+  decision       : met
+  criterion      : Hoehn and Yahr stage I-III
+
+  criterion_type : inclusion
+  decision       : unknown
+  criterion      : Demonstrate the ability to safely mount and dismount the Peloton stationary cycle
+
+  criterion_type : inclusion
+  decision       : unknown
+  criterion      : In-home wireless network (WiFi; required for Peloton system exercise data transmission)
+
+  criterion_type : exclusion
+  decision       : unknown
+  criterion      : Participation in pharmaceutical or behavioral disease modifying PD-related clinical trial or study
+</pre></details>
+<details><summary><strong>#2</strong> patient=P006 trial=T001 — gold=<span class='good'>eligible</span> predicted=<span class='bad'>eligible</span></summary><pre>  criterion_type : inclusion
+  decision       : met
+  criterion      : Adult with a diagnosis of idiopathic PD by a physician or physician extender
+
+  criterion_type : inclusion
+  decision       : met
+  criterion      : Hoehn and Yahr stage I-III
+
+  criterion_type : inclusion
+  decision       : unknown
+  criterion      : Demonstrate the ability to safely mount and dismount the Peloton stationary cycle
+
+  criterion_type : inclusion
+  decision       : unknown
+  criterion      : In-home wireless network (WiFi; required for Peloton system exercise data transmission)
+
+  criterion_type : exclusion
+  decision       : unknown
+  criterion      : Participation in pharmaceutical or behavioral disease modifying PD-related clinical trial or study
+</pre></details>
+<details><summary><strong>#3</strong> patient=P010 trial=T001 — gold=<span class='good'>unclear</span> predicted=<span class='bad'>unclear</span></summary><pre>  criterion_type : inclusion
+  decision       : met
+  criterion      : Adult with a diagnosis of idiopathic PD by a physician or physician extender
+
+  criterion_type : inclusion
+  decision       : met
+  criterion      : Hoehn and Yahr stage I-III
+
+  criterion_type : inclusion
+  decision       : unknown
+  criterion      : Demonstrate the ability to safely mount and dismount the Peloton stationary cycle
+
+  criterion_type : inclusion
+  decision       : unknown
+  criterion      : In-home wireless network (WiFi; required for Peloton system exercise data transmission)
+
+  criterion_type : exclusion
+  decision       : unknown
+  criterion      : Participation in pharmaceutical or behavioral disease modifying PD-related clinical trial or study
+</pre></details>
+<details><summary><strong>#4</strong> patient=P002 trial=T002 — gold=<span class='good'>eligible</span> predicted=<span class='bad'>eligible</span></summary><pre>  criterion_type : inclusion
+  decision       : unknown
+  criterion      : 1. The patients who voluntarily participate in the study, fully understand the content, process, and possible adverse events of the trial, can complete the study according to the requirements of the study protocol, and sign the informed consent form.
+
+  criterion_type : inclusion
+  decision       : met
+  criterion      : 2. The patients with clinically diagnosed Parkinson's disease (as per PD diagnostic criteria, China, 2016) and the course of disease for at least 5 years at the time of screening.
+
+  criterion_type : inclusion
+  decision       : unknown
+  criterion      : 3. The patient must be 45-70 years old (inclusive) on the day signing the informed consent form.
+
+  criterion_type : inclusion
+  decision       : unknown
+  criterion      : 4. The patients who are receiving Levodopa treatment with clear response to Levodopa treatment.
+
+  criterion_type : inclusion
+  decision       : unknown
+  criterion      : 5. The patients showing stable clinical symptoms within 1 month before baseline, with drug dosage remain the same.
+</pre></details>
+<details><summary><strong>#5</strong> patient=P005 trial=T002 — gold=<span class='good'>unclear</span> predicted=<span class='bad'>unclear</span></summary><pre>  criterion_type : inclusion
+  decision       : unknown
+  criterion      : 1. The patients who voluntarily participate in the study, fully understand the content, process, and possible adverse events of the trial, can complete the study according to the requirements of the study protocol, and sign the informed consent form.
+
+  criterion_type : inclusion
+  decision       : met
+  criterion      : 2. The patients with clinically diagnosed Parkinson's disease (as per PD diagnostic criteria, China, 2016) and the course of disease for at least 5 years at the time of screening.
+
+  criterion_type : inclusion
+  decision       : unknown
+  criterion      : 3. The patient must be 45-70 years old (inclusive) on the day signing the informed consent form.
+
+  criterion_type : inclusion
+  decision       : unknown
+  criterion      : 4. The patients who are receiving Levodopa treatment with clear response to Levodopa treatment.
+
+  criterion_type : inclusion
+  decision       : unknown
+  criterion      : 5. The patients showing stable clinical symptoms within 1 month before baseline, with drug dosage remain the same.
+</pre></details>
+<details><summary><strong>#6</strong> patient=P009 trial=T002 — gold=<span class='good'>not_eligible</span> predicted=<span class='bad'>not_eligible</span></summary><pre>  criterion_type : inclusion
+  decision       : unknown
+  criterion      : 1. The patients who voluntarily participate in the study, fully understand the content, process, and possible adverse events of the trial, can complete the study according to the requirements of the study protocol, and sign the informed consent form.
+
+  criterion_type : inclusion
+  decision       : met
+  criterion      : 2. The patients with clinically diagnosed Parkinson's disease (as per PD diagnostic criteria, China, 2016) and the course of disease for at least 5 years at the time of screening.
+
+  criterion_type : inclusion
+  decision       : unknown
+  criterion      : 3. The patient must be 45-70 years old (inclusive) on the day signing the informed consent form.
+
+  criterion_type : inclusion
+  decision       : unknown
+  criterion      : 4. The patients who are receiving Levodopa treatment with clear response to Levodopa treatment.
+
+  criterion_type : inclusion
+  decision       : unknown
+  criterion      : 5. The patients showing stable clinical symptoms within 1 month before baseline, with drug dosage remain the same.
+</pre></details>
+<details><summary><strong>#7</strong> patient=P004 trial=T003 — gold=<span class='good'>not_eligible</span> predicted=<span class='bad'>not_eligible</span></summary><pre>  criterion_type : inclusion
+  decision       : met
+  criterion      : Diagnosis of Huntington's disease or Parkinson's disease
+
+  criterion_type : inclusion
+  decision       : met
+  criterion      : Age 21 or older
+
+  criterion_type : inclusion
+  decision       : unknown
+  criterion      : Has anxiety symptoms (NeuroQoL Anxiety short form \&gt;12)
+
+  criterion_type : exclusion
+  decision       : unknown
+  criterion      : Unable to read and understand English
+
+  criterion_type : exclusion
+  decision       : met
+  criterion      : Previously diagnosed with dementia
+</pre></details>
+<details><summary><strong>#8</strong> patient=P007 trial=T003 — gold=<span class='good'>not_eligible</span> predicted=<span class='bad'>not_eligible</span></summary><pre>  criterion_type : inclusion
+  decision       : met
+  criterion      : Diagnosis of Huntington's disease or Parkinson's disease
+
+  criterion_type : inclusion
+  decision       : met
+  criterion      : Age 21 or older
+
+  criterion_type : inclusion
+  decision       : unknown
+  criterion      : Has anxiety symptoms (NeuroQoL Anxiety short form \&gt;12)
+
+  criterion_type : exclusion
+  decision       : unknown
+  criterion      : Unable to read and understand English
+
+  criterion_type : exclusion
+  decision       : met
+  criterion      : Previously diagnosed with dementia
+</pre></details>
+<details><summary><strong>#9</strong> patient=P008 trial=T003 — gold=<span class='good'>unclear</span> predicted=<span class='bad'>eligible</span></summary><pre>  criterion_type : inclusion
+  decision       : met
+  criterion      : Diagnosis of Huntington's disease or Parkinson's disease
+
+  criterion_type : inclusion
+  decision       : met
+  criterion      : Age 21 or older
+
+  criterion_type : inclusion
+  decision       : unknown
+  criterion      : Has anxiety symptoms (NeuroQoL Anxiety short form \&gt;12)
+
+  criterion_type : exclusion
+  decision       : unknown
+  criterion      : Unable to read and understand English
+
+  criterion_type : exclusion
+  decision       : unknown
+  criterion      : Previously diagnosed with dementia
+</pre></details>
+<details><summary><strong>#10</strong> patient=P003 trial=T004 — gold=<span class='good'>unclear</span> predicted=<span class='bad'>unclear</span></summary><pre>  criterion_type : inclusion
+  decision       : met
+  criterion      : diagnosis of PD according to the UK Brain Bank criteria;
+
+  criterion_type : inclusion
+  decision       : unknown
+  criterion      : ability to walk independently;
+
+  criterion_type : inclusion
+  decision       : unknown
+  criterion      : absence of relevant hearing impairments which could prevent the correct perception of the auditory cues;
+
+  criterion_type : inclusion
+  decision       : unknown
+  criterion      : absence of significant cognitive impairment (i.e., Mini-Mental Status Examination (MMSE) \&gt; 24; Frontal Assessment Battery (FAB) \&gt; 13);
+
+  criterion_type : inclusion
+  decision       : unknown
+  criterion      : absence of psychiatric or severe systemic illnesses;
+</pre></details>
+</section>
+<section id='generated-files'>
 <h2>Generated Files</h2>
 <ul><li><code>data/processed/results_llm_reviewed.json</code></li><li><code>data/processed/results_llm_reviewed.csv</code></li><li><code>data/processed/criterion_level_results.csv</code></li><li><code>data/processed/criterion_type_summary.json</code></li><li><code>data/processed/criterion_type_summary.csv</code></li><li><code>data/processed/error_analysis_llm_reviewed.json</code></li><li><code>data/processed/error_analysis_llm_reviewed.csv</code></li><li><code>reports/benchmark_report.html</code></li></ul>
 </section>
-<section>
+<section id='error-analysis-from-error_analysis_llm_reviewedjson'>
 <h2>Error Analysis (from error_analysis_llm_reviewed.json)</h2>
 <p>47 error analysis records loaded.</p>
 </section>
-<section>
+<section id='errors-by-type'>
 <h2>Errors by Type</h2>
 <h3>Errors by error_type</h3><table><thead><tr><th>error_type</th><th>count</th></tr></thead><tbody><tr><td>missed_uncertainty_missing_detail</td><td>16</td></tr><tr><td>overcalled_not_eligible_instead_of_unclear</td><td>12</td></tr><tr><td>overcalled_unclear</td><td>5</td></tr><tr><td>undercalled_not_eligible_as_unclear</td><td>3</td></tr><tr><td>overcalled_eligible</td><td>3</td></tr><tr><td>missed_device_uncertainty</td><td>2</td></tr><tr><td>missed_safety_uncertainty</td><td>2</td></tr><tr><td>overcalled_not_eligible</td><td>2</td></tr><tr><td>overstrict_dbs_rule</td><td>1</td></tr><tr><td>overstrict_age_or_stage_rule</td><td>1</td></tr></tbody></table><h3>Errors by Gold/Predicted Pair</h3><table><thead><tr><th>Gold label</th><th>Predicted label</th><th>Count</th></tr></thead><tbody><tr><td>unclear</td><td>eligible</td><td>23</td></tr><tr><td>unclear</td><td>not_eligible</td><td>12</td></tr><tr><td>eligible</td><td>unclear</td><td>5</td></tr><tr><td>eligible</td><td>not_eligible</td><td>4</td></tr><tr><td>not_eligible</td><td>unclear</td><td>3</td></tr></tbody></table>
 </section>
-<section>
+<section id='worst-error-examples-top-10'>
+<h2>Worst Error Examples (top 10)</h2>
+<details><summary><strong>#1</strong> patient=P008 trial=T003 — gold=<span class='good'>unclear</span> predicted=<span class='bad'>eligible</span> [<strong>major</strong>]</summary><pre>Severity          : major
+Matcher explanation:
+No blocking or uncertain criteria identified. Matched facts: patient age 69 within age &gt;= 21; Parkinson disease diagnosis confirmed.
+
+Gold rationale:
+REM sleep behavior disorder symptoms are present; it is unclear whether this constitutes an exclusion in this neuropsychiatric protocol.</pre></details>
+<details><summary><strong>#2</strong> patient=P012 trial=T004 — gold=<span class='good'>unclear</span> predicted=<span class='bad'>not_eligible</span> [<strong>major</strong>]</summary><pre>Severity          : major
+Matcher explanation:
+Patient does not meet eligibility requirements. Blocking criteria: Parkinson disease diagnosis required.
+
+Gold rationale:
+Patient is a healthy control; the E-RAS trial targets individuals with PD, but the summary does not clarify whether healthy controls are included as a comparator arm.</pre></details>
+<details><summary><strong>#3</strong> patient=P019 trial=T005 — gold=<span class='good'>unclear</span> predicted=<span class='bad'>not_eligible</span> [<strong>major</strong>]</summary><pre>Severity          : major
+Matcher explanation:
+Patient does not meet eligibility requirements. Blocking criteria: cognitive exclusion: trial excludes patients with dementia or cognitive impairment.
+
+Gold rationale:
+No prior DBS confirmed; study requires DBS candidacy or implantation, but protocol details are unavailable to determine whether naive candidates qualify.</pre></details>
+<details><summary><strong>#4</strong> patient=P003 trial=T005 — gold=<span class='good'>unclear</span> predicted=<span class='bad'>not_eligible</span> [<strong>major</strong>]</summary><pre>Severity          : major
+Matcher explanation:
+Patient does not meet eligibility requirements. Blocking criteria: deep brain stimulation (DBS) implant is an exclusion criterion.
+
+Gold rationale:
+Patient has prior bilateral DBS; whether the DBS international study targets already-implanted patients or new candidates cannot be determined from the summary.</pre></details>
+<details><summary><strong>#5</strong> patient=P013 trial=T006 — gold=<span class='good'>unclear</span> predicted=<span class='bad'>not_eligible</span> [<strong>major</strong>]</summary><pre>Severity          : major
+Matcher explanation:
+Patient does not meet eligibility requirements. Blocking criteria: trial requires idiopathic Parkinson disease for treatment/intervention; patient has atypical or unclear parkinsonism.
+
+Gold rationale:
+Atypical parkinsonism with poor levodopa response may not meet inclusion criteria for a PD-specific intervention; confirmation of PD diagnosis is unclear.</pre></details>
+<details><summary><strong>#6</strong> patient=P012 trial=T007 — gold=<span class='good'>not_eligible</span> predicted=<span class='bad'>unclear</span> [<strong>major</strong>]</summary><pre>Severity          : major
+Matcher explanation:
+Eligibility cannot be determined due to missing or unverifiable information. Uncertain criteria: patient is a healthy control/volunteer; Parkinson disease may be required but trial scope is ambiguous.
+
+Gold rationale:
+Healthy control without PD does not meet the inclusion criterion for a PD enteric nervous system study unless a control arm is specified, which is not confirmed.</pre></details>
+<details><summary><strong>#7</strong> patient=P014 trial=T008 — gold=<span class='good'>unclear</span> predicted=<span class='bad'>eligible</span> [<strong>major</strong>]</summary><pre>Severity          : major
+Matcher explanation:
+No blocking or uncertain criteria identified. Matched facts: Parkinson disease diagnosis confirmed.
+
+Gold rationale:
+Patient has PD with autonomic dysfunction; it is unclear whether orthostatic hypotension is an exclusion for a general PD rehabilitation quality-of-life study.</pre></details>
+<details><summary><strong>#8</strong> patient=P020 trial=T008 — gold=<span class='good'>unclear</span> predicted=<span class='bad'>eligible</span> [<strong>major</strong>]</summary><pre>Severity          : major
+Matcher explanation:
+No blocking or uncertain criteria identified. Matched facts: Parkinson disease diagnosis confirmed.
+
+Gold rationale:
+Missing disease duration and severity details prevent confirmation of key inclusion criteria for a rehabilitation quality-of-life trial.</pre></details>
+<details><summary><strong>#9</strong> patient=P018 trial=T009 — gold=<span class='good'>unclear</span> predicted=<span class='bad'>not_eligible</span> [<strong>major</strong>]</summary><pre>Severity          : major
+Matcher explanation:
+Patient does not meet eligibility requirements. Blocking criteria: trial requires age &gt;= 60.
+
+Gold rationale:
+Cardiac pacemaker is present; home physiotherapy without electrical stimulation may not be contraindicated, but pacemaker safety in this specific protocol cannot be confirmed.</pre></details>
+<details><summary><strong>#10</strong> patient=P019 trial=T011 — gold=<span class='good'>unclear</span> predicted=<span class='bad'>eligible</span> [<strong>major</strong>]</summary><pre>Severity          : major
+Matcher explanation:
+No blocking or uncertain criteria identified. Matched facts: Parkinson disease diagnosis confirmed.
+
+Gold rationale:
+Patient has PD with imaging workup; fMRI-DBS study may require active DBS candidacy or hardware that is not confirmed in this summary.</pre></details>
+</section>
+<section id='error-examples-first-15'>
 <h2>Error Examples (first 15)</h2>
 <details><summary><strong>#1</strong> patient=P008 trial=T003 — gold=<span class='good'>unclear</span> predicted=<span class='bad'>eligible</span></summary><pre>Blocking criteria : 
 Uncertain criteria: 
@@ -166,6 +468,7 @@ No blocking or uncertain criteria identified. Matched facts: Parkinson disease d
 Gold rationale:
 Depression is present; a LCIG non-motor symptoms trial may or may not exclude psychiatric comorbidities depending on scope.</pre></details>
 </section>
+<footer style='margin-top:3rem;padding-top:1rem;border-top:1px solid #ddd;font-size:.85rem;color:#666;'><p>This report was <strong>generated locally</strong> from benchmark results. All patient data consists of <strong>synthetic patients</strong> only. Labels are <strong>draft LLM-reviewed labels</strong> that have not been fully validated. <strong>Not for clinical use.</strong></p></footer>
 
 </body>
 </html>
