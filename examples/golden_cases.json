@@ -1,0 +1,186 @@
+{
+  "metadata": {
+    "source_file": "unified_benchmark.json",
+    "purpose": "Small human-readable golden example set for demos and regression checks",
+    "warning": "Synthetic patients, draft LLM-reviewed labels, not clinical gold, not for clinical use",
+    "total_cases": 10,
+    "label_distribution": {
+      "eligible": 4,
+      "not_eligible": 4,
+      "unclear": 2
+    }
+  },
+  "cases": [
+    {
+      "benchmark_id": "P001__T001",
+      "patient_id": "P001",
+      "trial_id": "T001",
+      "gold_label": "eligible",
+      "label_status": "llm_reviewed_needs_spotcheck",
+      "short_rationale": "Patient has confirmed idiopathic PD with motor symptoms and uses levodopa. No exclusion criteria identified for a lower-extremity exercise trial.",
+      "key_patient_facts": [
+        "Idiopathic Parkinson disease confirmed",
+        "Motor symptoms present",
+        "Levodopa use documented"
+      ],
+      "key_trial_criteria": [
+        "Parkinson disease diagnosis required"
+      ],
+      "why_this_case_is_useful": "Simple eligible case. PD diagnosis is the sole operative criterion and is clearly met. Good regression anchor for the most common include path."
+    },
+    {
+      "benchmark_id": "P002__T002",
+      "patient_id": "P002",
+      "trial_id": "T002",
+      "gold_label": "eligible",
+      "label_status": "llm_reviewed_needs_spotcheck",
+      "short_rationale": "Patient has advanced PD with motor fluctuations on levodopa. Age 70 meets the 45-70 range. Consistent with inclusion criteria for a safety/tolerability study.",
+      "key_patient_facts": [
+        "Advanced PD with motor fluctuations",
+        "Age 70",
+        "Levodopa therapy ongoing"
+      ],
+      "key_trial_criteria": [
+        "Age 45-70 required",
+        "Parkinson disease diagnosis required",
+        "Advanced PD severity required"
+      ],
+      "why_this_case_is_useful": "Eligible case where both age and disease severity criteria are explicitly matched. Tests numeric age boundary (70 = upper limit) and advanced-stage logic."
+    },
+    {
+      "benchmark_id": "P001__T006",
+      "patient_id": "P001",
+      "trial_id": "T006",
+      "gold_label": "eligible",
+      "label_status": "llm_reviewed_needs_spotcheck",
+      "short_rationale": "Patient has confirmed idiopathic PD, age 62 within the 50-80 range. No exclusion criteria identified for a blood pressure and tyrosine supplementation study.",
+      "key_patient_facts": [
+        "Idiopathic Parkinson disease confirmed",
+        "Age 62"
+      ],
+      "key_trial_criteria": [
+        "Age 50-80 required",
+        "Idiopathic PD required"
+      ],
+      "why_this_case_is_useful": "Clean eligible case with explicit age range match. Useful for verifying that idiopathic PD inclusion and numeric age rules fire correctly together."
+    },
+    {
+      "benchmark_id": "P006__T001",
+      "patient_id": "P006",
+      "trial_id": "T001",
+      "gold_label": "eligible",
+      "label_status": "llm_reviewed_needs_spotcheck",
+      "short_rationale": "Patient has PD with freezing of gait, which is directly relevant to a lower-extremity exercise trial. No exclusion criteria identified.",
+      "key_patient_facts": [
+        "PD with freezing of gait",
+        "Motor impairment documented"
+      ],
+      "key_trial_criteria": [
+        "Parkinson disease diagnosis required"
+      ],
+      "why_this_case_is_useful": "Eligible case where a specific motor symptom (FoG) aligns with the trial focus. Tests that symptom-positive patients are not incorrectly blocked."
+    },
+    {
+      "benchmark_id": "P009__T002",
+      "patient_id": "P009",
+      "trial_id": "T002",
+      "gold_label": "not_eligible",
+      "label_status": "llm_reviewed_needs_spotcheck",
+      "short_rationale": "Patient has early-onset PD without advanced disease markers. The trial requires advanced PD severity. Age 45 is within range but disease stage does not qualify.",
+      "key_patient_facts": [
+        "Early-onset PD",
+        "No advanced disease markers present",
+        "Age 45"
+      ],
+      "key_trial_criteria": [
+        "Advanced PD severity required",
+        "Age 45-70 required"
+      ],
+      "why_this_case_is_useful": "Not-eligible case where age criterion passes but disease severity fails. Tests that the matcher does not conflate age eligibility with overall eligibility."
+    },
+    {
+      "benchmark_id": "P004__T003",
+      "patient_id": "P004",
+      "trial_id": "T003",
+      "gold_label": "not_eligible",
+      "label_status": "llm_reviewed_needs_spotcheck",
+      "short_rationale": "Cognitive impairment with low MoCA score meets the exclusion criterion for a cognitive/neuropsychiatric protocol requiring intact cognition.",
+      "key_patient_facts": [
+        "Cognitive impairment documented",
+        "Low MoCA score"
+      ],
+      "key_trial_criteria": [
+        "Trial excludes patients with dementia or cognitive impairment"
+      ],
+      "why_this_case_is_useful": "Not-eligible case driven by a cognitive exclusion. Tests that the exclusion rule fires correctly when cognitive impairment is documented. Common and important pattern."
+    },
+    {
+      "benchmark_id": "P004__T005",
+      "patient_id": "P004",
+      "trial_id": "T005",
+      "gold_label": "not_eligible",
+      "label_status": "llm_reviewed_needs_spotcheck",
+      "short_rationale": "Cognitive impairment with low MoCA is a standard exclusion for DBS surgical trials due to neuropsychiatric risk.",
+      "key_patient_facts": [
+        "Cognitive impairment documented",
+        "Low MoCA score",
+        "No DBS history"
+      ],
+      "key_trial_criteria": [
+        "Trial excludes patients with dementia or cognitive impairment",
+        "DBS candidacy or implantation required"
+      ],
+      "why_this_case_is_useful": "Not-eligible case where cognitive exclusion applies in a DBS surgical context. Shows the cognitive exclusion rule generalises across trial types."
+    },
+    {
+      "benchmark_id": "P011__T006",
+      "patient_id": "P011",
+      "trial_id": "T006",
+      "gold_label": "not_eligible",
+      "label_status": "llm_reviewed_needs_spotcheck",
+      "short_rationale": "Suspected parkinsonism with unclear final diagnosis does not meet the confirmed idiopathic PD inclusion requirement for this trial.",
+      "key_patient_facts": [
+        "Suspected parkinsonism",
+        "Diagnosis not confirmed as idiopathic PD"
+      ],
+      "key_trial_criteria": [
+        "Idiopathic Parkinson disease required"
+      ],
+      "why_this_case_is_useful": "Not-eligible case where diagnostic uncertainty results in exclusion. Contrasts with Cases 9 and 10 where diagnostic uncertainty produces unclear rather than not_eligible."
+    },
+    {
+      "benchmark_id": "P010__T001",
+      "patient_id": "P010",
+      "trial_id": "T001",
+      "gold_label": "unclear",
+      "label_status": "llm_reviewed_needs_spotcheck",
+      "short_rationale": "Patient has PD and frailty. Frailty may affect ability to participate in a pragmatic exercise trial but no explicit exclusion for frailty is stated in the protocol.",
+      "key_patient_facts": [
+        "PD confirmed",
+        "Frailty documented"
+      ],
+      "key_trial_criteria": [
+        "Parkinson disease diagnosis required",
+        "No explicit frailty exclusion stated"
+      ],
+      "why_this_case_is_useful": "Unclear case driven by an unresolved safety signal. Frailty is present and potentially relevant but not explicitly excluded. Tests whether the matcher flags comorbidity ambiguity."
+    },
+    {
+      "benchmark_id": "P018__T004",
+      "patient_id": "P018",
+      "trial_id": "T004",
+      "gold_label": "unclear",
+      "label_status": "llm_reviewed_needs_spotcheck",
+      "short_rationale": "Patient has an implanted cardiac pacemaker. Acoustic stimulation devices may be contraindicated with pacemakers, but this is not confirmed in the trial summary.",
+      "key_patient_facts": [
+        "PD confirmed",
+        "Implanted cardiac pacemaker present"
+      ],
+      "key_trial_criteria": [
+        "Device-based acoustic stimulation trial",
+        "Pacemaker contraindication not explicitly stated"
+      ],
+      "why_this_case_is_useful": "Unclear case driven by a device safety signal. Pacemaker presence is clinically meaningful in a stimulation device trial but the protocol does not explicitly address it. Important pattern for device trial coverage."
+    }
+  ]
+}
