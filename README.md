@@ -108,6 +108,56 @@ Label: `unclear` — arrhythmia type is unspecified; eligibility cannot be deter
 
 These results reflect the genuine difficulty of eligibility reasoning from free-text criteria. Criteria are often verbose, ambiguous, or require multi-step inference. Modest scores indicate room for improvement in clinical NLP, not a flaw in the benchmark design.
 
+## Example Benchmark Case
+
+Below is an illustrative synthetic benchmark case showing the structure of patient, trial criteria, expected label, and matcher reasoning.
+
+**Synthetic Patient Profile:**
+```json
+{
+  "patient_id": "P_demo_047",
+  "age": 62,
+  "sex": "female",
+  "diagnosis": "idiopathic Parkinson disease",
+  "diagnosis_duration_years": 5,
+  "hoehn_yahr_stage": 2,
+  "updrs_iii_score": 32,
+  "medications": ["levodopa/carbidopa 300mg daily", "rasagiline 1mg daily"],
+  "dbs_history": false,
+  "cognitive_status": "normal",
+  "recent_trial_participation": false
+}
+```
+
+**Trial Eligibility Criteria (excerpt):**
+```
+Inclusion:
+  - Age 40–80 years
+  - Diagnosis of idiopathic Parkinson disease
+  - UPDRS III score between 20 and 40
+
+Exclusion:
+  - Current use of MAO-B inhibitor
+  - Prior deep brain stimulation
+  - Montreal Cognitive Assessment (MoCA) score < 26
+```
+
+**Expected Label (Gold):** `not_eligible`  
+**Matcher Prediction:** `eligible`  
+**Correct:** No (false positive)
+
+**Criterion-Level Reasoning (illustrative):**
+- ✓ Age 62 — within 40–80 range
+- ✓ Diagnosis — idiopathic Parkinson disease matches
+- ✓ UPDRS III 32 — within 20–40 range
+- ✗ **MAO-B inhibitor exclusion** — rasagiline (a MAO-B inhibitor) is listed in medications → **exclusion violated**
+- ✓ MoCA — not documented in profile, but cognitive_status is "normal" (heuristic pass)
+- ✓ DBS history — false (not prior DBS)
+
+**Analysis:** This case illustrates a common failure mode: the matcher may not reliably detect MAO-B inhibitor exclusions when medication names are given in full form. The patient should be marked `not_eligible` due to the explicit exclusion, but the matcher predicted `eligible` — a critical over-commitment error.
+
+---
+
 ## How to Read the Results
 
 - **Macro F1 of ~0.44** signals that the task is genuinely difficult across all three labels — no single label dominates and the model cannot succeed by defaulting to a majority class
