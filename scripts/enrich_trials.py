@@ -1,9 +1,12 @@
 """
-enrich_trials.py — Task 12: Trial metadata enrichment.
+enrich_trials.py — Task 12: Eligibility-focused trial metadata enrichment.
 
-Reads data/processed/trial_cases.json, adds or normalizes metadata fields
-extracted from existing trial content only, and writes
-data/processed/trial_cases_enriched.json.
+Complements enrich_trial_metadata.py (which handles nct_id, title, phase,
+status, intervention_type, condition). This script focuses on eligibility
+constraints extracted from existing trial content only.
+
+Reads  : data/processed/trial_cases.json
+Writes : data/processed/trial_cases_eligibility_enriched.json
 
 Usage:
     PYTHONPATH=. python scripts/enrich_trials.py
@@ -16,7 +19,7 @@ import sys
 import argparse
 
 DEFAULT_INPUT = "data/processed/trial_cases.json"
-DEFAULT_OUTPUT = "data/processed/trial_cases_enriched.json"
+DEFAULT_OUTPUT = "data/processed/trial_cases_eligibility_enriched.json"
 
 
 # ---------------------------------------------------------------------------
@@ -38,7 +41,7 @@ def load_trial_cases(path: str) -> list:
         return data
     if isinstance(data, dict) and "trials" in data:
         return data["trials"]
-    print("ERROR: Unexpected JSON structure; expected a list or dict with 'trials'.", file=sys.stderr)
+    print("ERROR: Expected a JSON list or dict with 'trials'.", file=sys.stderr)
     sys.exit(1)
 
 
@@ -49,7 +52,7 @@ def write_trial_cases(trials: list, path: str) -> None:
 
 
 # ---------------------------------------------------------------------------
-# Text collection
+# Text helpers
 # ---------------------------------------------------------------------------
 
 def collect_text_values(obj) -> str:
@@ -66,62 +69,53 @@ def collect_text_values(obj) -> str:
     return " ".join(p for p in parts if p)
 
 
+def extract_criteria_text(trial: dict) -> tuple:
+    """
+    Return (inclusion_text, exclusion_text, full_text) as lowercase strings.
+    Draws from inclusion_criteria, exclusion_criteria, and raw_eligibility.
+    """
+    def _join(val) -> str:
+        if isinstance(val, list):
+            return " ".join(str(v) for v in val).lower()
+        if isinstance(val, str):
+            return val.lower()
+        return ""
+
+    inc = _join(trial.get("inclusion_criteria", ""))
+    exc = _join(trial.get("exclusion_criteria", ""))
+    raw = _join(trial.get("raw_eligibility", ""))
+    full = " ".join([inc, exc, raw, collect_text_values(trial)])
+    return inc, exc, full
+
+
 # ---------------------------------------------------------------------------
 # Field extractors
 # ---------------------------------------------------------------------------
 
-def _extract_phase(text: str, trial: dict):
-    """Return trial phase string or empty string."""
-    existing = trial.get("phase", "")
-    if existing:
-        return str(existing)
-    m = re.search(r"phase\s+([1-4](?:[a-b])?|i{1,3}v?|iv)", text)
-    if m:
-        raw = m.group(1).upper()
-        mapping = {"I": "1", "II": "2", "III": "3", "IV": "4",
-                   "IIA": "2a", "IIB": "2b", "IIIA": "3a", "IIIB": "3b"}
-        return mapping.get(raw, raw)
-    return ""
+def _parse_age_years(value) -> int | None:
+    """Parse '45 Years', 45, '45', etc. to int or None."""
+    if value is None or value == "":
+        return None
+    try:
+        return int(float(str(value).split()[0]))
+    except (ValueError, IndexError):
+        return None
 
 
-def _extract_condition(text: str, trial: dict):
-    """Return primary condition string or empty string."""
-    existing = trial.get("condition", "") or trial.get("primary_condition", "")
-    if existing:
-        return str(existing)
-    if re.search(r"parkinson", text):
-        return "Parkinson disease"
-    return ""
-
-
-def _extract_sponsor_type(text: str, trial: dict):
-    """Return 'industry', 'academic', or empty string."""
-    existing = trial.get("sponsor_type", "")
-    if existing:
-        return str(existing)
-    if re.search(r"\b(pharma|biotech|inc\.|ltd\.|corp\.|industry|sponsor)\b", text):
-        return "industry"
-    if re.search(r"\b(university|hospital|academic|institute|nih|nih-funded|foundation)\b", text):
-        return "academic"
-    return ""
-
-
-def _extract_min_age(text: str, trial: dict):
-    """Return minimum age as int, or None."""
-    existing = trial.get("min_age") or trial.get("minimum_age")
+def _extract_min_age(full: str, trial: dict) -> int | None:
+    existing = _parse_age_years(
+        trial.get("minimum_age") or trial.get("min_age")
+    )
     if existing is not None:
-        try:
-            return int(existing)
-        except (TypeError, ValueError):
-            pass
+        return existing
     patterns = [
-        r"(?:age(?:d)?|participants?)\s+(?:≥|>=|at\s+least|minimum\s+of?)\s+(\d+)",
-        r"(\d+)\s*(?:years?\s+(?:of\s+age\s+)?or\s+older)",
-        r"minimum\s+age[:\s]+(\d+)",
-        r"age\s+range[:\s]+(\d+)\s*[-–]",
+        r"(?:age(?:d)?|participants?)\s*(?:≥|>=|at\s+least|minimum\s+of?)\s*(\d+)",
+        r"(\d+)\s*years?\s+(?:of\s+age\s+)?or\s+older",
+        r"must\s+be\s+(\d+)\s*[-–]\s*\d+\s*years?\s+old",
+        r"aged?\s+(\d+)\s*[-–]",
     ]
     for pat in patterns:
-        m = re.search(pat, text)
+        m = re.search(pat, full)
         if m:
             try:
                 return int(m.group(1))
@@ -130,23 +124,20 @@ def _extract_min_age(text: str, trial: dict):
     return None
 
 
-def _extract_max_age(text: str, trial: dict):
-    """Return maximum age as int, or None."""
-    existing = trial.get("max_age") or trial.get("maximum_age")
+def _extract_max_age(full: str, trial: dict) -> int | None:
+    existing = _parse_age_years(
+        trial.get("maximum_age") or trial.get("max_age")
+    )
     if existing is not None:
-        try:
-            return int(existing)
-        except (TypeError, ValueError):
-            pass
+        return existing
     patterns = [
-        r"(?:age(?:d)?|participants?)\s+(?:≤|<=|no\s+more\s+than|at\s+most|maximum\s+of?)\s+(\d+)",
-        r"(\d+)\s*(?:years?\s+(?:of\s+age\s+)?or\s+(?:younger|below|under))",
-        r"maximum\s+age[:\s]+(\d+)",
-        r"age\s+range[:\s]+\d+\s*[-–]\s*(\d+)",
+        r"(?:age(?:d)?|participants?)\s*(?:≤|<=|no\s+more\s+than|at\s+most|maximum\s+of?)\s*(\d+)",
+        r"(\d+)\s*years?\s+(?:of\s+age\s+)?or\s+(?:younger|below|under)",
+        r"must\s+be\s+\d+\s*[-–]\s*(\d+)\s*years?\s+old",
         r"aged?\s+\d+\s*[-–]\s*(\d+)",
     ]
     for pat in patterns:
-        m = re.search(pat, text)
+        m = re.search(pat, full)
         if m:
             try:
                 return int(m.group(1))
@@ -155,92 +146,230 @@ def _extract_max_age(text: str, trial: dict):
     return None
 
 
-def _extract_sex_restriction(text: str, trial: dict):
-    """Return 'male', 'female', 'all', or empty string."""
-    existing = trial.get("sex_restriction", "") or trial.get("sex", "")
-    if existing and str(existing).lower() not in ("any", ""):
-        return str(existing).lower()
-    if re.search(r"\bmale(?:s)?\s+only\b|\bmen\s+only\b", text):
+def _extract_age_unit(trial: dict) -> str:
+    """Return 'Years' or empty string from existing age fields."""
+    for field in ("minimum_age", "maximum_age"):
+        val = trial.get(field, "")
+        if isinstance(val, str) and "year" in val.lower():
+            return "Years"
+    return "Years"  # default for clinical trials
+
+
+def _extract_sex_restriction(full: str, trial: dict) -> str:
+    existing = trial.get("sex", "") or trial.get("sex_restriction", "")
+    if existing:
+        s = str(existing).upper()
+        if s in ("ALL", "BOTH"):
+            return "all"
+        if s in ("MALE", "M"):
+            return "male"
+        if s in ("FEMALE", "F"):
+            return "female"
+    if re.search(r"\bmale(?:s)?\s+only\b|\bmen\s+only\b", full):
         return "male"
-    if re.search(r"\bfemale(?:s)?\s+only\b|\bwomen\s+only\b", text):
+    if re.search(r"\bfemale(?:s)?\s+only\b|\bwomen\s+only\b", full):
         return "female"
-    if re.search(r"\ball\s+(?:sexes|genders)\b|\bboth\s+(?:sexes|genders)\b", text):
+    if re.search(r"\ball\s+(?:sexes|genders)\b|\bboth\s+(?:sexes|genders)\b", full):
         return "all"
     return ""
 
 
-def _extract_healthy_volunteers(text: str, trial: dict):
-    """Return True if healthy volunteers accepted, False if excluded, None if unknown."""
+def _extract_healthy_volunteers(full: str, trial: dict) -> bool | None:
     existing = trial.get("healthy_volunteers")
     if existing is not None:
-        return existing
-    if re.search(r"no\s+healthy\s+volunteers|healthy\s+volunteers?\s+(?:not\s+accepted|excluded|not\s+eligible)", text):
+        return bool(existing)
+    if re.search(r"no\s+healthy\s+volunteers|healthy\s+volunteers?\s+(?:not\s+accepted|excluded|not\s+eligible)", full):
         return False
-    if re.search(r"healthy\s+volunteers?\s+(?:accepted|welcome|eligible|allowed|included)", text):
+    if re.search(r"healthy\s+volunteers?\s+(?:accepted|welcome|eligible|allowed|included)", full):
         return True
     return None
 
 
-def _extract_intervention_type(text: str, trial: dict) -> list:
-    """Return list of intervention types found in text."""
-    existing = trial.get("intervention_types") or trial.get("intervention_type")
-    if isinstance(existing, list) and existing:
-        return existing
-    if isinstance(existing, str) and existing:
-        return [existing]
+def _extract_requires_parkinson(inc: str, full: str) -> bool | None:
+    if re.search(r"(?:diagnosis|diagnosed)\s+(?:of\s+)?(?:idiopathic\s+)?(?:parkinson|pd)\b", inc):
+        return True
+    if re.search(r"parkinson(?:'?s?|\s+disease)?\s+(?:diagnosis|diagnosed|confirmed)", inc):
+        return True
+    return None
+
+
+def _extract_excludes_atypical(exc: str) -> bool | None:
+    if re.search(r"(?:atypical|secondary)\s+parkinson|parkinson(?:ian)?\s+syndrome", exc):
+        return True
+    return None
+
+
+def _extract_excludes_dbs(exc: str) -> bool | None:
+    if re.search(r"(?:deep\s+brain\s+stimulat|dbs|implanted\s+deep)", exc):
+        return True
+    return None
+
+
+def _extract_requires_dbs(inc: str) -> bool | None:
+    if re.search(r"(?:deep\s+brain\s+stimulat|dbs)\s+(?:required|implanted|recipients?|eligible|candidates?)", inc):
+        return True
+    if re.search(r"(?:requires?|must\s+have)\s+(?:deep\s+brain\s+stimulat|dbs)", inc):
+        return True
+    return None
+
+
+def _extract_excludes_pacemaker(exc: str) -> bool | None:
+    if re.search(r"pacemaker|cardiac\s+implant|implanted\s+(?:cardiac|metal|electronic)", exc):
+        return True
+    if re.search(r"mri.incompatible\s+implant|metallic\s+implant", exc):
+        return True
+    return None
+
+
+def _extract_medication_exclusions(exc: str) -> list:
     found = []
-    _types = [
-        (r"\b(drug|medication|pharmacolog)", "drug"),
-        (r"\b(device|implant|stimulat)", "device"),
-        (r"\b(behavioral|exercise|physical\s+therapy|rehabilitation)", "behavioral"),
-        (r"\b(surgical|surgery|procedure)", "surgical"),
-        (r"\b(gene\s+therapy|genetic)", "gene therapy"),
-        (r"\b(stem\s+cell|cell\s+therapy)", "cell therapy"),
-        (r"\b(dietary|supplement|nutritional)", "dietary supplement"),
+    _meds = [
+        (r"\bmaoi\b|monoamine\s+oxidase\s+inhibitor", "MAO inhibitor"),
+        (r"\bclozapine\b", "clozapine"),
+        (r"\bhaloperidol\b", "haloperidol"),
+        (r"\bantipsychotic", "antipsychotics"),
+        (r"\bwarfarin\b", "warfarin"),
+        (r"\banticoagulant", "anticoagulants"),
+        (r"\binvestigational\s+(?:drug|product|medication|treatment)", "investigational drug"),
+        (r"\bimmunosuppressant", "immunosuppressants"),
+        (r"\bchemotherap", "chemotherapy"),
+        (r"\bcorticosteroid", "corticosteroids"),
     ]
     seen = set()
-    for pattern, label in _types:
-        if re.search(pattern, text) and label not in seen:
+    for pattern, label in _meds:
+        if re.search(pattern, exc) and label not in seen:
             found.append(label)
             seen.add(label)
     return found
 
 
-def _extract_primary_outcome(text: str, trial: dict):
-    """Return primary outcome string or empty string."""
-    existing = trial.get("primary_outcome", "")
-    if existing:
-        return str(existing)
-    m = re.search(r"primary\s+(?:outcome|endpoint)[:\s]+([^.]{5,80})", text)
-    if m:
-        return m.group(1).strip()
-    return ""
+def _extract_procedure_exclusions(exc: str) -> list:
+    found = []
+    _procs = [
+        (r"(?:deep\s+brain\s+stimulat|dbs)", "deep brain stimulation"),
+        (r"pallidotomy", "pallidotomy"),
+        (r"thalamotomy", "thalamotomy"),
+        (r"focused\s+ultrasound", "focused ultrasound"),
+        (r"brain\s+surgery|neurosurgery|pd.related\s+(?:brain|surgical)", "brain surgery"),
+    ]
+    seen = set()
+    for pattern, label in _procs:
+        if re.search(pattern, exc) and label not in seen:
+            found.append(label)
+            seen.add(label)
+    return found
+
+
+def _extract_cognitive_exclusions(exc: str) -> list:
+    found = []
+    _cog = [
+        (r"\bdementia\b", "dementia"),
+        (r"mild\s+cognitive\s+impairment|\bmci\b", "mild cognitive impairment"),
+        (r"cognitive\s+impairment|neurocognitive\s+impairment", "cognitive impairment"),
+        (r"psychosis|active\s+hallucination", "psychosis/hallucinations"),
+        (r"\bschizophrenia\b", "schizophrenia"),
+    ]
+    seen = set()
+    for pattern, label in _cog:
+        if re.search(pattern, exc) and label not in seen:
+            found.append(label)
+            seen.add(label)
+    return found
+
+
+def _extract_required_scores(inc: str) -> list:
+    found = []
+    _scores = [
+        (r"hoehn\s+(?:and|&|y(?:ahr)?)\s+(?:stage\s+)?(?:≥|>=|at\s+least|i+|[1-5])", "Hoehn-Yahr stage"),
+        (r"(?:mds.)?updrs\s+(?:part\s+)?iii\s*(?:≥|>=|score\s+(?:of\s+)?(?:≥|>=))?\s*\d+", "UPDRS-III"),
+        (r"mmse\s*(?:score)?\s*(?:≥|>=|>|<|≤|<=)\s*\d+", "MMSE"),
+        (r"moca\s*(?:score)?\s*(?:≥|>=|>|<|≤|<=)\s*\d+", "MoCA"),
+        (r"hamd\s*(?:score)?\s*(?:≥|>=|>|<|≤|<=)\s*\d+", "HAMD"),
+        (r"bmi\s*(?:of\s+)?\d+\s*[-–]\s*\d+", "BMI range"),
+        (r"body\s+(?:weight|mass)\s+\d+\s*[-–]\s*\d+\s*kg", "weight range"),
+    ]
+    seen = set()
+    for pattern, label in _scores:
+        if re.search(pattern, inc) and label not in seen:
+            found.append(label)
+            seen.add(label)
+    return found
+
+
+def _build_eligibility_summary(trial: dict, meta: dict) -> str:
+    """Build a short human-readable eligibility summary from extracted fields."""
+    parts = []
+    min_a = meta.get("min_age")
+    max_a = meta.get("max_age")
+    if min_a is not None and max_a is not None:
+        parts.append(f"Age {min_a}–{max_a}")
+    elif min_a is not None:
+        parts.append(f"Age ≥{min_a}")
+    elif max_a is not None:
+        parts.append(f"Age ≤{max_a}")
+
+    sex = meta.get("sex_restriction", "")
+    if sex and sex != "all":
+        parts.append(sex.capitalize() + " only")
+
+    if meta.get("requires_parkinson_diagnosis"):
+        parts.append("Parkinson diagnosis required")
+    if meta.get("excludes_atypical_parkinsonism"):
+        parts.append("No atypical parkinsonism")
+    if meta.get("excludes_dbs"):
+        parts.append("No prior DBS")
+    if meta.get("requires_dbs"):
+        parts.append("DBS required")
+    if meta.get("excludes_pacemaker_or_implant"):
+        parts.append("No pacemaker/implant")
+
+    cog = meta.get("cognitive_exclusions", [])
+    if cog:
+        parts.append("Excludes: " + ", ".join(cog))
+
+    med_exc = meta.get("medication_exclusions", [])
+    if med_exc:
+        parts.append("Medication exclusions: " + ", ".join(med_exc))
+
+    return "; ".join(parts) if parts else ""
 
 
 # ---------------------------------------------------------------------------
 # Core enrichment
 # ---------------------------------------------------------------------------
 
-def extract_trial_metadata(trial: dict) -> dict:
-    """Extract all enrichable fields from a trial record."""
-    text = collect_text_values(trial)
-    return {
-        "phase": _extract_phase(text, trial),
-        "condition": _extract_condition(text, trial),
-        "sponsor_type": _extract_sponsor_type(text, trial),
-        "min_age": _extract_min_age(text, trial),
-        "max_age": _extract_max_age(text, trial),
-        "sex_restriction": _extract_sex_restriction(text, trial),
-        "healthy_volunteers": _extract_healthy_volunteers(text, trial),
-        "intervention_types": _extract_intervention_type(text, trial),
-        "primary_outcome": _extract_primary_outcome(text, trial),
+def extract_trial_eligibility_metadata(trial: dict) -> dict:
+    """Extract eligibility-focused metadata from a trial record."""
+    inc, exc, full = extract_criteria_text(trial)
+
+    min_age = _extract_min_age(full, trial)
+    max_age = _extract_max_age(full, trial)
+
+    meta = {
+        "min_age": min_age,
+        "max_age": max_age,
+        "age_unit": _extract_age_unit(trial),
+        "sex_restriction": _extract_sex_restriction(full, trial),
+        "accepts_healthy_volunteers": _extract_healthy_volunteers(full, trial),
+        "requires_parkinson_diagnosis": _extract_requires_parkinson(inc, full),
+        "excludes_atypical_parkinsonism": _extract_excludes_atypical(exc),
+        "excludes_dbs": _extract_excludes_dbs(exc),
+        "requires_dbs": _extract_requires_dbs(inc),
+        "excludes_pacemaker_or_implant": _extract_excludes_pacemaker(exc),
+        "medication_exclusions": _extract_medication_exclusions(exc),
+        "procedure_exclusions": _extract_procedure_exclusions(exc),
+        "cognitive_exclusions": _extract_cognitive_exclusions(exc),
+        "required_scores_or_thresholds": _extract_required_scores(inc),
+        "eligibility_summary": "",
     }
+    meta["eligibility_summary"] = _build_eligibility_summary(trial, meta)
+    return meta
 
 
 def enrich_trial_case(trial: dict) -> dict:
-    """Return a new dict with original fields preserved and enriched fields added."""
+    """Return a new dict with original fields preserved and eligibility fields added."""
     enriched = dict(trial)
-    metadata = extract_trial_metadata(trial)
+    metadata = extract_trial_eligibility_metadata(trial)
     for field, value in metadata.items():
         original = trial.get(field)
         if original is None or original == "" or original == []:
@@ -258,13 +387,21 @@ def enrich_trial_cases(trials: list) -> list:
 # ---------------------------------------------------------------------------
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Enrich trial cases with normalized metadata.")
-    parser.add_argument("--input", default=DEFAULT_INPUT, help=f"Input path (default: {DEFAULT_INPUT})")
-    parser.add_argument("--output", default=DEFAULT_OUTPUT, help=f"Output path (default: {DEFAULT_OUTPUT})")
+    parser = argparse.ArgumentParser(
+        description="Enrich trial cases with eligibility-focused metadata."
+    )
+    parser.add_argument(
+        "--input", default=DEFAULT_INPUT,
+        help=f"Input path (default: {DEFAULT_INPUT})"
+    )
+    parser.add_argument(
+        "--output", default=DEFAULT_OUTPUT,
+        help=f"Output path (default: {DEFAULT_OUTPUT})"
+    )
     args = parser.parse_args()
 
     if args.output == args.input:
-        print("ERROR: Output path must differ from input path to avoid overwriting source data.", file=sys.stderr)
+        print("ERROR: Output path must differ from input path.", file=sys.stderr)
         sys.exit(1)
 
     trials = load_trial_cases(args.input)
