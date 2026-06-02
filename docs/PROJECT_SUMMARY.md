@@ -1,0 +1,137 @@
+# Project Summary
+
+## What This Project Is
+
+This is a local clinical trial eligibility benchmark built for research and portfolio purposes.
+
+It combines:
+
+- **Synthetic Parkinson disease patient profiles** — fully fictional patient cases covering a range of clinical presentations, designed to exercise a variety of eligibility criteria.
+- **Public trial eligibility criteria** — inclusion and exclusion criteria sourced from publicly available ClinicalTrials.gov records.
+- **LLM-reviewed draft benchmark labels** — patient–trial eligibility labels (eligible / not_eligible / unclear) produced with LLM assistance and reviewed for internal consistency. These are draft benchmark labels, not clinician-adjudicated gold labels.
+- **A rule-based, auditable matcher** — a deterministic eligibility matching engine (`rule_matcher.py`) that evaluates patient profiles against trial criteria using pattern matching and structured rules.
+- **A full evaluation and reporting pipeline** — scripts for running the benchmark, computing metrics, analysing errors, and generating audit reports.
+
+---
+
+## What Was Built
+
+### Data Pipeline
+
+- Synthetic patient case files with structured clinical fields and narrative profiles.
+- Trial case files with normalised eligibility criteria and metadata.
+- Enrichment scripts for patients and trials extracting metadata from existing content only.
+- LLM-reviewed draft label file with gold label, label status, rationale, and evidence per pair.
+
+### Benchmark Execution
+
+- Benchmark runner producing prediction records, criterion-level results, and summary metrics.
+- Per-prediction fields: gold label, predicted label, confidence, matched facts, blocking criteria, uncertain criteria, reasoning trace, and criterion results.
+
+### Metrics and Reports
+
+- Overall accuracy, macro F1, per-class precision/recall/F1, confusion matrix.
+- Uncertainty and safety metrics: unsafe eligible errors, overly conservative errors, overcommitment rate, critical/major/minor error rates.
+- Confidence calibration report grouped by confidence band.
+- Confidence threshold sweep reporting coverage, accuracy, and macro F1 at each cutoff.
+- Criterion type classification and per-type error rate aggregation.
+- Prediction distribution report covering gold vs predicted, per-patient, per-trial, and confidence statistics.
+- Cross-trial patient consistency and cross-patient trial consistency reports.
+- Label coverage and completeness report.
+- Human-review queue CSV with priority scoring.
+
+### Error Analysis
+
+- Error analysis pipeline producing error type, severity, and counts.
+- Error pattern analysis grouped by criterion type.
+- Baseline comparison (majority-class and random baselines).
+
+### Robustness and Contrastive Checks
+
+- Counterfactual pair checks.
+- Minimal pair checks.
+- Noise robustness and sensitivity analysis.
+- Capability tag report.
+- Abstention analysis treating `unclear` as abstention.
+
+### Documentation Suite
+
+- `BENCHMARK_CARD.md` — benchmark overview and limitations.
+- `KNOWN_LIMITATIONS.md` — documented matcher and dataset limitations.
+- `FUTURE_WORK.md` — planned improvements and open questions.
+- `EXPECTED_REASONING_STEPS.md` — expected matcher reasoning per criterion type.
+- `CHANGELOG.md` — record of completed work.
+- `CONTRIBUTING.md` — guide for extending the project.
+- `PROJECT_SUMMARY.md` — this file.
+
+---
+
+## How to Run the Main Workflow
+
+Run all tests:
+
+```
+PYTHONPATH=. python -m pytest
+```
+
+Run the main benchmark:
+
+```
+PYTHONPATH=. python eval/run_llm_reviewed_benchmark.py
+```
+
+Run error analysis:
+
+```
+PYTHONPATH=. python eval/summarize_llm_reviewed_errors.py
+```
+
+Regenerate additional analysis reports by running individual scripts in `eval/`. Each script prints its output path on completion. See `docs/CONTRIBUTING.md` for the full list.
+
+---
+
+## Key Outputs
+
+| Path | Description |
+|---|---|
+| `data/processed/results_llm_reviewed.json` | Full prediction records with all fields |
+| `data/processed/results_llm_reviewed.csv` | Flat CSV of prediction records |
+| `data/processed/criterion_level_results.csv` | Per-criterion decisions and reasons |
+| `data/processed/error_analysis_llm_reviewed.json` | Error types, severities, and counts |
+| `data/processed/error_analysis_llm_reviewed.csv` | Flat CSV of error analysis |
+| `data/processed/criterion_type_classified.csv` | Criteria with classified type labels |
+| `data/processed/human_review_queue.csv` | Prioritised human review export |
+| `reports/` | Markdown reports from analysis scripts |
+| `docs/` | Project documentation |
+
+---
+
+## How to Interpret Results
+
+- Results are benchmark outputs on synthetic data, not real-world clinical performance measurements.
+- Labels are LLM-reviewed draft benchmark labels — they should not be treated as clinician-adjudicated gold labels.
+- Modest accuracy and F1 figures reflect both the genuine difficulty of eligibility matching and the current limitations of the rule-based matcher.
+- Reports generated by `eval/` scripts are audit and analysis tools. They document matcher behaviour on the benchmark dataset; they are not clinical validation outputs.
+- Confidence scores reflect the matcher's internal uncertainty estimate, not a calibrated probability of clinical correctness.
+
+---
+
+## Appropriate Use
+
+This project is suitable for:
+
+- Portfolio demonstration of benchmark engineering, NLP evaluation, and clinical data pipeline skills.
+- Research into rule-based and LLM-assisted clinical trial eligibility matching.
+- Structured error analysis and capability documentation for a matcher system.
+- Educational exploration of clinical NLP evaluation methodology.
+
+---
+
+## Not Appropriate For
+
+This project is **not** appropriate for:
+
+- Patient care or real clinical trial eligibility decisions.
+- Regulatory submissions or compliance claims.
+- Replacing clinical, legal, or regulatory review of trial eligibility.
+- Any deployment in a healthcare or clinical operations setting.
