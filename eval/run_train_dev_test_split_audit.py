@@ -11,6 +11,7 @@ from pathlib import Path
 
 CANDIDATE_PATHS = [
     Path("data/processed/labels_llm_reviewed.json"),
+    Path("data/processed/labels_llm_reviewed_with_splits.json"),
     Path("data/processed/unified_benchmark.json"),
     Path("data/processed/BENCHMARK_VERSION.json"),
     Path("docs/BENCHMARK_VERSION.json"),
