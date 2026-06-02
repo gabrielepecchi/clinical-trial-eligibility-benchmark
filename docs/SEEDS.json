@@ -1,0 +1,12 @@
+{
+  "benchmark_version": "0.1.0",
+  "dataset_name": "clinical-trial-eligibility-benchmark",
+  "patient_generation_seed": 42,
+  "label_seed_file": "data/processed/labels_seed.json",
+  "label_review_file": "data/processed/labels_seed_review.csv",
+  "reviewed_labels_file": "data/processed/labels_llm_reviewed.json",
+  "generated_patient_file": "data/processed/patient_cases.json",
+  "generated_trial_file": "data/processed/trial_cases.json",
+  "deterministic_subset_selection": true,
+  "notes": "Seeds and file references are recorded here for reproducibility purposes. Labels are draft benchmark labels produced with LLM assistance and reviewed for internal consistency. They are not physician-adjudicated clinical gold labels and should not be treated as such."
+}
