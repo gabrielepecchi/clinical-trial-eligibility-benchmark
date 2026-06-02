@@ -1,0 +1,17 @@
+{
+  "benchmark_version": "0.1.0",
+  "dataset_name": "clinical-trial-eligibility-benchmark",
+  "disease_domain": "Parkinson disease",
+  "patient_data_type": "synthetic",
+  "trial_data_source": "ClinicalTrials.gov public records",
+  "label_source": "draft LLM-reviewed labels",
+  "label_file": "data/processed/labels_llm_reviewed.json",
+  "patient_file": "data/processed/patient_cases.json",
+  "trial_file": "data/processed/trial_cases.json",
+  "evaluated_pairs": 150,
+  "created_by": "Gabriele Pecchi",
+  "year": 2026,
+  "intended_use": "research and portfolio benchmarking only",
+  "clinical_use": false,
+  "notes": "Labels are draft benchmark labels produced with LLM assistance and reviewed for internal consistency. They are not physician-adjudicated clinical gold labels and should not be treated as such."
+}
