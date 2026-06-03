@@ -169,3 +169,98 @@ def parse_eligibility_criteria(text: str) -> dict[str, list[str] | str]:
         "exclusion_criteria": exclusion,
         "raw_eligibility": text,
     }
+
+
+_UNIT_DAYS: dict[str, float] = {
+    "days": 1.0,
+    "weeks": 7.0,
+    "months": 30.0,
+    "years": 365.0,
+}
+
+_UNIT_PATTERN = r"(days?|weeks?|months?|years?)"
+_NUM_PAT = r"(\d+(?:\.\d+)?)"
+
+
+def _canonical_unit(raw: str) -> str:
+    """Return plural canonical unit string."""
+    r = raw.lower().rstrip("s")
+    return {"day": "days", "week": "weeks", "month": "months", "year": "years"}[r]
+
+
+def _build_result(op: str, value: float, unit: str) -> dict:
+    return {
+        "operator": op,
+        "value": value,
+        "unit": unit,
+        "value_days": value * _UNIT_DAYS[unit],
+    }
+
+
+def parse_duration(text: str) -> dict[str, object]:
+    """Extract a duration expression from a criterion string.
+
+    Operators:
+      at_least  – at least N / for at least N / stable for N / minimum N
+      within    – within N / in the last N / during the past N
+      less_than – less than N / fewer than N / symptoms for less than N
+      past      – past N (bare past-N phrasing without 'within')
+      exact     – washout period of N / period of N / duration of N
+
+    Returns dict with keys: operator, value, unit, value_days (all None if not found).
+    """
+    t = text.lower()
+    _N = _NUM_PAT
+    _U = _UNIT_PATTERN
+
+    # at_least
+    for pat in [
+        rf"(?:for\s+)?at\s+least\s+{_N}\s+{_U}",
+        rf"stable\s+for\s+{_N}\s+{_U}",
+        rf"(?:no\s+)?(?:medication\s+)?change\s+for\s+{_N}\s+{_U}",
+        rf"(?:diagnosed|diagnosis)\s+for\s+(?:more\s+than\s+|at\s+least\s+)?{_N}\s+{_U}",
+        rf"disease\s+duration\s+of\s+(?:at\s+least\s+)?{_N}\s+{_U}",
+        rf"duration\s+of\s+at\s+least\s+{_N}\s+{_U}",
+        rf"for\s+more\s+than\s+{_N}\s+{_U}",
+        rf"more\s+than\s+{_N}\s+{_U}",
+    ]:
+        m = re.search(pat, t)
+        if m:
+            return _build_result("at_least", float(m.group(1)), _canonical_unit(m.group(2)))
+
+    # less_than
+    for pat in [
+        rf"(?:symptoms?\s+for\s+)?less\s+than\s+{_N}\s+{_U}",
+        rf"fewer\s+than\s+{_N}\s+{_U}",
+        rf"(?:within\s+)?no\s+more\s+than\s+{_N}\s+{_U}",
+    ]:
+        m = re.search(pat, t)
+        if m:
+            return _build_result("less_than", float(m.group(1)), _canonical_unit(m.group(2)))
+
+    # within
+    for pat in [
+        rf"within\s+(?:the\s+)?(?:last\s+)?{_N}\s+{_U}",
+        rf"in\s+the\s+last\s+{_N}\s+{_U}",
+        rf"during\s+the\s+past\s+{_N}\s+{_U}",
+    ]:
+        m = re.search(pat, t)
+        if m:
+            return _build_result("within", float(m.group(1)), _canonical_unit(m.group(2)))
+
+    # exact / named-period
+    for pat in [
+        rf"(?:washout\s+)?period\s+of\s+{_N}\s+{_U}",
+        rf"washout\s+(?:period\s+)?of\s+{_N}\s+{_U}",
+    ]:
+        m = re.search(pat, t)
+        if m:
+            return _build_result("exact", float(m.group(1)), _canonical_unit(m.group(2)))
+
+    # fallback: bare "for N units"
+    m = re.search(rf"for\s+{_N}\s+{_U}", t)
+    if m:
+        return _build_result("at_least", float(m.group(1)), _canonical_unit(m.group(2)))
+
+    return {"operator": None, "value": None, "unit": None, "value_days": None}
+

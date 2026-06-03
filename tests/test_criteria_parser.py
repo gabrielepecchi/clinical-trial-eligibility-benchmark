@@ -1,6 +1,6 @@
 """Unit tests for criteria_parser.py."""
 
-from app.eligibility.criteria_parser import parse_eligibility_criteria, parse_numeric_range, parse_numeric_comparator
+from app.eligibility.criteria_parser import parse_eligibility_criteria, parse_numeric_range, parse_numeric_comparator, parse_duration
 
 
 TEXT_FULL = """\
@@ -298,5 +298,108 @@ def test_comparator_no_match_returns_none():
     r = parse_numeric_comparator("Parkinson disease diagnosis required")
     assert r["operator"] is None
     assert r["value"] is None
+
+
+# ---------------------------------------------------------------------------
+# Duration parsing tests
+# ---------------------------------------------------------------------------
+
+def test_duration_for_at_least_weeks():
+    r = parse_duration("for at least 4 weeks")
+    assert r["operator"] == "at_least"
+    assert r["value"] == 4.0
+    assert r["unit"] == "weeks"
+    assert r["value_days"] == 28.0
+
+
+def test_duration_stable_for_months():
+    r = parse_duration("stable for 3 months")
+    assert r["operator"] == "at_least"
+    assert r["value"] == 3.0
+    assert r["unit"] == "months"
+    assert r["value_days"] == 90.0
+
+
+def test_duration_within_days():
+    r = parse_duration("within 30 days")
+    assert r["operator"] == "within"
+    assert r["value"] == 30.0
+    assert r["unit"] == "days"
+    assert r["value_days"] == 30.0
+
+
+def test_duration_in_the_last_months():
+    r = parse_duration("in the last 6 months")
+    assert r["operator"] == "within"
+    assert r["value"] == 6.0
+    assert r["unit"] == "months"
+    assert r["value_days"] == 180.0
+
+
+def test_duration_during_the_past_weeks():
+    r = parse_duration("during the past 12 weeks")
+    assert r["operator"] == "within"
+    assert r["value"] == 12.0
+    assert r["unit"] == "weeks"
+    assert r["value_days"] == 84.0
+
+
+def test_duration_no_medication_change_weeks():
+    r = parse_duration("no medication change for 8 weeks")
+    assert r["operator"] == "at_least"
+    assert r["value"] == 8.0
+    assert r["unit"] == "weeks"
+    assert r["value_days"] == 56.0
+
+
+def test_duration_washout_period_days():
+    r = parse_duration("washout period of 14 days")
+    assert r["operator"] == "exact"
+    assert r["value"] == 14.0
+    assert r["unit"] == "days"
+    assert r["value_days"] == 14.0
+
+
+def test_duration_disease_duration_years():
+    r = parse_duration("disease duration of at least 2 years")
+    assert r["operator"] == "at_least"
+    assert r["value"] == 2.0
+    assert r["unit"] == "years"
+    assert r["value_days"] == 730.0
+
+
+def test_duration_diagnosed_more_than_years():
+    r = parse_duration("diagnosed for more than 5 years")
+    assert r["operator"] == "at_least"
+    assert r["value"] == 5.0
+    assert r["unit"] == "years"
+    assert r["value_days"] == 1825.0
+
+
+def test_duration_symptoms_less_than_year():
+    r = parse_duration("symptoms for less than 1 year")
+    assert r["operator"] == "less_than"
+    assert r["value"] == 1.0
+    assert r["unit"] == "years"
+    assert r["value_days"] == 365.0
+
+
+def test_duration_no_match_returns_none():
+    r = parse_duration("Parkinson disease diagnosis required")
+    assert r["operator"] is None
+    assert r["value"] is None
+    assert r["unit"] is None
+    assert r["value_days"] is None
+
+
+def test_duration_value_days_weeks():
+    r = parse_duration("for at least 2 weeks")
+    assert r["value_days"] == 14.0
+
+
+def test_duration_unit_normalized_plural():
+    r = parse_duration("stable for 1 month")
+    assert r["unit"] == "months"
+
 
 
