@@ -3741,3 +3741,119 @@ def test_no_blocking_no_uncertain_gives_eligible():
     assert result["prediction"] == "eligible"
     assert not result["blocking_criteria"]
     assert not result["uncertain_criteria"]
+
+
+# ---------------------------------------------------------------------------
+# Task 7: Temporal eligibility logic
+# ---------------------------------------------------------------------------
+
+def test_dbs_surgery_within_exclusion_window_gives_not_eligible():
+    """Patient had DBS surgery 2 months ago; trial excludes DBS within 6 months."""
+    patient = make_patient(
+        age=65,
+        diagnosis=["Parkinson disease"],
+        key_features=["DBS surgery 2 months ago"],
+        medications=[],
+    )
+    trial = make_trial(
+        inclusion_criteria=["Confirmed Parkinson disease diagnosis"],
+        exclusion_criteria=["no DBS surgery within 6 months"],
+    )
+    result = match_patient_to_trial(patient, trial)
+    assert result["prediction"] == "not_eligible"
+    assert result["blocking_criteria"]
+
+
+def test_dbs_surgery_outside_exclusion_window_does_not_block():
+    """Patient had DBS surgery 8 months ago; trial excludes DBS within 6 months — should not block."""
+    patient = make_patient(
+        age=65,
+        diagnosis=["Parkinson disease"],
+        key_features=["DBS surgery 8 months ago"],
+        medications=[],
+    )
+    trial = make_trial(
+        inclusion_criteria=["Confirmed Parkinson disease diagnosis"],
+        exclusion_criteria=["no DBS surgery within 6 months"],
+    )
+    result = match_patient_to_trial(patient, trial)
+    assert "dbs_surgery" not in " ".join(result["blocking_criteria"]).lower() or result["prediction"] != "not_eligible"
+
+
+def test_investigational_drug_within_exclusion_window_gives_not_eligible():
+    """Patient received investigational drug 2 weeks ago; trial excludes within 30 days."""
+    patient = make_patient(
+        age=60,
+        diagnosis=["Parkinson disease"],
+        key_features=["received investigational drug 2 weeks ago"],
+        medications=[],
+    )
+    trial = make_trial(
+        inclusion_criteria=["Confirmed Parkinson disease diagnosis"],
+        exclusion_criteria=["no investigational drug within 30 days"],
+    )
+    result = match_patient_to_trial(patient, trial)
+    assert result["prediction"] == "not_eligible"
+    assert result["blocking_criteria"]
+
+
+def test_disease_duration_below_minimum_gives_not_eligible():
+    """Trial requires diagnosed for at least 2 years; patient diagnosed 6 months ago."""
+    patient = make_patient(
+        age=58,
+        diagnosis=["Parkinson disease"],
+        key_features=["diagnosed 6 months ago"],
+        medications=[],
+    )
+    trial = make_trial(
+        inclusion_criteria=[
+            "Confirmed Parkinson disease diagnosis",
+            "diagnosed for at least 2 years",
+        ],
+        exclusion_criteria=[],
+    )
+    result = match_patient_to_trial(patient, trial)
+    assert result["prediction"] == "not_eligible"
+    assert result["blocking_criteria"]
+
+
+def test_disease_duration_satisfies_minimum_does_not_block():
+    """Trial requires diagnosed for at least 2 years; patient diagnosed 5 years ago."""
+    patient = make_patient(
+        age=65,
+        diagnosis=["Parkinson disease"],
+        key_features=["diagnosed 5 years ago"],
+        medications=[],
+    )
+    trial = make_trial(
+        inclusion_criteria=[
+            "Age 40 to 80 years",
+            "Confirmed Parkinson disease diagnosis",
+            "diagnosed for at least 2 years",
+        ],
+        exclusion_criteria=[],
+    )
+    result = match_patient_to_trial(patient, trial)
+    assert "disease_duration" not in result["blocking_criteria"]
+
+
+def test_disease_duration_missing_gives_unclear():
+    """Trial requires diagnosed for at least 2 years; patient disease_duration unknown."""
+    patient = make_patient(
+        age=65,
+        diagnosis=["Parkinson disease"],
+        disease_duration=None,
+        key_features=[],
+        medications=[],
+    )
+    trial = make_trial(
+        inclusion_criteria=[
+            "Age 40 to 80 years",
+            "Confirmed Parkinson disease diagnosis",
+            "diagnosed for at least 2 years",
+        ],
+        exclusion_criteria=[],
+    )
+    result = match_patient_to_trial(patient, trial)
+    assert result["prediction"] == "unclear"
+    assert "disease_duration" in result["missing_information"]

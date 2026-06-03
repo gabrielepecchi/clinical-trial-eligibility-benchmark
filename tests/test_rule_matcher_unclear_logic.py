@@ -647,3 +647,39 @@ def test_hard_exclusion_plus_missing_info_gives_not_eligible():
     result = match_patient_to_trial(patient, trial)
     assert result["prediction"] == "not_eligible"
 
+
+
+# ---------------------------------------------------------------------------
+# Task 7: Temporal eligibility — unclear propagation
+# ---------------------------------------------------------------------------
+
+def test_investigational_drug_timing_unknown_gives_unclear():
+    """Patient notes investigational drug use but timing unknown; trial excludes within 30 days."""
+    patient = {
+        "diagnosis": "Parkinson disease",
+        "age": 62,
+        "key_features": ["received investigational drug, timing unknown"],
+        "medications": [],
+    }
+    trial = {
+        "inclusion_criteria": ["Confirmed Parkinson disease diagnosis"],
+        "exclusion_criteria": ["no investigational drug within 30 days"],
+    }
+    result = match_patient_to_trial(patient, trial)
+    assert result["prediction"] == "unclear"
+
+
+def test_trial_participation_timing_unknown_gives_unclear():
+    """Patient notes recent clinical trial participation but timing not documented."""
+    patient = {
+        "diagnosis": "Parkinson disease",
+        "age": 65,
+        "key_features": ["enrolled in clinical trial, dates not recorded"],
+        "medications": [],
+    }
+    trial = {
+        "inclusion_criteria": ["Confirmed Parkinson disease diagnosis"],
+        "exclusion_criteria": ["no clinical trial within 3 months"],
+    }
+    result = match_patient_to_trial(patient, trial)
+    assert result["prediction"] == "unclear"

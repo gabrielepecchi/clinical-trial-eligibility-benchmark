@@ -333,3 +333,121 @@ def _patient_changed_weeks_ago(patient_med_text: str) -> int | None:
     if m.group(1) is not None:
         return _to_weeks(int(m.group(1)), m.group(2))
     return _to_weeks(int(m.group(3)), m.group(4))
+
+
+# ---------------------------------------------------------------------------
+# General temporal parsing helpers
+# ---------------------------------------------------------------------------
+
+def _to_days(amount: int, unit: str) -> int:
+    """Convert amount+unit to whole days."""
+    u = unit.lower()
+    if u.startswith("day"):
+        return amount
+    if u.startswith("week"):
+        return amount * 7
+    if u.startswith("month"):
+        return amount * 30
+    if u.startswith("year"):
+        return amount * 365
+    return amount
+
+
+# Matches "within N days/weeks/months/years"
+_WITHIN_DURATION_PATTERN = re.compile(
+    r"within\s+(?:the\s+(?:last|past)\s+)?(\d+)\s+(days?|weeks?|months?|years?)",
+    re.IGNORECASE,
+)
+# Matches "at least N / more than N / > N days/weeks/months/years"
+_AT_LEAST_DURATION_PATTERN = re.compile(
+    r"(?:at\s+least|for\s+at\s+least|for\s+more\s+than|(?:greater|more)\s+than)\s+(\d+)\s+(days?|weeks?|months?|years?)",
+    re.IGNORECASE,
+)
+# Matches "less than / fewer than / under N days/weeks/months/years"
+_LESS_THAN_DURATION_PATTERN = re.compile(
+    r"(?:less\s+than|fewer\s+than|under)\s+(\d+)\s+(days?|weeks?|months?|years?)",
+    re.IGNORECASE,
+)
+
+# Patient-side: "N days/weeks/months/years ago"
+_PATIENT_ELAPSED_PATTERN = re.compile(
+    r"(\d+)\s+(days?|weeks?|months?|years?)\s+ago",
+    re.IGNORECASE,
+)
+# Patient-side: "for N years/months/weeks"
+_PATIENT_DURATION_FOR_PATTERN = re.compile(
+    r"(?:for|over)\s+(\d+)\s+(days?|weeks?|months?|years?)",
+    re.IGNORECASE,
+)
+
+# Temporal exclusion topic detection
+_TEMPORAL_EXCLUSION_TOPICS = [
+    (re.compile(r"medication.*change|change.*medication|levodopa.*change|dopaminergic.*change", re.I), "medication_change"),
+    (re.compile(r"investigational.*(?:drug|agent)|experimental.*drug", re.I), "investigational_drug"),
+    (re.compile(r"clinical\s+trial|investigational\s+study", re.I), "trial_participation"),
+    (re.compile(r"\bdbs\b|deep\s+brain\s+stimulation", re.I), "dbs_surgery"),
+    (re.compile(r"\bsurgery\b|\bsurgical\s+procedure\b|\bneurosurgery\b", re.I), "surgery"),
+]
+
+# Temporal inclusion topic detection
+_TEMPORAL_INCLUSION_TOPICS = [
+    (re.compile(r"diagnosed|diagnosis|disease\s+duration|symptom.*duration|duration.*symptom|symptom.*onset", re.I), "disease_duration"),
+]
+
+# Patient-side unknown signals
+_PATIENT_TEMPORAL_UNKNOWN_PATTERNS = [
+    r"unknown",
+    r"not\s+(?:documented|recorded|known|available|reported)",
+    r"unclear",
+    r"no\s+(?:records?|history|data)",
+]
+
+
+def parse_temporal_exclusion(criterion: str) -> Optional[tuple[str, int]]:
+    """Return (topic, max_days) for 'no X within N weeks/days', else None."""
+    c = criterion.lower()
+    if not re.search(r"\b(?:no|not|without|within)\b", c):
+        return None
+    m = _WITHIN_DURATION_PATTERN.search(c)
+    if not m:
+        return None
+    max_days = _to_days(int(m.group(1)), m.group(2))
+    for pattern, topic in _TEMPORAL_EXCLUSION_TOPICS:
+        if pattern.search(c):
+            return topic, max_days
+    return None
+
+
+def parse_temporal_inclusion(criterion: str) -> Optional[tuple[str, int, str]]:
+    """Return (topic, threshold_days, direction) for temporal inclusion, else None.
+
+    direction: 'at_least' or 'less_than'.
+    """
+    c = criterion.lower()
+    m = _AT_LEAST_DURATION_PATTERN.search(c)
+    if m:
+        days = _to_days(int(m.group(1)), m.group(2))
+        for pattern, topic in _TEMPORAL_INCLUSION_TOPICS:
+            if pattern.search(c):
+                return topic, days, "at_least"
+        return None
+    m = _LESS_THAN_DURATION_PATTERN.search(c)
+    if m:
+        days = _to_days(int(m.group(1)), m.group(2))
+        for pattern, topic in _TEMPORAL_INCLUSION_TOPICS:
+            if pattern.search(c):
+                return topic, days, "less_than"
+        return None
+    return None
+
+
+def get_patient_elapsed_days(patient_text: str) -> Optional[int]:
+    """Return documented elapsed days from patient text (first numeric duration found), or None."""
+    for pat in _PATIENT_TEMPORAL_UNKNOWN_PATTERNS:
+        if re.search(pat, patient_text, re.I):
+            return None
+    for m in _PATIENT_ELAPSED_PATTERN.finditer(patient_text):
+        return _to_days(int(m.group(1)), m.group(2))
+    for m in _PATIENT_DURATION_FOR_PATTERN.finditer(patient_text):
+        return _to_days(int(m.group(1)), m.group(2))
+    return None
