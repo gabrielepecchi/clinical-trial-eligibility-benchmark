@@ -1,7 +1,7 @@
 """Unit tests for rule_matcher.py."""
 
-from rule_matcher import match_patient_to_trial, match_patient_to_trial_criteria
-from models import CriterionDecision, CriterionType
+from app.eligibility.rule_matcher import match_patient_to_trial, match_patient_to_trial_criteria
+from app.models import CriterionDecision, CriterionType
 from tests.helpers import make_patient
 
 # ---------------------------------------------------------------------------
@@ -3632,3 +3632,112 @@ def test_rbd_non_motor_pd_study_not_unclear():
         f"RBD must not generate uncertainty in non-motor PD phenotype study. "
         f"uncertain={result['uncertain_criteria']}"
     )
+
+
+# ---------------------------------------------------------------------------
+# Task 100: Decision precedence
+# ---------------------------------------------------------------------------
+
+def test_blocking_and_uncertain_gives_not_eligible():
+    """blocking_criteria + uncertain_criteria => not_eligible (blocking takes precedence)."""
+    patient = make_patient(
+        age=35,  # below minimum → blocking
+        diagnosis=["Parkinson disease"],
+        key_features=["disease stage unknown"],  # → uncertain
+        medications=[],
+    )
+    trial = make_trial(
+        inclusion_criteria=[
+            "Age 50 to 80 years",
+            "Hoehn and Yahr stage 2 to 4",
+        ],
+        exclusion_criteria=[],
+    )
+    result = match_patient_to_trial(patient, trial)
+    assert result["prediction"] == "not_eligible"
+    assert result["blocking_criteria"]
+
+
+def test_blocking_and_missing_info_gives_not_eligible():
+    """blocking_criteria + missing_information => not_eligible (blocking takes precedence)."""
+    patient = make_patient(
+        age=35,  # below minimum → blocking
+        diagnosis=["Parkinson disease"],
+        key_features=[],
+        medications=[],
+    )
+    trial = make_trial(
+        inclusion_criteria=[
+            "Age 50 to 80 years",
+            "stable levodopa regimen for at least 4 weeks",
+        ],
+        exclusion_criteria=[],
+    )
+    result = match_patient_to_trial(patient, trial)
+    assert result["prediction"] == "not_eligible"
+    assert result["blocking_criteria"]
+
+
+def test_uncertain_only_gives_unclear():
+    """uncertain_criteria only (no blocking) => unclear."""
+    patient = make_patient(
+        age=65,
+        diagnosis=["Parkinson disease"],
+        key_features=["dose and frequency unclear"],
+        medications=[],
+    )
+    trial = make_trial(
+        inclusion_criteria=[
+            "Age 40 to 80 years",
+            "Confirmed Parkinson disease diagnosis",
+            "stable levodopa regimen for at least 4 weeks",
+        ],
+        exclusion_criteria=[],
+    )
+    result = match_patient_to_trial(patient, trial)
+    assert result["prediction"] == "unclear"
+    assert not result["blocking_criteria"]
+    assert result["uncertain_criteria"]
+
+
+def test_missing_information_only_gives_unclear():
+    """missing_information (duration undocumented) => unclear."""
+    patient = make_patient(
+        age=65,
+        diagnosis=["Parkinson disease"],
+        key_features=["on levodopa"],
+        medications=["levodopa"],
+    )
+    trial = make_trial(
+        inclusion_criteria=[
+            "Age 40 to 80 years",
+            "Confirmed Parkinson disease diagnosis",
+            "stable levodopa regimen for at least 4 weeks",
+        ],
+        exclusion_criteria=[],
+    )
+    result = match_patient_to_trial(patient, trial)
+    assert result["prediction"] == "unclear"
+    assert "medication_stability_duration" in result["missing_information"]
+    assert not result["blocking_criteria"]
+
+
+def test_no_blocking_no_uncertain_gives_eligible():
+    """No blocking, no uncertain, criteria satisfied => eligible."""
+    patient = make_patient(
+        age=65,
+        diagnosis=["Parkinson disease"],
+        key_features=[],
+        medications=[],
+    )
+    trial = make_trial(
+        inclusion_criteria=[
+            "Age 40 to 80 years",
+            "Confirmed Parkinson disease diagnosis",
+        ],
+        exclusion_criteria=[],
+    )
+    result = match_patient_to_trial(patient, trial)
+    assert result["prediction"] == "eligible"
+    assert not result["blocking_criteria"]
+    assert not result["uncertain_criteria"]
