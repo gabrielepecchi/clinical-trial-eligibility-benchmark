@@ -46,6 +46,13 @@ from app.eligibility.clinical_terms import (
     _ACTIVE_CANCER_PATIENT_PATTERNS, _ACTIVE_CANCER_TRIAL_PATTERNS,
 )
 
+from app.eligibility.clinical_units import (
+    _to_weeks,
+    _required_weeks,
+    _patient_stable_weeks,
+    _patient_changed_weeks_ago,
+)
+
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -163,38 +170,6 @@ def _count_unverifiable_inclusion_criteria(trial: dict) -> int:
 
 
 
-def _to_weeks(amount: int, unit: str) -> int:
-    """Convert a duration amount+unit to whole weeks (months = 4 weeks)."""
-    return amount * 4 if unit.lower().startswith("month") else amount
-
-
-def _required_weeks(criterion: str) -> int | None:
-    """Return the required stability duration in weeks, or None if not specified."""
-    m = _STABILITY_CRITERION_PATTERN.search(criterion)
-    if not m:
-        return None
-    return _to_weeks(int(m.group(1)), m.group(2))
-
-
-def _patient_stable_weeks(patient_med_text: str) -> int | None:
-    """Return how many weeks the patient's medication has been stable, or None."""
-    m = _PATIENT_STABLE_DURATION_PATTERN.search(patient_med_text)
-    if not m:
-        return None
-    # Groups 1+2 or 3+4 depending on which branch matched
-    if m.group(1) is not None:
-        return _to_weeks(int(m.group(1)), m.group(2))
-    return _to_weeks(int(m.group(3)), m.group(4))
-
-
-def _patient_changed_weeks_ago(patient_med_text: str) -> int | None:
-    """Return how many weeks ago the medication was changed, or None."""
-    m = _PATIENT_CHANGED_PATTERN.search(patient_med_text)
-    if not m:
-        return None
-    if m.group(1) is not None:
-        return _to_weeks(int(m.group(1)), m.group(2))
-    return _to_weeks(int(m.group(3)), m.group(4))
 
 
 # ---------------------------------------------------------------------------
