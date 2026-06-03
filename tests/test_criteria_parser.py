@@ -1,6 +1,6 @@
 """Unit tests for criteria_parser.py."""
 
-from app.eligibility.criteria_parser import parse_eligibility_criteria, parse_numeric_range
+from app.eligibility.criteria_parser import parse_eligibility_criteria, parse_numeric_range, parse_numeric_comparator
 
 
 TEXT_FULL = """\
@@ -198,4 +198,105 @@ def test_range_no_numbers_returns_none():
     r = parse_numeric_range("Parkinson disease diagnosis required")
     assert r["lower"] is None
     assert r["upper"] is None
+
+
+# ---------------------------------------------------------------------------
+# Comparator parsing tests
+# ---------------------------------------------------------------------------
+
+def test_comparator_gte_symbol():
+    r = parse_numeric_comparator("age >= 18")
+    assert r["operator"] == ">="
+    assert r["value"] == 18.0
+
+
+def test_comparator_gt_symbol():
+    r = parse_numeric_comparator("age > 18")
+    assert r["operator"] == ">"
+    assert r["value"] == 18.0
+
+
+def test_comparator_lte_symbol():
+    r = parse_numeric_comparator("age ≤ 75")
+    assert r["operator"] == "<="
+    assert r["value"] == 75.0
+
+
+def test_comparator_lt_symbol():
+    r = parse_numeric_comparator("age < 75")
+    assert r["operator"] == "<"
+    assert r["value"] == 75.0
+
+
+def test_comparator_at_least():
+    r = parse_numeric_comparator("at least 18 years")
+    assert r["operator"] == ">="
+    assert r["value"] == 18.0
+
+
+def test_comparator_greater_than():
+    r = parse_numeric_comparator("greater than 18 years")
+    assert r["operator"] == ">"
+    assert r["value"] == 18.0
+
+
+def test_comparator_more_than():
+    r = parse_numeric_comparator("more than 18 years")
+    assert r["operator"] == ">"
+    assert r["value"] == 18.0
+
+
+def test_comparator_minimum_age():
+    r = parse_numeric_comparator("minimum age 18")
+    assert r["operator"] == ">="
+    assert r["value"] == 18.0
+
+
+def test_comparator_no_more_than():
+    r = parse_numeric_comparator("no more than 75 years")
+    assert r["operator"] == "<="
+    assert r["value"] == 75.0
+
+
+def test_comparator_less_than():
+    r = parse_numeric_comparator("less than 75 years")
+    assert r["operator"] == "<"
+    assert r["value"] == 75.0
+
+
+def test_comparator_maximum_age():
+    r = parse_numeric_comparator("maximum age 75")
+    assert r["operator"] == "<="
+    assert r["value"] == 75.0
+
+
+def test_comparator_creatinine_lt():
+    r = parse_numeric_comparator("creatinine < 1.5 mg/dL")
+    assert r["operator"] == "<"
+    assert r["value"] == 1.5
+
+
+def test_comparator_hemoglobin_greater_than():
+    r = parse_numeric_comparator("hemoglobin greater than 10 g/dL")
+    assert r["operator"] == ">"
+    assert r["value"] == 10.0
+
+
+def test_comparator_lte_ascii():
+    r = parse_numeric_comparator("age <= 75")
+    assert r["operator"] == "<="
+    assert r["value"] == 75.0
+
+
+def test_comparator_gte_unicode():
+    r = parse_numeric_comparator("age ≥ 18")
+    assert r["operator"] == ">="
+    assert r["value"] == 18.0
+
+
+def test_comparator_no_match_returns_none():
+    r = parse_numeric_comparator("Parkinson disease diagnosis required")
+    assert r["operator"] is None
+    assert r["value"] is None
+
 

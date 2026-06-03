@@ -70,6 +70,53 @@ def parse_numeric_range(text: str) -> dict[str, float | None]:
     return {"lower": lower, "upper": upper}
 
 
+def parse_numeric_comparator(text: str) -> dict[str, str | float | None]:
+    """Extract a single comparator and value from a criterion string.
+
+    Supports:
+      >=, >, <=, <, ≥, ≤ symbols;
+      "at least", "greater than", "more than", "minimum age";
+      "no more than", "less than", "at most", "maximum age".
+
+    Returns:
+        Dict with keys 'operator' (str or None) and 'value' (float or None).
+        operator is one of: '>=', '>', '<=', '<', or None.
+    """
+    t = text.lower()
+    _NUM = r"(\d+(?:\.\d+)?)"
+
+    _GTE = [
+        (r"(?:>=|≥)\s*" + _NUM, ">="),
+        (r"at\s+least\s+" + _NUM, ">="),
+        (r"minimum\s+(?:age\s+|value\s+|dose\s+)?" + _NUM, ">="),
+        (_NUM + r"\s+(?:years?\s+)?or\s+older", ">="),
+    ]
+    _GT = [
+        (r"(?<![=<>!])>\s*" + _NUM, ">"),
+        (r"greater\s+than\s+" + _NUM, ">"),
+        (r"(?<!no\s)more\s+than\s+" + _NUM, ">"),
+    ]
+    _LTE = [
+        (r"(?:<=|≤)\s*" + _NUM, "<="),
+        (r"no\s+more\s+than\s+" + _NUM, "<="),
+        (r"at\s+most\s+" + _NUM, "<="),
+        (r"maximum\s+(?:age\s+|value\s+|dose\s+)?" + _NUM, "<="),
+        (_NUM + r"\s+(?:years?\s+)?or\s+younger", "<="),
+    ]
+    _LT = [
+        (r"(?<![=<>!])<\s*" + _NUM, "<"),
+        (r"less\s+than\s+" + _NUM, "<"),
+    ]
+
+    for pattern, op in _LTE + _GTE + _GT + _LT:
+        m = re.search(pattern, t)
+        if m:
+            return {"operator": op, "value": float(m.group(1))}
+
+    return {"operator": None, "value": None}
+
+
+
 def parse_eligibility_criteria(text: str) -> dict[str, list[str] | str]:
     """Parse raw eligibility text into inclusion and exclusion criteria.
 
