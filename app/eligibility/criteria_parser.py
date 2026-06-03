@@ -14,6 +14,62 @@ def _clean_lines(lines: list[str]) -> list[str]:
     return cleaned
 
 
+def parse_numeric_range(text: str) -> dict[str, float | None]:
+    """Extract lower/upper numeric bounds from a criterion string.
+
+    Supports formats:
+      between N and M, N to M, N-M, N – M, from N to M,
+      >= N, > N, at least N, N or older,
+      <= M, < M, at most M, M or younger.
+
+    Returns:
+        Dict with keys 'lower' and 'upper' (float or None).
+    """
+    t = text.lower()
+    lower: float | None = None
+    upper: float | None = None
+
+    # between N and M  /  from N to M  /  N to M  /  N - M  /  N – M
+    m = re.search(
+        r"(?:between\s+|from\s+)?(\d+(?:\.\d+)?)\s*(?:to|-|–|and)\s*(\d+(?:\.\d+)?)",
+        t,
+    )
+    if m:
+        lower = float(m.group(1))
+        upper = float(m.group(2))
+        return {"lower": lower, "upper": upper}
+
+    # minimum-only: >= / > / at least / N or older
+    m = re.search(r"(?:>=|≥)\s*(\d+(?:\.\d+)?)", t)
+    if m:
+        lower = float(m.group(1))
+    elif re.search(r">\s*(\d+(?:\.\d+)?)", t):
+        m2 = re.search(r">\s*(\d+(?:\.\d+)?)", t)
+        lower = float(m2.group(1))  # type: ignore[union-attr]
+    m2 = re.search(r"at\s+least\s+(\d+(?:\.\d+)?)", t)
+    if m2:
+        lower = float(m2.group(1))
+    m2 = re.search(r"(\d+(?:\.\d+)?)\s+(?:years?\s+)?or\s+older", t)
+    if m2:
+        lower = float(m2.group(1))
+
+    # maximum-only: <= / < / at most / N or younger
+    m3 = re.search(r"(?:<=|≤)\s*(\d+(?:\.\d+)?)", t)
+    if m3:
+        upper = float(m3.group(1))
+    elif re.search(r"<\s*(\d+(?:\.\d+)?)", t):
+        m4 = re.search(r"<\s*(\d+(?:\.\d+)?)", t)
+        upper = float(m4.group(1))  # type: ignore[union-attr]
+    m4 = re.search(r"at\s+most\s+(\d+(?:\.\d+)?)", t)
+    if m4:
+        upper = float(m4.group(1))
+    m4 = re.search(r"(\d+(?:\.\d+)?)\s+(?:years?\s+)?or\s+younger", t)
+    if m4:
+        upper = float(m4.group(1))
+
+    return {"lower": lower, "upper": upper}
+
+
 def parse_eligibility_criteria(text: str) -> dict[str, list[str] | str]:
     """Parse raw eligibility text into inclusion and exclusion criteria.
 

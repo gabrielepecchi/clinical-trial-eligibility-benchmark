@@ -1,6 +1,6 @@
 """Unit tests for criteria_parser.py."""
 
-from criteria_parser import parse_eligibility_criteria
+from app.eligibility.criteria_parser import parse_eligibility_criteria, parse_numeric_range
 
 
 TEXT_FULL = """\
@@ -97,3 +97,105 @@ def test_empty_lines_removed():
 def test_raw_eligibility_preserved():
     result = parse_eligibility_criteria(TEXT_FULL)
     assert result["raw_eligibility"] == TEXT_FULL
+
+
+# ---------------------------------------------------------------------------
+# Numeric range parsing tests
+# ---------------------------------------------------------------------------
+
+
+def test_range_between_and():
+    r = parse_numeric_range("between 18 and 80")
+    assert r["lower"] == 18.0
+    assert r["upper"] == 80.0
+
+
+def test_range_n_to_m():
+    r = parse_numeric_range("18 to 80")
+    assert r["lower"] == 18.0
+    assert r["upper"] == 80.0
+
+
+def test_range_hyphen():
+    r = parse_numeric_range("18-80")
+    assert r["lower"] == 18.0
+    assert r["upper"] == 80.0
+
+
+def test_range_en_dash():
+    r = parse_numeric_range("18 – 80")
+    assert r["lower"] == 18.0
+    assert r["upper"] == 80.0
+
+
+def test_range_from_to():
+    r = parse_numeric_range("from 18 to 80")
+    assert r["lower"] == 18.0
+    assert r["upper"] == 80.0
+
+
+def test_range_bmi_with_units():
+    r = parse_numeric_range("BMI between 18 and 32 kg/m2")
+    assert r["lower"] == 18.0
+    assert r["upper"] == 32.0
+
+
+def test_range_hy_stage():
+    r = parse_numeric_range("Hoehn and Yahr stage 1 to 3")
+    assert r["lower"] == 1.0
+    assert r["upper"] == 3.0
+
+
+def test_range_or_older():
+    r = parse_numeric_range("age 40 years or older")
+    assert r["lower"] == 40.0
+    assert r["upper"] is None
+
+
+def test_range_or_younger():
+    r = parse_numeric_range("age 75 years or younger")
+    assert r["lower"] is None
+    assert r["upper"] == 75.0
+
+
+def test_range_at_least():
+    r = parse_numeric_range("at least 18 years of age")
+    assert r["lower"] == 18.0
+    assert r["upper"] is None
+
+
+def test_range_at_most():
+    r = parse_numeric_range("at most 80 years of age")
+    assert r["lower"] is None
+    assert r["upper"] == 80.0
+
+
+def test_range_gte_symbol():
+    r = parse_numeric_range("age >= 18")
+    assert r["lower"] == 18.0
+    assert r["upper"] is None
+
+
+def test_range_lte_symbol():
+    r = parse_numeric_range("age <= 75")
+    assert r["lower"] is None
+    assert r["upper"] == 75.0
+
+
+def test_range_unicode_gte():
+    r = parse_numeric_range("age ≥ 18")
+    assert r["lower"] == 18.0
+    assert r["upper"] is None
+
+
+def test_range_unicode_lte():
+    r = parse_numeric_range("age ≤ 75")
+    assert r["lower"] is None
+    assert r["upper"] == 75.0
+
+
+def test_range_no_numbers_returns_none():
+    r = parse_numeric_range("Parkinson disease diagnosis required")
+    assert r["lower"] is None
+    assert r["upper"] is None
+
