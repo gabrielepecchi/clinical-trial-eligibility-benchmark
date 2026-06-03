@@ -573,3 +573,77 @@ def test_clear_pd_patient_no_comorbidities_eligible():
     }
     result = match_patient_to_trial(patient, trial)
     assert result["prediction"] == "eligible"
+
+
+# ---------------------------------------------------------------------------
+# Task 99: Unknown/unclear propagation — targeted general cases
+# ---------------------------------------------------------------------------
+
+def test_stable_med_trial_no_duration_in_patient_gives_unclear_and_missing_duration():
+    """Trial requires stable medication duration; patient has medication but no duration → unclear."""
+    patient = {
+        "diagnosis": "Parkinson disease",
+        "age": 62,
+        "key_features": ["on levodopa"],
+        "medications": ["levodopa"],
+    }
+    trial = {
+        "inclusion_criteria": ["stable levodopa regimen for at least 4 weeks"],
+        "exclusion_criteria": [],
+    }
+    result = match_patient_to_trial(patient, trial)
+    assert result["prediction"] == "unclear"
+    assert "medication_stability_duration" in result["missing_information"]
+
+
+def test_disease_stage_missing_hy_trial_gives_unclear():
+    """Trial requires H&Y stage; patient disease_stage is missing → unclear."""
+    patient = {
+        "diagnosis": "Parkinson disease",
+        "age": 66,
+        "disease_stage": None,
+        "key_features": [],
+        "medications": [],
+    }
+    trial = {
+        "inclusion_criteria": ["Hoehn and Yahr stage 2 to 4"],
+        "exclusion_criteria": [],
+    }
+    result = match_patient_to_trial(patient, trial)
+    assert result["prediction"] == "unclear"
+
+
+def test_medication_list_unknown_specific_med_trial_gives_unclear():
+    """Trial requires specific medication; patient medication list is empty/unknown → unclear."""
+    patient = {
+        "diagnosis": "Parkinson disease",
+        "age": 60,
+        "key_features": ["medication history not available"],
+        "medications": [],
+    }
+    trial = {
+        "inclusion_criteria": ["patients receiving rotigotine patch for at least 3 months"],
+        "exclusion_criteria": [],
+    }
+    result = match_patient_to_trial(patient, trial)
+    assert result["prediction"] == "unclear"
+
+
+def test_hard_exclusion_plus_missing_info_gives_not_eligible():
+    """Hard exclusion criterion present together with missing info → not_eligible takes precedence."""
+    patient = {
+        "diagnosis": "Parkinson disease",
+        "age": 45,  # below 50 minimum
+        "key_features": ["dose and frequency unclear"],
+        "medications": [],
+    }
+    trial = {
+        "inclusion_criteria": [
+            "age 50 to 80 years",
+            "stable levodopa regimen for at least 4 weeks",
+        ],
+        "exclusion_criteria": [],
+    }
+    result = match_patient_to_trial(patient, trial)
+    assert result["prediction"] == "not_eligible"
+

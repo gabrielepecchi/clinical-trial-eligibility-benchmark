@@ -58,6 +58,27 @@ from app.eligibility.clinical_units import (
 )
 
 # ---------------------------------------------------------------------------
+# Local patterns
+# ---------------------------------------------------------------------------
+
+_STABLE_REGIMEN_DURATION_PATTERN = re.compile(
+    r"stable\s+\w+(?:\s+\w+)?\s+regimen\s+for\s+at\s+least\s+(\d+)\s+(weeks?|months?)",
+    re.IGNORECASE,
+)
+
+
+def _required_weeks_extended(criterion: str) -> int | None:
+    """Like _required_weeks but also matches 'stable <drug> regimen for at least N weeks'."""
+    result = _required_weeks(criterion)
+    if result is not None:
+        return result
+    m = _STABLE_REGIMEN_DURATION_PATTERN.search(criterion)
+    if not m:
+        return None
+    return _to_weeks(int(m.group(1)), m.group(2))
+
+
+# ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
 
@@ -554,7 +575,7 @@ def _check_medication_stability(patient: dict, trial: dict) -> tuple[str | None,
 
     # Numeric duration check
     for criterion in inclusion_list:
-        req = _required_weeks(criterion)
+        req = _required_weeks_extended(criterion)
         if req is None:
             continue
         changed_ago = _patient_changed_weeks_ago(patient_med_text)
@@ -648,14 +669,16 @@ def _check_disease_stage_unclear(
             "disease stage, severity, or duration unclear or missing",
         )
 
-    # Also check if disease_stage field is explicitly "unclear"
-    disease_stage = str(patient.get("disease_stage", "")).lower()
-    if disease_stage in ("unclear", "unknown", "missing", "not recorded", ""):
-        # Only flag if stage/severity info is genuinely relevant to the trial
-        return (
-            "trial requires disease stage or severity information but patient data is unclear or missing",
-            "disease stage unclear or not recorded",
-        )
+    # Also check if disease_stage field is explicitly "unclear" or None (key present but no data)
+    if "disease_stage" in patient:
+        _raw_stage = patient.get("disease_stage")
+        disease_stage = "" if _raw_stage is None else str(_raw_stage).lower()
+        if disease_stage in ("unclear", "unknown", "missing", "not recorded", "none", ""):
+            # Only flag if stage/severity info is genuinely relevant to the trial
+            return (
+                "trial requires disease stage or severity information but patient data is unclear or missing",
+                "disease stage unclear or not recorded",
+            )
 
     return None, None
 
@@ -2305,7 +2328,7 @@ def match_patient_to_trial(patient: dict, trial: dict) -> dict:
     inclusion_list = trial.get("inclusion_criteria", [])
     patient_med_text = _text(patient.get("medications", []) + patient.get("key_features", []))
     for criterion in inclusion_list:
-        req = _required_weeks(criterion)
+        req = _required_weeks_extended(criterion)
         if req is None:
             continue
         patient_weeks = _patient_stable_weeks(patient_med_text)
@@ -2434,7 +2457,7 @@ def _evaluate_inclusion_criterion(
         if _any_match(_UNCLEAR_MED_PATTERNS, med_text):
             return CriterionDecision.unknown, "medication details unclear"
         # Numeric duration check
-        req = _required_weeks(c_lower)
+        req = _required_weeks_extended(c_lower)
         if req is not None:
             changed_ago = _patient_changed_weeks_ago(med_text)
             if changed_ago is not None and changed_ago < req:
