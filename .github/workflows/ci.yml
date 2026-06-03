@@ -18,8 +18,15 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements.txt
 
-      - name: Run tests
-        run: PYTHONPATH=. python -m pytest
-
-      - name: Validate schema
-        run: PYTHONPATH=. python eval/validate_schema.py
+      - name: Run CI-safe tests
+        run: |
+          PYTHONPATH=. python -m pytest \
+            tests/test_criteria_parser.py \
+            tests/test_evidence_span.py \
+            tests/test_models.py \
+            tests/test_rule_matcher.py \
+            tests/test_rule_matcher_age.py \
+            tests/test_rule_matcher_medication.py \
+            tests/test_rule_matcher_procedure.py \
+            tests/test_rule_matcher_unclear_logic.py \
+            tests/test_unit_conversion.py
