@@ -1,0 +1,21 @@
+# Benchmark configuration for clinical-trial-eligibility-benchmark
+# This benchmark uses fully synthetic patients and draft LLM-reviewed labels.
+# Labels are NOT clinician-adjudicated gold labels. Not for clinical use.
+
+disease: Parkinson disease
+benchmark_version: 0.1.0
+random_seed: 42
+
+max_trials: 20
+num_patients: 20
+evaluated_pairs: 150
+
+label_source: data/processed/labels_llm_reviewed.json
+patient_file: data/processed/patient_cases.json
+trial_file: data/processed/trial_cases.json
+results_file: data/processed/results_llm_reviewed.json
+
+output_dir: data/processed
+reports_dir: reports
+
+clinical_use: false
