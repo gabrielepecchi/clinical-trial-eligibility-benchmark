@@ -44,6 +44,8 @@ from app.eligibility.clinical_terms import (
     _FRAILTY_TARGET_SUPPRESSION_PATTERNS, _RBD_TARGET_SUPPRESSION_PATTERNS,
     _RBD_AMBIGUITY_TRIGGER_PATTERNS, _DEPRESSION_IMAGING_BIOMARKER_PATTERNS,
     _ACTIVE_CANCER_PATIENT_PATTERNS, _ACTIVE_CANCER_TRIAL_PATTERNS,
+    _MED_SYNONYMS, _patient_has_med_class, _trial_requires_med_class,
+    _normalize_med_text,
 )
 
 from app.eligibility.clinical_units import (
@@ -423,7 +425,7 @@ def _check_maob(patient: dict, trial: dict) -> tuple[str | None, str | None]:
     if not _MAOB_CRITERION_PATTERN.search(exclusion_text):
         return None, None
     patient_med_text = _text(patient.get("medications", []) + patient.get("key_features", []))
-    if _has_maob_inhibitor(patient_med_text):
+    if _has_maob_inhibitor(patient_med_text) or _patient_has_med_class(patient_med_text, "maob_inhibitor"):
         return "MAO-B inhibitor use is an exclusion criterion", "MAO-B inhibitor medication present"
     return None, None
 
@@ -2485,7 +2487,7 @@ def _evaluate_exclusion_criterion(
         patient_med_text = _text(patient.get("medications", []) + patient.get("key_features", []))
         if _has_negated_maob(patient_med_text):
             return CriterionDecision.not_met, "no MAO-B inhibitor use documented"
-        if _has_maob_inhibitor(patient_med_text):
+        if _has_maob_inhibitor(patient_med_text) or _patient_has_med_class(patient_med_text, "maob_inhibitor"):
             return CriterionDecision.met, "MAO-B inhibitor present — patient excluded"
         return CriterionDecision.not_met, "no MAO-B inhibitor found"
 

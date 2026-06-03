@@ -797,3 +797,111 @@ _ACTIVE_CANCER_TRIAL_PATTERNS = [
     r"cardiovascular", r"hepatic", r"tolerability",
 ]
 
+
+# ---------------------------------------------------------------------------
+# Medication synonym groups
+# ---------------------------------------------------------------------------
+
+# Each group: (canonical_name, [regex patterns for all synonyms])
+_MED_SYNONYM_GROUPS: list[tuple[str, list[str]]] = [
+    (
+        "levodopa",
+        [
+            r"\blevodopa\b",
+            r"\bl.dopa\b",
+            r"\bldopa\b",
+            r"carbidopa.levodopa",
+            r"levodopa.carbidopa",
+            r"co.careldopa",
+            r"\bsinemet\b",
+            r"\bduodopa\b",
+            r"\bkynmobi\b",
+            r"\binbrija\b",
+            r"\brytary\b",
+        ],
+    ),
+    (
+        "dopamine_agonist",
+        [
+            r"\bpramipexole\b",
+            r"\bmirapex\b",
+            r"\bropinirole\b",
+            r"\brequip\b",
+            r"\brotigotine\b",
+            r"\bneupro\b",
+            r"\bapomorphine\b",
+            r"\bkynmobi\b",
+            r"dopamine.*agonist",
+            r"agonist.*dopamine",
+        ],
+    ),
+    (
+        "maob_inhibitor",
+        [
+            r"\brasagiline\b",
+            r"\bazilect\b",
+            r"\bselegiline\b",
+            r"\bdeprenyl\b",
+            r"\beldepryl\b",
+            r"\bzelapar\b",
+            r"\bsafinamide\b",
+            r"\bxadago\b",
+            r"mao.b inhibitor",
+            r"monoamine oxidase.*b.*inhibitor",
+        ],
+    ),
+    (
+        "comt_inhibitor",
+        [
+            r"\bentacapone\b",
+            r"\bcomtan\b",
+            r"\bopicapone\b",
+            r"\bongentys\b",
+            r"\btolcapone\b",
+            r"\btasmar\b",
+            r"comt inhibitor",
+            r"comt.inhibitor",
+        ],
+    ),
+    (
+        "amantadine",
+        [
+            r"\bamantadine\b",
+            r"\bgocovri\b",
+            r"\bosmolex\b",
+            r"\bsymmetrel\b",
+        ],
+    ),
+]
+
+# Flat lookup: canonical → list of patterns
+_MED_SYNONYMS: dict[str, list[str]] = {
+    canonical: patterns for canonical, patterns in _MED_SYNONYM_GROUPS
+}
+
+
+def _patient_has_med_class(patient_text: str, canonical: str) -> bool:
+    """Return True if patient text contains any synonym for the given medication class."""
+    if canonical == "maob_inhibitor" and _has_negated_maob(patient_text):
+        return False
+    patterns = _MED_SYNONYMS.get(canonical, [])
+    return _any_match(patterns, patient_text)
+
+
+def _trial_requires_med_class(trial_text: str, canonical: str) -> bool:
+    """Return True if trial text references any synonym for the given medication class."""
+    patterns = _MED_SYNONYMS.get(canonical, [])
+    return _any_match(patterns, trial_text)
+
+
+def _normalize_med_text(text: str) -> str:
+    """Return text with medication synonyms replaced by their canonical form.
+
+    Useful for downstream pattern matching that uses canonical drug names only.
+    """
+    result = text
+    for canonical, patterns in _MED_SYNONYM_GROUPS:
+        for p in patterns:
+            result = re.sub(p, canonical, result, flags=re.IGNORECASE)
+    return result
+
