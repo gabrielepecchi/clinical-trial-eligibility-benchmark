@@ -999,3 +999,116 @@ def _trial_involves_procedure(trial_text: str, canonical: str) -> bool:
     patterns = _PROCEDURE_SYNONYMS.get(canonical, [])
     return any(re.search(p, trial_text, re.IGNORECASE) for p in patterns)
 
+
+# ---------------------------------------------------------------------------
+# Task 8: General negation and contradiction helpers
+# ---------------------------------------------------------------------------
+
+# Negation prefixes: "no", "denies", "not", "without", "no history of", etc.
+_NEGATION_PREFIX = r"(?:no\b|denies?|not\b|without\b|no\s+history\s+of|no\s+prior|no\s+evidence\s+of|ruled?\s+out|free\s+of|absence\s+of)"
+
+# Clause-boundary chars: comma, semicolon, period, "but", "however", "although", "yet"
+_NO_CLAUSE_BREAK = r"(?:(?!,|;|\.|but\b|however\b|although\b|yet\b).)"
+
+# Per-topic negation patterns — do NOT cross clause boundaries
+_NEGATION_PATTERNS: dict[str, re.Pattern] = {
+    "dbs": re.compile(
+        rf"{_NEGATION_PREFIX}{_NO_CLAUSE_BREAK}{{0,40}}(?:dbs|deep\s+brain\s+stimulation|subthalamic\s+stimulation)",
+        re.IGNORECASE,
+    ),
+    "maob_inhibitor": re.compile(
+        rf"{_NEGATION_PREFIX}{_NO_CLAUSE_BREAK}{{0,40}}(?:mao.?b|rasagiline|selegiline|safinamide|azilect|deprenyl)",
+        re.IGNORECASE,
+    ),
+    "cognitive_impairment": re.compile(
+        rf"{_NEGATION_PREFIX}{_NO_CLAUSE_BREAK}{{0,40}}(?:cognitive\s+impairment|dementia|memory\s+impairment|mci|cognitive\s+decline)",
+        re.IGNORECASE,
+    ),
+    "active_cancer": re.compile(
+        rf"{_NEGATION_PREFIX}{_NO_CLAUSE_BREAK}{{0,40}}(?:active\s+cancer|cancer|malignancy|tumor|tumour|chemotherapy|oncology)"
+        rf"|(?:cancer|malignancy)\s+(?:ruled?\s+out|excluded|resolved|in\s+remission|not\s+active)",
+        re.IGNORECASE,
+    ),
+    "investigational_drug": re.compile(
+        rf"{_NEGATION_PREFIX}{_NO_CLAUSE_BREAK}{{0,40}}(?:investigational\s+drug|experimental\s+drug|investigational\s+agent)",
+        re.IGNORECASE,
+    ),
+    "trial_participation": re.compile(
+        rf"{_NEGATION_PREFIX}{_NO_CLAUSE_BREAK}{{0,40}}(?:clinical\s+trial|investigational\s+study|trial\s+participation)",
+        re.IGNORECASE,
+    ),
+}
+
+# Per-topic positive (affirmative) patterns — presence of topic
+_POSITIVE_PATTERNS: dict[str, list[str]] = {
+    "dbs": [r"\bdbs\b", r"deep\s+brain\s+stimulation", r"subthalamic\s+(?:nucleus\s+)?stimulation", r"\bstn\b"],
+    "maob_inhibitor": [r"\brasagiline\b", r"\bselegiline\b", r"\bsafinamide\b", r"mao.?b\s+inhibitor"],
+    "cognitive_impairment": [r"cognitive\s+impairment", r"\bdementia\b", r"\bmci\b", r"memory\s+impairment", r"cognitive\s+decline"],
+    "active_cancer": [r"active\s+cancer", r"active\s+malignancy", r"current\s+chemotherapy", r"currently\s+receiving\s+chemotherapy", r"ongoing\s+chemotherapy", r"active\s+tumor", r"receiving\s+chemotherapy"],
+    "investigational_drug": [r"investigational\s+drug", r"experimental\s+drug", r"investigational\s+agent"],
+    "trial_participation": [r"clinical\s+trial", r"investigational\s+study", r"enrolled\s+in\s+(?:a\s+)?(?:trial|study)"],
+}
+
+
+def is_negated(text: str, topic: str) -> bool:
+    """Return True if the topic is clearly negated in text."""
+    pat = _NEGATION_PATTERNS.get(topic)
+    if pat is None:
+        return False
+    return bool(pat.search(text))
+
+
+def is_affirmed(text: str, topic: str) -> bool:
+    """Return True if the topic is positively mentioned in text (ignoring negation)."""
+    pats = _POSITIVE_PATTERNS.get(topic, [])
+    return _any_match(pats, text)
+
+
+def _negation_spans(text: str, topic: str) -> list[tuple[int, int]]:
+    """Return (start, end) spans covering all keyword matches within each negation match."""
+    pat = _NEGATION_PATTERNS.get(topic)
+    if pat is None:
+        return []
+    keyword_pats = _POSITIVE_PATTERNS.get(topic, [])
+    spans: list[tuple[int, int]] = []
+    for m in pat.finditer(text):
+        seg = m.group()
+        seg_start = m.start()
+        latest_end: int | None = None
+        for kp in keyword_pats:
+            for km in re.finditer(kp, seg, re.IGNORECASE):
+                kend = seg_start + km.end()
+                if latest_end is None or kend > latest_end:
+                    latest_end = kend
+        spans.append((seg_start, latest_end if latest_end is not None else m.end()))
+    return spans
+
+
+def has_non_negated_affirmation(text: str, topic: str) -> bool:
+    """Return True if there is a positive mention of topic NOT covered by any negation span.
+
+    A positive match is considered covered (negated) if its start position falls
+    within any negation span.  Pure negations like "no dementia" produce only
+    negation spans; they are NOT treated as affirmed.
+    """
+    pats = _POSITIVE_PATTERNS.get(topic, [])
+    if not pats:
+        return False
+    spans = _negation_spans(text, topic)
+    for p in pats:
+        for m in re.finditer(p, text, re.IGNORECASE):
+            pos = m.start()
+            if not any(s <= pos < e for s, e in spans):
+                return True
+    return False
+
+
+def has_contradiction(text: str, topic: str) -> bool:
+    """Return True if text contains both a negation AND a separate non-negated affirmation for topic.
+
+    A pure negation ("no dementia", "cancer ruled out") returns False because
+    the only positive keyword match is inside the negation span itself.
+    True contradictions ("denies dementia, dementia documented by neurologist") return True
+    because there is a positive mention outside the negation span.
+    """
+    return is_negated(text, topic) and has_non_negated_affirmation(text, topic)

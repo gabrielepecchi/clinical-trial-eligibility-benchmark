@@ -6,6 +6,9 @@ from app.models import CriterionDecision, CriterionMatchResult, CriterionType
 
 from app.eligibility.clinical_terms import (
     _any_match,
+    is_negated,
+    is_affirmed,
+    has_contradiction,
     _has_negated_dbs,
     _has_maob_inhibitor,
     _has_negated_maob,
@@ -261,6 +264,31 @@ def _check_dbs(patient: dict, trial: dict) -> tuple[str | None, str | None]:
         + patient.get("medications", [])
         + patient.get("exclusions", [])
     )
+    _DBS_NEGATION_PHRASES = [
+        r"\bno\b.{0,40}(?:history\s+of\s+)?(?:dbs|deep\s+brain\s+stimulation)",
+        r"\bdenies?\b.{0,40}(?:dbs|deep\s+brain\s+stimulation)",
+        r"\bno\s+prior\b.{0,40}(?:dbs|deep\s+brain\s+stimulation)",
+        r"\bno\s+previous\b.{0,40}(?:dbs|deep\s+brain\s+stimulation)",
+        r"\bwithout\b.{0,40}(?:dbs|deep\s+brain\s+stimulation)",
+    ]
+    _DBS_IMPLANT_PHRASES = [
+        r"(?:dbs|deep\s+brain\s+stimulation)\s+(?:implanted|implant|surgery|procedure|placed|insertion)",
+        r"(?:implanted|underwent|undergone|received|has)\s+(?:a\s+)?(?:dbs|deep\s+brain\s+stimulation)",
+        r"(?:stn|subthalamic).{0,20}(?:dbs|stimulation).{0,20}(?:implanted|implant|surgery)",
+        r"(?:dbs|deep\s+brain\s+stimulation).{0,40}(?:years?\s+ago|months?\s+ago)",
+    ]
+    _has_dbs_negation_phrase = _any_match(_DBS_NEGATION_PHRASES, patient_text)
+    _has_dbs_implant_phrase = _any_match(_DBS_IMPLANT_PHRASES, patient_text)
+    if _has_dbs_negation_phrase and _has_dbs_implant_phrase:
+        return (
+            "__unclear__:contradictory DBS records: both no DBS history and DBS implant/procedure documented",
+            "contradiction in DBS records",
+        )
+    if has_contradiction(patient_text, "dbs"):
+        return (
+            "__unclear__:contradictory DBS records: both negation and affirmation found — eligibility cannot be determined",
+            "contradiction in DBS records",
+        )
     if _has_negated_dbs(patient_text):
         return None, None
     patient_has_dbs = _patient_has_procedure(patient_text, "dbs")
@@ -450,6 +478,11 @@ def _check_maob(patient: dict, trial: dict) -> tuple[str | None, str | None]:
     if not _MAOB_CRITERION_PATTERN.search(exclusion_text):
         return None, None
     patient_med_text = _text(patient.get("medications", []) + patient.get("key_features", []))
+    if has_contradiction(patient_med_text, "maob_inhibitor"):
+        return (
+            "__unclear__:contradictory MAO-B inhibitor records: both negation and affirmation found — eligibility cannot be determined",
+            "contradiction in MAO-B inhibitor records",
+        )
     if _has_maob_inhibitor(patient_med_text) or _patient_has_med_class(patient_med_text, "maob_inhibitor"):
         return "MAO-B inhibitor use is an exclusion criterion", "MAO-B inhibitor medication present"
     return None, None
@@ -701,6 +734,42 @@ def _check_temporal_criteria(
 
     return blocks, uncertainties, missing_keys
 
+
+def _check_contradictions(
+    patient: dict, trial: dict
+) -> tuple[list[tuple[str, str]], list[str]]:
+    """Detect contradictory patient facts for trial-relevant topics.
+
+    Returns (uncertainties, missing_keys) where each uncertainty is (criterion_text, fact_text).
+    Contradictory facts (both negated and affirmed) produce unclear rather than a hard block.
+    """
+    patient_all_text = _text(
+        patient.get("key_features", [])
+        + patient.get("medications", [])
+        + patient.get("exclusions", [])
+        + [patient.get("summary", "")]
+        + (patient.get("diagnosis", []) if isinstance(patient.get("diagnosis"), list) else [str(patient.get("diagnosis", ""))])
+    )
+
+    # Topics relevant to hard exclusions checked by rule_matcher
+    _EXCLUSION_TOPICS = ["dbs", "maob_inhibitor", "cognitive_impairment", "active_cancer",
+                         "investigational_drug", "trial_participation"]
+
+    uncertainties: list[tuple[str, str]] = []
+    missing_keys: list[str] = []
+
+    for topic in _EXCLUSION_TOPICS:
+        if has_contradiction(patient_all_text, topic):
+            msg = (
+                f"contradictory patient records for {topic.replace("_", " ")}: "                f"both negation and affirmation found — eligibility cannot be determined"
+            )
+            uncertainties.append((msg, f"contradiction in {topic} records"))
+            key = f"{topic}_contradiction"
+            if key not in missing_keys:
+                missing_keys.append(key)
+
+    return uncertainties, missing_keys
+
 # ---------------------------------------------------------------------------
 # Extended unclear checks
 # ---------------------------------------------------------------------------
@@ -927,6 +996,10 @@ def _check_active_cancer(
     )
 
     if not _any_match(_ACTIVE_CANCER_PATTERNS, patient_all_text):
+        return None, None
+
+    # Negation: patient explicitly denies active cancer
+    if is_negated(patient_all_text, "active_cancer") and not has_contradiction(patient_all_text, "active_cancer"):
         return None, None
 
     # Check if trial itself is oncology-focused (then cancer is expected and not a red flag)
@@ -1210,6 +1283,10 @@ def _check_cognitive_exclusion_general(
     if not _any_match(_STRICT_COGNITIVE_IMPAIRMENT_PATTERNS, patient_features):
         return None, None
 
+    # Pure negation: patient explicitly denies cognitive impairment/dementia — do not block
+    if is_negated(patient_features, "cognitive_impairment") and not has_contradiction(patient_features, "cognitive_impairment"):
+        return None, None
+
     # For DBS/neuropsychiatric/facial/imaging outcome trials without explicit numeric cutoff
     # or explicit dementia exclusion: downgrade to unclear instead of hard blocking.
     _DBS_NEURO_IMAGING_OUTCOME_PATTERNS = [
@@ -1296,6 +1373,7 @@ def _check_cognitive_inclusion_minimum(
             elif (
                 _any_match(_HARD_COG_PATTERNS, patient_features)
                 and not _any_match(_EARLY_PD_EXEMPT, patient_features)
+                and not (is_negated(patient_features, "cognitive_impairment") and not has_contradiction(patient_features, "cognitive_impairment"))
             ):
                 return (
                     f"cognitive inclusion minimum: MMSE >= {required} required; patient has documented cognitive impairment",
@@ -1318,6 +1396,7 @@ def _check_cognitive_inclusion_minimum(
             elif (
                 _any_match(_HARD_COG_PATTERNS, patient_features)
                 and not _any_match(_EARLY_PD_EXEMPT, patient_features)
+                and not (is_negated(patient_features, "cognitive_impairment") and not has_contradiction(patient_features, "cognitive_impairment"))
             ):
                 return (
                     f"cognitive inclusion minimum: MoCA >= {required} required; patient has documented cognitive impairment",
@@ -1340,6 +1419,7 @@ def _check_cognitive_inclusion_minimum(
             if (
                 _any_match(_CLEAR_IMPAIRMENT_PATTERNS, patient_features)
                 and not _any_match(_EARLY_PD_EXEMPT, patient_features)
+                and not (is_negated(patient_features, "cognitive_impairment") and not has_contradiction(patient_features, "cognitive_impairment"))
             ):
                 return (
                     "cognitive inclusion requirement: intact cognition or consent capacity required; patient has documented cognitive impairment",
@@ -2156,8 +2236,13 @@ def match_patient_to_trial(patient: dict, trial: dict) -> dict:
     # --- DBS ---
     dbs_block, dbs_fact = _check_dbs(patient, trial)
     if dbs_block:
-        blocking_criteria.append(dbs_block)
-        matched_facts.append(dbs_fact)
+        if dbs_block.startswith("__unclear__:"):
+            uncertain_criteria.append(dbs_block[len("__unclear__:"):])
+            if dbs_fact:
+                matched_facts.append(dbs_fact)
+        else:
+            blocking_criteria.append(dbs_block)
+            matched_facts.append(dbs_fact)
 
     # --- DBS + MRI/fMRI compatibility ---
     dbs_mri_block, dbs_mri_fact = _check_dbs_mri_compatibility(patient, trial)
@@ -2169,9 +2254,14 @@ def match_patient_to_trial(patient: dict, trial: dict) -> dict:
     # --- MAO-B inhibitor ---
     maob_block, maob_fact = _check_maob(patient, trial)
     if maob_block:
-        blocking_criteria.append(maob_block)
-        if maob_fact:
-            matched_facts.append(maob_fact)
+        if maob_block.startswith("__unclear__:"):
+            uncertain_criteria.append(maob_block[len("__unclear__:"):])
+            if maob_fact:
+                matched_facts.append(maob_fact)
+        else:
+            blocking_criteria.append(maob_block)
+            if maob_fact:
+                matched_facts.append(maob_fact)
 
     # --- Cognitive / MMSE / MoCA (numeric threshold) ---
     cog_block, cog_fact = _check_cognitive(patient, trial)
@@ -2337,6 +2427,13 @@ def match_patient_to_trial(patient: dict, trial: dict) -> dict:
         if trial_part_fact:
             matched_facts.append(trial_part_fact)
 
+    # --- Contradictions (Task 8) ---
+    contra_uncertainties, contra_missing = _check_contradictions(patient, trial)
+    for cu, cf in contra_uncertainties:
+        if cu not in uncertain_criteria:
+            uncertain_criteria.append(cu)
+            matched_facts.append(cf)
+
     # --- Temporal criteria (Task 7) ---
     temp_blocks, temp_uncertainties, temp_missing = _check_temporal_criteria(patient, trial)
     for tb, tf in temp_blocks:
@@ -2462,6 +2559,10 @@ def match_patient_to_trial(patient: dict, trial: dict) -> dict:
         missing_information.append("trial_participation_history")
 
     for mk in temp_missing:
+        if mk not in missing_information:
+            missing_information.append(mk)
+
+    for mk in contra_missing:
         if mk not in missing_information:
             missing_information.append(mk)
 

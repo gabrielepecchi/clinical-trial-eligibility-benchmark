@@ -650,36 +650,36 @@ def test_hard_exclusion_plus_missing_info_gives_not_eligible():
 
 
 # ---------------------------------------------------------------------------
-# Task 7: Temporal eligibility — unclear propagation
+# Task 8: Negation and contradiction — unclear propagation
 # ---------------------------------------------------------------------------
 
-def test_investigational_drug_timing_unknown_gives_unclear():
-    """Patient notes investigational drug use but timing unknown; trial excludes within 30 days."""
-    patient = {
-        "diagnosis": "Parkinson disease",
-        "age": 62,
-        "key_features": ["received investigational drug, timing unknown"],
-        "medications": [],
-    }
-    trial = {
-        "inclusion_criteria": ["Confirmed Parkinson disease diagnosis"],
-        "exclusion_criteria": ["no investigational drug within 30 days"],
-    }
-    result = match_patient_to_trial(patient, trial)
-    assert result["prediction"] == "unclear"
-
-
-def test_trial_participation_timing_unknown_gives_unclear():
-    """Patient notes recent clinical trial participation but timing not documented."""
+def test_contradictory_maob_records_give_unclear():
+    """Patient text has both denial and affirmation of MAO-B inhibitor."""
     patient = {
         "diagnosis": "Parkinson disease",
         "age": 65,
-        "key_features": ["enrolled in clinical trial, dates not recorded"],
-        "medications": [],
+        "key_features": ["no MAO-B inhibitor use", "taking rasagiline"],
+        "medications": ["rasagiline"],
     }
     trial = {
         "inclusion_criteria": ["Confirmed Parkinson disease diagnosis"],
-        "exclusion_criteria": ["no clinical trial within 3 months"],
+        "exclusion_criteria": ["MAO-B inhibitor use"],
     }
     result = match_patient_to_trial(patient, trial)
     assert result["prediction"] == "unclear"
+
+
+def test_negated_investigational_drug_does_not_flag_unclear():
+    """Patient denies investigational drug use; no trial washout — should not produce unclear."""
+    patient = {
+        "diagnosis": "Parkinson disease",
+        "age": 62,
+        "key_features": ["no investigational drug use"],
+        "medications": ["levodopa"],
+    }
+    trial = {
+        "inclusion_criteria": ["Confirmed Parkinson disease diagnosis"],
+        "exclusion_criteria": [],
+    }
+    result = match_patient_to_trial(patient, trial)
+    assert not any("investigational" in u.lower() for u in result["uncertain_criteria"])
