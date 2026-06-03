@@ -2,8 +2,7 @@
 tests/test_unit_conversion.py — Task 6: Unit conversion regression tests.
 
 Tests unit-aware numeric thresholds for weight, BMI, creatinine, hemoglobin.
-Passing tests assert stable current matcher behavior.
-Xfail tests document desired future behavior not yet implemented.
+All tests assert implemented matcher behavior.
 """
 
 import pytest
@@ -46,7 +45,6 @@ class TestWeightKg:
             "A patient within the weight range should not be not_eligible solely on weight."
         )
 
-    @pytest.mark.xfail(strict=False, reason="Matcher does not enforce weight_kg lower bound yet; returns eligible.")
     def test_weight_below_range_kg(self):
         """Patient weight 40 kg is below 45 kg minimum; expect not_eligible or unclear."""
         patient = _patient(weight_kg=40)
@@ -55,7 +53,6 @@ class TestWeightKg:
         # Current matcher may return unclear if it cannot evaluate; not_eligible also acceptable.
         assert result["prediction"] in ("not_eligible", "unclear")
 
-    @pytest.mark.xfail(strict=False, reason="Matcher does not enforce weight_kg upper bound yet; returns eligible.")
     def test_weight_above_range_kg(self):
         """Patient weight 110 kg exceeds 100 kg maximum; expect not_eligible or unclear."""
         patient = _patient(weight_kg=110)
@@ -78,7 +75,6 @@ class TestWeightKg:
 
 class TestWeightLbConversion:
 
-    @pytest.mark.xfail(strict=False, reason="Matcher does not convert lb to kg yet.")
     def test_weight_154_lb_within_45_100_kg(self):
         """154 lb ≈ 70 kg; should be within 45–100 kg range after conversion."""
         patient = _patient(weight_lb=154)
@@ -86,7 +82,6 @@ class TestWeightLbConversion:
         result = match_patient_to_trial(patient, trial)
         assert result["prediction"] in ("eligible", "unclear")
 
-    @pytest.mark.xfail(strict=False, reason="Matcher does not convert lb to kg yet.")
     def test_weight_88_lb_below_45_kg(self):
         """88 lb ≈ 40 kg; below 45 kg minimum."""
         patient = _patient(weight_lb=88)
@@ -108,7 +103,6 @@ class TestBMI:
         result = match_patient_to_trial(patient, trial)
         assert result["prediction"] in ("eligible", "unclear")
 
-    @pytest.mark.xfail(strict=False, reason="Matcher does not enforce BMI lower bound yet; returns eligible.")
     def test_bmi_below_range(self):
         """BMI 16 is below minimum of 18; expect not_eligible or unclear."""
         patient = _patient(bmi=16)
@@ -116,7 +110,6 @@ class TestBMI:
         result = match_patient_to_trial(patient, trial)
         assert result["prediction"] in ("not_eligible", "unclear")
 
-    @pytest.mark.xfail(strict=False, reason="Matcher does not enforce BMI upper bound yet; returns eligible.")
     def test_bmi_above_range(self):
         """BMI 35 exceeds maximum of 32; expect not_eligible or unclear."""
         patient = _patient(bmi=35)
@@ -131,7 +124,6 @@ class TestBMI:
         result = match_patient_to_trial(patient, trial)
         assert result["prediction"] in ("unclear", "eligible")
 
-    @pytest.mark.xfail(strict=False, reason="Matcher does not compute BMI from height/weight yet.")
     def test_bmi_derived_from_height_weight(self):
         """BMI derivable from height 170 cm / weight 70 kg ≈ 24.2; within 18–32."""
         patient = _patient(height_cm=170, weight_kg=70)
@@ -153,7 +145,6 @@ class TestCreatinine:
         result = match_patient_to_trial(patient, trial)
         assert result["prediction"] in ("eligible", "unclear")
 
-    @pytest.mark.xfail(strict=False, reason="Matcher does not enforce creatinine_mg_dl upper bound yet; returns eligible.")
     def test_creatinine_above_threshold(self):
         """Creatinine 2.0 mg/dL exceeds 1.5 mg/dL threshold; expect not_eligible or unclear."""
         patient = _patient(creatinine_mg_dl=2.0)
@@ -168,7 +159,6 @@ class TestCreatinine:
         result = match_patient_to_trial(patient, trial)
         assert result["prediction"] in ("unclear", "eligible")
 
-    @pytest.mark.xfail(strict=False, reason="Matcher does not convert creatinine clearance to eGFR yet.")
     def test_creatinine_clearance_above_minimum(self):
         """Creatinine clearance 75 mL/min exceeds required >60 mL/min."""
         patient = _patient(creatinine_clearance_ml_min=75)
@@ -176,7 +166,6 @@ class TestCreatinine:
         result = match_patient_to_trial(patient, trial)
         assert result["prediction"] in ("eligible", "unclear")
 
-    @pytest.mark.xfail(strict=False, reason="Matcher does not convert creatinine clearance to eGFR yet.")
     def test_creatinine_clearance_below_minimum(self):
         """Creatinine clearance 45 mL/min is below required >60 mL/min."""
         patient = _patient(creatinine_clearance_ml_min=45)
@@ -198,7 +187,6 @@ class TestHemoglobin:
         result = match_patient_to_trial(patient, trial)
         assert result["prediction"] in ("eligible", "unclear")
 
-    @pytest.mark.xfail(strict=False, reason="Matcher does not enforce hemoglobin_g_dl lower bound yet; returns eligible.")
     def test_hemoglobin_below_threshold(self):
         """Hemoglobin 8.0 g/dL is below minimum of 10 g/dL; expect not_eligible or unclear."""
         patient = _patient(hemoglobin_g_dl=8.0)
@@ -213,7 +201,6 @@ class TestHemoglobin:
         result = match_patient_to_trial(patient, trial)
         assert result["prediction"] in ("unclear", "eligible")
 
-    @pytest.mark.xfail(strict=False, reason="Matcher does not convert g/L to g/dL yet.")
     def test_hemoglobin_unit_conversion_g_per_l(self):
         """Hemoglobin 125 g/L = 12.5 g/dL; should satisfy >10 g/dL criterion after conversion."""
         patient = _patient(hemoglobin_g_l=125)

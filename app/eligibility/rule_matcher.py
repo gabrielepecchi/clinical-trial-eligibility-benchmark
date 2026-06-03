@@ -51,6 +51,7 @@ from app.eligibility.clinical_units import (
     _required_weeks,
     _patient_stable_weeks,
     _patient_changed_weeks_ago,
+    check_lab_thresholds,
 )
 
 # ---------------------------------------------------------------------------
@@ -2010,6 +2011,21 @@ def match_patient_to_trial(patient: dict, trial: dict) -> dict:
         uncertain_criteria.append(age_block)
     elif age_status == "ok" and age_fact:
         matched_facts.append(age_fact)
+
+    # --- Lab / measurement thresholds (weight, BMI, creatinine, hemoglobin) ---
+    _ec = trial.get("eligibility_criteria", [])
+    if isinstance(_ec, str):
+        _ec = [_ec]
+    all_criteria = (
+        list(_ec)
+        + trial.get("inclusion_criteria", [])
+        + trial.get("exclusion_criteria", [])
+    )
+    for lab_block, lab_fact in check_lab_thresholds(patient, all_criteria):
+        if lab_block not in blocking_criteria:
+            blocking_criteria.append(lab_block)
+        if lab_fact not in matched_facts:
+            matched_facts.append(lab_fact)
 
     # --- DBS ---
     dbs_block, dbs_fact = _check_dbs(patient, trial)
