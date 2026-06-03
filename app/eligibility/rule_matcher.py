@@ -46,6 +46,7 @@ from app.eligibility.clinical_terms import (
     _ACTIVE_CANCER_PATIENT_PATTERNS, _ACTIVE_CANCER_TRIAL_PATTERNS,
     _MED_SYNONYMS, _patient_has_med_class, _trial_requires_med_class,
     _normalize_med_text,
+    _PROCEDURE_SYNONYMS, _patient_has_procedure, _trial_involves_procedure,
 )
 
 from app.eligibility.clinical_units import (
@@ -238,7 +239,7 @@ def _check_dbs(patient: dict, trial: dict) -> tuple[str | None, str | None]:
     )
     if _has_negated_dbs(patient_text):
         return None, None
-    patient_has_dbs = _any_match(_DBS_PATTERNS, patient_text)
+    patient_has_dbs = _patient_has_procedure(patient_text, "dbs")
     if not patient_has_dbs:
         return None, None
 
@@ -356,7 +357,7 @@ def _check_dbs_mri_compatibility(patient: dict, trial: dict) -> tuple[str | None
     )
     if _has_negated_dbs(patient_text):
         return None, None
-    if not _any_match(_DBS_PATTERNS, patient_text):
+    if not _patient_has_procedure(patient_text, "dbs"):
         return None, None
 
     # If trial explicitly targets implanted DBS patients (LFP, directional leads, DBS outcomes)
@@ -2468,7 +2469,7 @@ def _evaluate_exclusion_criterion(
     For exclusions: met = criterion applies (patient IS excluded), not_met = criterion does not apply.
     """
     # DBS
-    if _any_match(_DBS_PATTERNS, c_lower):
+    if _any_match(_DBS_PATTERNS, c_lower) or _trial_involves_procedure(c_lower, "dbs"):
         patient_text = _text(
             patient.get("key_features", [])
             + patient.get("medications", [])
@@ -2478,7 +2479,7 @@ def _evaluate_exclusion_criterion(
             return CriterionDecision.not_met, "no DBS history documented"
         if any("dbs" in b or "deep brain" in b for b in blocking):
             return CriterionDecision.met, "DBS implant present — patient excluded"
-        if _any_match(_DBS_PATTERNS, patient_text):
+        if _patient_has_procedure(patient_text, "dbs"):
             return CriterionDecision.met, "DBS implant present — patient excluded"
         return CriterionDecision.not_met, "no DBS implant found"
 

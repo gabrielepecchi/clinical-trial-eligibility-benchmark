@@ -905,3 +905,97 @@ def _normalize_med_text(text: str) -> str:
             result = re.sub(p, canonical, result, flags=re.IGNORECASE)
     return result
 
+
+# ---------------------------------------------------------------------------
+# Procedure / device synonym groups
+# ---------------------------------------------------------------------------
+
+_PROCEDURE_SYNONYM_GROUPS: list[tuple[str, list[str]]] = [
+    (
+        "dbs",
+        [
+            r"\bdbs\b",
+            r"deep brain stimulation",
+            r"subthalamic.*stimulation",
+            r"stn.*dbs",
+            r"dbs.*stn",
+            r"subthalamic nucleus.*stimulation",
+        ],
+    ),
+    (
+        "mri",
+        [
+            r"\bmri\b",
+            r"\bfmri\b",
+            r"functional\s+mri",
+            r"magnetic resonance imaging",
+            r"functional magnetic resonance",
+            r"neuroimaging",
+        ],
+    ),
+    (
+        "tms",
+        [
+            r"\btms\b",
+            r"\brtms\b",
+            r"transcranial magnetic stimulation",
+            r"repetitive transcranial magnetic",
+        ],
+    ),
+    (
+        "tdcs",
+        [
+            r"\btdcs\b",
+            r"\btacs\b",
+            r"transcranial direct current stimulation",
+            r"transcranial alternating current stimulation",
+            r"transcranial.*direct.*current",
+            r"transcranial.*alternating.*current",
+        ],
+    ),
+    (
+        "pacemaker",
+        [
+            r"\bpacemaker\b",
+            r"implanted cardiac device",
+            r"cardiac.*pacemaker",
+            r"implanted.*pacemaker",
+            r"\bicd\b",
+            r"implantable cardioverter",
+            r"cardiac.*implant",
+        ],
+    ),
+    (
+        "lcig",
+        [
+            r"\blcig\b",
+            r"levodopa.carbidopa intestinal gel",
+            r"intestinal gel infusion",
+            r"intestinal gel",
+            r"\bduodopa\b",
+            r"\bduopa\b",
+        ],
+    ),
+]
+
+_PROCEDURE_SYNONYMS: dict[str, list[str]] = {
+    canonical: patterns for canonical, patterns in _PROCEDURE_SYNONYM_GROUPS
+}
+
+
+def _patient_has_procedure(patient_text: str, canonical: str) -> bool:
+    """Return True if patient text contains any synonym for the given procedure/device.
+
+    Respects existing negation helpers where available (e.g. DBS).
+    """
+    if canonical == "dbs" and _has_negated_dbs(patient_text):
+        return False
+    patterns = _PROCEDURE_SYNONYMS.get(canonical, [])
+    return any(re.search(p, patient_text, re.IGNORECASE) for p in patterns)
+
+
+def _trial_involves_procedure(trial_text: str, canonical: str) -> bool:
+    """Return True if trial text references any synonym for the given procedure/device."""
+    patterns = _PROCEDURE_SYNONYMS.get(canonical, [])
+    return any(re.search(p, trial_text, re.IGNORECASE) for p in patterns)
+
