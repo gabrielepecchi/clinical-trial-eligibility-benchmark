@@ -11,6 +11,7 @@ from app.eligibility.clinical_terms import (
     _has_negated_maob,
     _DBS_PATTERNS,
     _MAOB_CRITERION_PATTERN,
+    _MAOB_DRUGS,
     _COGNITIVE_EXCLUSION_PATTERNS,
     _UNCLEAR_MED_PATTERNS,
     _PARKINSON_PATTERNS,
@@ -813,7 +814,14 @@ def match_patient_to_trial(patient: dict, trial: dict) -> dict:
 
     # medication_stability_duration: trial requires duration, patient doesn't satisfy it
     inclusion_list = trial.get("inclusion_criteria", [])
-    patient_med_text = _text(patient.get("medications", []) + patient.get("key_features", []))
+    _med_parts = []
+    for _f in ("medications", "current_medications", "medication_history", "key_features"):
+        _v = patient.get(_f, [])
+        if isinstance(_v, list):
+            _med_parts.extend(str(x) for x in _v)
+        elif _v:
+            _med_parts.append(str(_v))
+    patient_med_text = " ".join(_med_parts).lower()
     for criterion in inclusion_list:
         req = _required_weeks_extended(criterion)
         if req is None:
@@ -1014,8 +1022,17 @@ def _evaluate_exclusion_criterion(
         return CriterionDecision.not_met, "no DBS implant found"
 
     # MAO-B inhibitor
-    if _MAOB_CRITERION_PATTERN.search(c_lower):
-        patient_med_text = _text(patient.get("medications", []) + patient.get("key_features", []))
+    if _MAOB_CRITERION_PATTERN.search(c_lower) or _any_match(_MAOB_DRUGS, c_lower):
+        patient_med_text = _text(
+            patient.get("medications", [])
+            + patient.get("current_medications", [])
+            + patient.get("medication_history", [])
+            + patient.get("key_features", [])
+            + patient.get("exclusions", [])
+        )
+        summary = patient.get("summary", "")
+        if summary:
+            patient_med_text = patient_med_text + " " + str(summary).lower()
         if _has_negated_maob(patient_med_text):
             return CriterionDecision.not_met, "no MAO-B inhibitor use documented"
         if _has_maob_inhibitor(patient_med_text) or _patient_has_med_class(patient_med_text, "maob_inhibitor"):

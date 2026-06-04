@@ -6,6 +6,7 @@ from app.eligibility.clinical_terms import (
     _any_match,
     has_contradiction,
     _MAOB_CRITERION_PATTERN,
+    _MAOB_DRUGS,
     _has_maob_inhibitor,
     _patient_has_med_class,
     _STABLE_MED_PATTERNS,
@@ -53,12 +54,28 @@ def _required_weeks_extended(criterion: str) -> int | None:
 # Rule checks
 # ---------------------------------------------------------------------------
 
+def _collect_patient_med_text(patient: dict) -> str:
+    """Return a single lowercased string covering all medication-bearing patient fields."""
+    parts = []
+    for field in ("medications", "current_medications", "medication_history", "key_features", "exclusions"):
+        val = patient.get(field, [])
+        if isinstance(val, list):
+            parts.extend(str(v) for v in val)
+        elif val:
+            parts.append(str(val))
+    summary = patient.get("summary", "")
+    if summary:
+        parts.append(str(summary))
+    return " ".join(parts).lower()
+
+
 def _check_maob(patient: dict, trial: dict) -> tuple[str | None, str | None]:
     """Return (blocking_criterion, matched_fact) if MAO-B inhibitor exclusion applies."""
     exclusion_text = _text(trial.get("exclusion_criteria", []))
     if not _MAOB_CRITERION_PATTERN.search(exclusion_text):
-        return None, None
-    patient_med_text = _text(patient.get("medications", []) + patient.get("key_features", []))
+        if not _any_match(_MAOB_DRUGS, exclusion_text):
+            return None, None
+    patient_med_text = _collect_patient_med_text(patient)
     if has_contradiction(patient_med_text, "maob_inhibitor"):
         return (
             "__unclear__:contradictory MAO-B inhibitor records: both negation and affirmation found — eligibility cannot be determined",
@@ -76,7 +93,7 @@ def _check_medication_stability(patient: dict, trial: dict) -> tuple[str | None,
     if not _any_match(_STABLE_MED_PATTERNS, inclusion_text):
         return None, None
 
-    patient_med_text = _text(patient.get("medications", []) + patient.get("key_features", []))
+    patient_med_text = _collect_patient_med_text(patient)
     if _any_match(_UNCLEAR_MED_PATTERNS, patient_med_text):
         return (
             "stable medication regimen required but cannot be confirmed",
@@ -122,11 +139,7 @@ def _check_medication_details_unclear(
     if not _any_match(_TRIAL_MED_SPECIFIC_PATTERNS, trial_text):
         return None, None
 
-    patient_med_text = _text(
-        patient.get("medications", [])
-        + patient.get("key_features", [])
-        + [patient.get("summary", "")]
-    )
+    patient_med_text = _collect_patient_med_text(patient)
 
     if _any_match(_PATIENT_UNCLEAR_MED_PATTERNS, patient_med_text):
         return (
