@@ -1008,11 +1008,20 @@ def _evaluate_exclusion_criterion(
     """
     # DBS
     if _any_match(_DBS_PATTERNS, c_lower) or _trial_involves_procedure(c_lower, "dbs"):
-        patient_text = _text(
-            patient.get("key_features", [])
-            + patient.get("medications", [])
-            + patient.get("exclusions", [])
-        )
+        _dbs_parts = []
+        for _f in ("key_features", "medications", "exclusions", "procedures",
+                   "procedure_history", "surgical_history"):
+            _v = patient.get(_f, [])
+            if isinstance(_v, list):
+                _dbs_parts.extend(str(x) for x in _v)
+            elif _v:
+                _dbs_parts.append(str(_v))
+        _summary = patient.get("summary", "")
+        if _summary:
+            _dbs_parts.append(str(_summary))
+        if patient.get("dbs_history") is True:
+            _dbs_parts.append("dbs history of dbs")
+        patient_text = " ".join(_dbs_parts).lower()
         if _has_negated_dbs(patient_text):
             return CriterionDecision.not_met, "no DBS history documented"
         if any("dbs" in b or "deep brain" in b for b in blocking):

@@ -135,6 +135,25 @@ _TRIAL_META_FIELDS_FULL = [
 ]
 
 
+def _collect_patient_dbs_text(patient: dict) -> str:
+    """Return a single lowercased string covering all DBS-bearing patient fields."""
+    parts = []
+    for field in ("key_features", "medications", "exclusions", "procedures",
+                  "procedure_history", "surgical_history"):
+        val = patient.get(field, [])
+        if isinstance(val, list):
+            parts.extend(str(v) for v in val)
+        elif val:
+            parts.append(str(val))
+    summary = patient.get("summary", "")
+    if summary:
+        parts.append(str(summary))
+    # Support boolean dbs_history flag
+    if patient.get("dbs_history") is True:
+        parts.append("dbs history of dbs")
+    return " ".join(parts).lower()
+
+
 def _check_dbs(patient: dict, trial: dict) -> tuple[str | None, str | None]:
     """Return (blocking_criterion, matched_fact) if DBS is a problem, else (None, None)."""
     exclusion_text = _text(trial.get("exclusion_criteria", []))
@@ -142,11 +161,7 @@ def _check_dbs(patient: dict, trial: dict) -> tuple[str | None, str | None]:
     if not has_dbs_exclusion:
         return None, None
 
-    patient_text = _text(
-        patient.get("key_features", [])
-        + patient.get("medications", [])
-        + patient.get("exclusions", [])
-    )
+    patient_text = _collect_patient_dbs_text(patient)
     _has_dbs_negation_phrase = _any_match(_DBS_NEGATION_PHRASES, patient_text)
     _has_dbs_implant_phrase = _any_match(_DBS_IMPLANT_PHRASES, patient_text)
     if _has_dbs_negation_phrase and _has_dbs_implant_phrase:
@@ -217,12 +232,7 @@ def _check_dbs_mri_compatibility(patient: dict, trial: dict) -> tuple[str | None
     if not _any_match(_MRI_IMAGING_TRIAL_PATTERNS_LOCAL, all_trial_text):
         return None, None
 
-    patient_text = _text(
-        patient.get("key_features", [])
-        + patient.get("medications", [])
-        + patient.get("exclusions", [])
-        + [patient.get("summary", "")]
-    )
+    patient_text = _collect_patient_dbs_text(patient)
     if _has_negated_dbs(patient_text):
         return None, None
     if not _patient_has_procedure(patient_text, "dbs"):
@@ -270,12 +280,7 @@ def _check_dbs_required(patient: dict, trial: dict) -> tuple[str | None, str | N
     if not has_hard_requirement and not has_ambiguous:
         return None, None
 
-    patient_text = _text(
-        patient.get("key_features", [])
-        + patient.get("medications", [])
-        + patient.get("exclusions", [])
-        + [patient.get("summary", "")]
-    )
+    patient_text = _collect_patient_dbs_text(patient)
     if _any_match(_DBS_PATTERNS, patient_text) and not _has_negated_dbs(patient_text):
         return None, None  # Patient has DBS — fine
 
