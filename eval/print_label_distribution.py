@@ -5,11 +5,13 @@ Usage:
 """
 
 import json
+import os
 import sys
 from collections import defaultdict
 from pathlib import Path
 
 RESULTS_FILE = Path("data/processed/results_llm_reviewed.json")
+REPORT_PATH = Path("reports/label_distribution_report.md")
 LABEL_ORDER = ["eligible", "not_eligible", "unclear"]
 
 
@@ -111,6 +113,62 @@ def format_error_pairs(pair_counts: dict[tuple[str, str], int]) -> str:
     return "\n".join(lines)
 
 
+def format_markdown_report(
+    results_file: Path,
+    total: int,
+    gold_counts: dict[str, int],
+    predicted_counts: dict[str, int],
+    pair_counts: dict[tuple[str, str], int],
+) -> str:
+    total_gold = sum(gold_counts.values())
+    total_pred = sum(predicted_counts.values())
+    all_labels = sorted(
+        set(gold_counts) | set(predicted_counts),
+        key=lambda l: LABEL_ORDER.index(l) if l in LABEL_ORDER else 99,
+    )
+
+    lines = [
+        "# Label Distribution Report",
+        "",
+        f"**Results file:** `{results_file}`  ",
+        f"**Total records:** {total}",
+        "",
+        "---",
+        "",
+        "## Label Distribution",
+        "",
+        "| Label | Gold | Gold % | Predicted | Pred % |",
+        "| --- | --- | --- | --- | --- |",
+    ]
+    for label in all_labels:
+        g = gold_counts.get(label, 0)
+        p = predicted_counts.get(label, 0)
+        g_pct = g / total_gold * 100 if total_gold else 0.0
+        p_pct = p / total_pred * 100 if total_pred else 0.0
+        lines.append(f"| {label} | {g} | {g_pct:.1f}% | {p} | {p_pct:.1f}% |")
+    lines.append(f"| **total** | **{total_gold}** | | **{total_pred}** | |")
+    lines.append("")
+    lines.append("## Error Pairs (gold → predicted)")
+    lines.append("")
+    if pair_counts:
+        total_errors = sum(pair_counts.values())
+        sorted_pairs = sorted(pair_counts.items(), key=lambda x: -x[1])
+        lines.append("| Gold | Predicted | Count |")
+        lines.append("| --- | --- | --- |")
+        for (gold, pred), count in sorted_pairs:
+            lines.append(f"| {gold} | {pred} | {count} |")
+        lines.append(f"| **total errors** | | **{total_errors}** |")
+    else:
+        lines.append("No errors.")
+    lines.append("")
+    return "\n".join(lines)
+
+
+def write_report(text: str, path: Path) -> None:
+    os.makedirs(path.parent, exist_ok=True)
+    path.write_text(text, encoding="utf-8")
+
+
 def main() -> None:
     predictions = load_results(RESULTS_FILE)
     gold_counts, predicted_counts = count_labels(predictions)
@@ -120,6 +178,12 @@ def main() -> None:
     print(f"Total records: {len(predictions)}")
     print(format_label_distribution(gold_counts, predicted_counts))
     print(format_error_pairs(pair_counts))
+
+    report_md = format_markdown_report(
+        RESULTS_FILE, len(predictions), gold_counts, predicted_counts, pair_counts
+    )
+    write_report(report_md, REPORT_PATH)
+    print(f"\nReport saved  : {REPORT_PATH}")
 
 
 if __name__ == "__main__":

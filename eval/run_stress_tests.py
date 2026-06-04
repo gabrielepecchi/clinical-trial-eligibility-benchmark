@@ -7,10 +7,14 @@ Usage:
     PYTHONPATH=. python eval/run_stress_tests.py
 """
 
+import os
 import sys
+from pathlib import Path
+
 from app.eligibility.rule_matcher import match_patient_to_trial
 
 VALID_LABELS = {"eligible", "not_eligible", "unclear"}
+REPORT_PATH = Path("reports/stress_test_report.md")
 
 # ---------------------------------------------------------------------------
 # Stress-test cases
@@ -262,6 +266,52 @@ def validate_result(result: object) -> list[str]:
 
 
 # ---------------------------------------------------------------------------
+# Markdown report
+# ---------------------------------------------------------------------------
+
+def format_markdown_stress_report(
+    total: int,
+    passed: int,
+    failed: int,
+    case_results: list[dict],
+) -> str:
+    lines = [
+        "# Stress Test Report",
+        "",
+        f"**Total cases:** {total}  ",
+        f"**Passed:** {passed}  ",
+        f"**Failed:** {failed}",
+        "",
+        "---",
+        "",
+        "## Per-Case Results",
+        "",
+        "| Status | Case | Prediction | Details |",
+        "| --- | --- | --- | --- |",
+    ]
+    for entry in case_results:
+        status = entry["status"]
+        name = entry["name"]
+        prediction = entry.get("prediction", "—")
+        detail = entry.get("detail", "")
+        lines.append(f"| {status} | {name} | {prediction} | {detail} |")
+    lines.append("")
+    lines.append("---")
+    lines.append("")
+    if failed:
+        lines.append(f"**Result: FAIL** — {failed} case(s) failed.")
+    else:
+        lines.append("**Result: PASS** — All cases passed.")
+    lines.append("")
+    return "\n".join(lines)
+
+
+def write_report(text: str, path: Path) -> None:
+    os.makedirs(path.parent, exist_ok=True)
+    path.write_text(text, encoding="utf-8")
+
+
+# ---------------------------------------------------------------------------
 # Runner
 # ---------------------------------------------------------------------------
 
@@ -269,6 +319,7 @@ def main() -> None:
     total = len(STRESS_CASES)
     passed = 0
     failed = 0
+    case_results = []
 
     print(f"\n=== Stress Test Report ===")
     print(f"Total cases: {total}\n")
@@ -293,14 +344,21 @@ def main() -> None:
             print(f"  [{status}] {name}")
             print(f"           prediction: {prediction}")
             print(f"           reason    : {detail}")
+            case_results.append({"status": status, "name": name, "prediction": prediction, "detail": detail})
         else:
             passed += 1
             status = "PASS"
-            print(f"  [{status}] {name}  →  {result['prediction']}")
+            prediction = result["prediction"]
+            print(f"  [{status}] {name}  →  {prediction}")
+            case_results.append({"status": status, "name": name, "prediction": prediction, "detail": ""})
 
     print(f"\n--- Summary ---")
     print(f"Passed: {passed} / {total}")
     print(f"Failed: {failed} / {total}")
+
+    report_md = format_markdown_stress_report(total, passed, failed, case_results)
+    write_report(report_md, REPORT_PATH)
+    print(f"\nReport saved  : {REPORT_PATH}")
 
     if failed:
         print(f"\nFAIL: {failed} stress case(s) failed.", file=sys.stderr)

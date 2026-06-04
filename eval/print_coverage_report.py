@@ -5,11 +5,13 @@ Usage:
 """
 
 import json
+import os
 import sys
 from pathlib import Path
 
 PATIENTS_FILE = Path("data/processed/patient_cases.json")
 TRIALS_FILE = Path("data/processed/trial_cases.json")
+REPORT_PATH = Path("reports/coverage_report.md")
 
 
 def load_json_list(path: Path) -> list[dict]:
@@ -106,6 +108,48 @@ def format_coverage_table(title: str, rows: list[tuple[str, int, int]]) -> str:
     return "\n".join(lines)
 
 
+def format_markdown_coverage_table(title: str, rows: list[tuple[str, int, int]]) -> str:
+    """Format a coverage table as Markdown."""
+    lines = [
+        f"## {title}",
+        "",
+        "| Field / Signal | Present | Total | Coverage |",
+        "| --- | --- | --- | --- |",
+    ]
+    for label, present, total in rows:
+        pct = present / total * 100 if total else 0.0
+        lines.append(f"| {label} | {present} | {total} | {pct:.1f}% |")
+    lines.append("")
+    return "\n".join(lines)
+
+
+def format_markdown_report(
+    patients_file: Path,
+    trials_file: Path,
+    patient_rows: list[tuple[str, int, int]],
+    trial_rows: list[tuple[str, int, int]],
+) -> str:
+    n_patients = patient_rows[0][2] if patient_rows else 0
+    n_trials = trial_rows[0][2] if trial_rows else 0
+    parts = [
+        "# Coverage Report",
+        "",
+        f"**Patients file:** `{patients_file}` ({n_patients} records)  ",
+        f"**Trials file:** `{trials_file}` ({n_trials} records)",
+        "",
+        "---",
+        "",
+        format_markdown_coverage_table("Patient Coverage", patient_rows),
+        format_markdown_coverage_table("Trial Coverage", trial_rows),
+    ]
+    return "\n".join(parts)
+
+
+def write_report(text: str, path: Path) -> None:
+    os.makedirs(path.parent, exist_ok=True)
+    path.write_text(text, encoding="utf-8")
+
+
 def main() -> None:
     patients = load_json_list(PATIENTS_FILE)
     trials = load_json_list(TRIALS_FILE)
@@ -118,6 +162,10 @@ def main() -> None:
 
     print(format_coverage_table("Patient Coverage", patient_rows))
     print(format_coverage_table("Trial Coverage", trial_rows))
+
+    report_md = format_markdown_report(PATIENTS_FILE, TRIALS_FILE, patient_rows, trial_rows)
+    write_report(report_md, REPORT_PATH)
+    print(f"\nReport saved  : {REPORT_PATH}")
 
 
 if __name__ == "__main__":

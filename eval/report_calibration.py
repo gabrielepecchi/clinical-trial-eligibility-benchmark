@@ -4,14 +4,17 @@ report_calibration.py — Task 18: Confidence calibration report.
 Usage:
     PYTHONPATH=. python eval/report_calibration.py
     PYTHONPATH=. python eval/report_calibration.py --results path/to/results.json
+    PYTHONPATH=. python eval/report_calibration.py --output path/to/report.md
 """
 
 import json
+import os
 import sys
 import argparse
 from collections import defaultdict
 
 DEFAULT_RESULTS_PATH = "data/processed/results_llm_reviewed.json"
+DEFAULT_OUTPUT_PATH = "reports/calibration_report.md"
 
 BANDS = [
     (0.00, 0.49, "0.00–0.49"),
@@ -165,6 +168,44 @@ def format_calibration_report(summary: dict) -> str:
     return "\n".join(lines)
 
 
+def format_markdown_calibration_report(summary: dict) -> str:
+    """Format the calibration summary as a Markdown report."""
+    oa = summary["overall_accuracy"]
+    oa_str = f"{oa:.4f}" if oa is not None else "n/a"
+    lines = [
+        "# Confidence Calibration Report",
+        "",
+        f"**Total usable records:** {summary['total_usable']}  ",
+        f"**Skipped records:** {summary['total_skipped']}  ",
+        f"**Overall accuracy:** {oa_str}",
+        "",
+        "---",
+        "",
+        "## Per-Band Metrics",
+        "",
+        "| Band | Total | Correct | Errors | Accuracy | Avg Confidence |",
+        "| --- | --- | --- | --- | --- | --- |",
+    ]
+    for band_label, m in summary["bands"].items():
+        total = m["total"]
+        if total == 0:
+            lines.append(f"| {band_label} | 0 | - | - | - | - |")
+            continue
+        acc_str = f"{m['accuracy']:.4f}" if m["accuracy"] is not None else "n/a"
+        avg_str = f"{m['avg_confidence']:.4f}" if m["avg_confidence"] is not None else "n/a"
+        lines.append(
+            f"| {band_label} | {total} | {m['correct']} | {m['errors']} | {acc_str} | {avg_str} |"
+        )
+    lines.append("")
+    return "\n".join(lines)
+
+
+def write_report(text: str, path: str) -> None:
+    os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
+    with open(path, "w", encoding="utf-8") as f:
+        f.write(text)
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Confidence calibration report.")
     parser.add_argument(
@@ -172,12 +213,21 @@ def main() -> None:
         default=DEFAULT_RESULTS_PATH,
         help=f"Path to results JSON (default: {DEFAULT_RESULTS_PATH})",
     )
+    parser.add_argument(
+        "--output",
+        default=DEFAULT_OUTPUT_PATH,
+        help=f"Path for Markdown report output (default: {DEFAULT_OUTPUT_PATH})",
+    )
     args = parser.parse_args()
 
     results = load_results(args.results)
     predictions = extract_predictions(results)
     summary = compute_calibration_by_band(predictions)
     print(format_calibration_report(summary))
+
+    report_md = format_markdown_calibration_report(summary)
+    write_report(report_md, args.output)
+    print(f"\nReport saved  : {args.output}")
 
 
 if __name__ == "__main__":

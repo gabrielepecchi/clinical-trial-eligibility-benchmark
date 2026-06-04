@@ -7,6 +7,10 @@ Run with:
 
 from __future__ import annotations
 
+import os
+import tempfile
+from pathlib import Path
+
 import pytest
 
 from eval.run_criterion_coverage_analysis import (
@@ -262,3 +266,190 @@ def test_index_trial_criteria_list():
     assert "T11" in index
     assert any("age >= 18" in c for c in index["T10"])
     assert any("prior dbs" in c for c in index["T11"])
+
+
+# ---------------------------------------------------------------------------
+# Report-saving helpers (pure unit tests, no filesystem side effects)
+# ---------------------------------------------------------------------------
+
+
+def test_check_duplicates_format_markdown_report_no_duplicates():
+    """format_markdown_report produces valid Markdown with PASS result."""
+    from eval.check_duplicates import format_markdown_report
+    from pathlib import Path
+
+    report = format_markdown_report(
+        trials_file=Path("data/processed/trial_cases.json"),
+        total=10,
+        duplicate_ids={},
+        near_duplicate_criteria=[],
+        records=[],
+    )
+    assert "# Duplicate Check Report" in report
+    assert "**Total records:** 10" in report
+    assert "No duplicate IDs found." in report
+    assert "No near-duplicate criteria found." in report
+    assert "PASS" in report
+
+
+def test_check_duplicates_format_markdown_report_with_duplicates():
+    """format_markdown_report produces FAIL result when duplicates present."""
+    from eval.check_duplicates import format_markdown_report
+    from pathlib import Path
+
+    records = [
+        {"trial_id": "T1"},
+        {"trial_id": "T1"},
+    ]
+    report = format_markdown_report(
+        trials_file=Path("data/processed/trial_cases.json"),
+        total=2,
+        duplicate_ids={"T1": [0, 1]},
+        near_duplicate_criteria=[],
+        records=records,
+    )
+    assert "FAIL" in report
+    assert "T1" in report
+
+
+def test_print_coverage_report_format_markdown():
+    """format_markdown_report for coverage produces correct section headers."""
+    from eval.print_coverage_report import format_markdown_report
+    from pathlib import Path
+
+    patient_rows = [("age", 8, 10), ("diagnosis", 10, 10)]
+    trial_rows = [("trial_id", 5, 5)]
+    report = format_markdown_report(
+        patients_file=Path("data/processed/patient_cases.json"),
+        trials_file=Path("data/processed/trial_cases.json"),
+        patient_rows=patient_rows,
+        trial_rows=trial_rows,
+    )
+    assert "# Coverage Report" in report
+    assert "## Patient Coverage" in report
+    assert "## Trial Coverage" in report
+    assert "80.0%" in report
+
+
+def test_print_label_distribution_format_markdown():
+    """format_markdown_report for label distribution includes all sections."""
+    from eval.print_label_distribution import format_markdown_report
+    from pathlib import Path
+
+    gold = {"eligible": 5, "not_eligible": 3}
+    predicted = {"eligible": 4, "not_eligible": 4}
+    pairs = {("eligible", "not_eligible"): 1}
+    report = format_markdown_report(
+        results_file=Path("data/processed/results_llm_reviewed.json"),
+        total=8,
+        gold_counts=gold,
+        predicted_counts=predicted,
+        pair_counts=pairs,
+    )
+    assert "# Label Distribution Report" in report
+    assert "## Label Distribution" in report
+    assert "## Error Pairs" in report
+    assert "eligible" in report
+    assert "not_eligible" in report
+
+
+def test_report_calibration_format_markdown():
+    """format_markdown_calibration_report includes all band rows."""
+    from eval.report_calibration import (
+        compute_calibration_by_band,
+        format_markdown_calibration_report,
+    )
+
+    predictions = [
+        {"gold_label": "eligible", "predicted_label": "eligible", "confidence": 0.95},
+        {"gold_label": "eligible", "predicted_label": "not_eligible", "confidence": 0.72},
+        {"gold_label": "not_eligible", "predicted_label": "not_eligible", "confidence": 0.55},
+    ]
+    summary = compute_calibration_by_band(predictions)
+    report = format_markdown_calibration_report(summary)
+    assert "# Confidence Calibration Report" in report
+    assert "## Per-Band Metrics" in report
+    assert "0.90" in report or "0.90–1.00" in report
+
+
+def test_run_stress_tests_format_markdown():
+    """format_markdown_stress_report produces expected structure."""
+    from eval.run_stress_tests import format_markdown_stress_report
+
+    case_results = [
+        {"status": "PASS", "name": "case one", "prediction": "eligible", "detail": ""},
+        {"status": "FAIL", "name": "case two", "prediction": "—", "detail": "missing key: prediction"},
+    ]
+    report = format_markdown_stress_report(
+        total=2, passed=1, failed=1, case_results=case_results
+    )
+    assert "# Stress Test Report" in report
+    assert "**Total cases:** 2" in report
+    assert "PASS" in report
+    assert "FAIL" in report
+    assert "case one" in report
+    assert "case two" in report
+    assert "missing key: prediction" in report
+
+
+def test_run_stress_tests_format_markdown_all_pass():
+    """format_markdown_stress_report shows PASS result when no failures."""
+    from eval.run_stress_tests import format_markdown_stress_report
+
+    case_results = [
+        {"status": "PASS", "name": "case one", "prediction": "eligible", "detail": ""},
+    ]
+    report = format_markdown_stress_report(
+        total=1, passed=1, failed=0, case_results=case_results
+    )
+    assert "Result: PASS" in report
+
+
+def test_write_report_creates_directory(tmp_path):
+    """write_report in check_duplicates creates parent directories."""
+    from eval.check_duplicates import write_report
+    from pathlib import Path
+
+    target = tmp_path / "nested" / "dir" / "report.md"
+    write_report("# Hello", target)
+    assert target.exists()
+    assert target.read_text(encoding="utf-8") == "# Hello"
+
+
+def test_write_report_coverage_creates_directory(tmp_path):
+    """write_report in print_coverage_report creates parent directories."""
+    from eval.print_coverage_report import write_report
+    from pathlib import Path
+
+    target = tmp_path / "reports" / "coverage_report.md"
+    write_report("# Coverage", target)
+    assert target.exists()
+
+
+def test_write_report_label_dist_creates_directory(tmp_path):
+    """write_report in print_label_distribution creates parent directories."""
+    from eval.print_label_distribution import write_report
+    from pathlib import Path
+
+    target = tmp_path / "reports" / "label_dist.md"
+    write_report("# Labels", target)
+    assert target.exists()
+
+
+def test_write_report_calibration_creates_directory(tmp_path):
+    """write_report in report_calibration creates parent directories."""
+    from eval.report_calibration import write_report
+
+    target = str(tmp_path / "reports" / "calibration.md")
+    write_report("# Calibration", target)
+    assert os.path.exists(target)
+
+
+def test_write_report_stress_creates_directory(tmp_path):
+    """write_report in run_stress_tests creates parent directories."""
+    from eval.run_stress_tests import write_report
+    from pathlib import Path
+
+    target = tmp_path / "reports" / "stress.md"
+    write_report("# Stress", target)
+    assert target.exists()
