@@ -17,7 +17,21 @@ REPORT_PATH = Path("reports/baseline_comparison.md")
 
 VALID_LABELS = ["eligible", "not_eligible", "unclear"]
 
-STRATEGIES = ["always_unclear", "always_eligible", "always_not_eligible", "majority_class"]
+STRATEGIES = [
+    "always_unclear",
+    "always_eligible",
+    "always_not_eligible",
+    "majority_class",
+    "strict_missing_unclear",
+    "optimistic_missing_eligible",
+    "conservative_missing_unclear_or_not_eligible",
+]
+
+MISSING_POLICY_STRATEGIES = {
+    "strict_missing_unclear",
+    "optimistic_missing_eligible",
+    "conservative_missing_unclear_or_not_eligible",
+}
 
 
 # ---------------------------------------------------------------------------
@@ -43,7 +57,65 @@ def extract_gold_labels(labels: list) -> list[str]:
     return [rec["label"] for rec in labels if isinstance(rec, dict) and rec.get("label")]
 
 
-def predict_baseline(records: list, strategy: str) -> list[str]:
+def _has_structured_missingness(record: dict) -> bool:
+    """Return True if a prediction record signals structured missingness or uncertainty."""
+    if record.get("unknown_fields"):
+        return True
+    if record.get("missing_information"):
+        return True
+    details = record.get("missing_information_details") or []
+    if any(d.get("status") == "unknown" for d in details):
+        return True
+    if record.get("uncertain_criteria"):
+        return True
+    if record.get("missing_reason_type"):
+        return True
+    return False
+
+
+def _has_blocking_evidence(record: dict) -> bool:
+    """Return True if a prediction record has clear blocking evidence."""
+    if record.get("blocking_criteria"):
+        return True
+    if record.get("blocked_by"):
+        return True
+    return False
+
+
+def predict_missing_policy(record: dict, strategy: str) -> str:
+    """Predict a label for a single prediction record using a missing-information policy.
+
+    Args:
+        record:   A prediction record dict (may contain structured missingness fields).
+        strategy: One of the MISSING_POLICY_STRATEGIES.
+
+    Returns:
+        A label string: 'eligible' | 'not_eligible' | 'unclear'.
+    """
+    has_missing = _has_structured_missingness(record)
+    has_blocking = _has_blocking_evidence(record)
+
+    if strategy == "strict_missing_unclear":
+        if has_missing:
+            return "unclear"
+        return "eligible"
+
+    if strategy == "optimistic_missing_eligible":
+        if has_blocking:
+            return "not_eligible"
+        return "eligible"
+
+    if strategy == "conservative_missing_unclear_or_not_eligible":
+        if has_blocking:
+            return "not_eligible"
+        if has_missing:
+            return "unclear"
+        return "eligible"
+
+    raise ValueError(f"Unknown missing-policy strategy: {strategy}")
+
+
+def predict_baseline(records: list, strategy: str, prediction_records: list | None = None) -> list[str]:
     gold = extract_gold_labels(records)
     if strategy == "always_unclear":
         return ["unclear"] * len(gold)
@@ -54,6 +126,11 @@ def predict_baseline(records: list, strategy: str) -> list[str]:
     if strategy == "majority_class":
         majority = Counter(gold).most_common(1)[0][0]
         return [majority] * len(gold)
+    if strategy in MISSING_POLICY_STRATEGIES:
+        if prediction_records and len(prediction_records) == len(gold):
+            return [predict_missing_policy(r, strategy) for r in prediction_records]
+        # Fallback when structured records are unavailable: use gold-length list of eligible
+        return ["eligible"] * len(gold)
     raise ValueError(f"Unknown strategy: {strategy}")
 
 
@@ -106,25 +183,31 @@ def compute_metrics(gold: list[str], predicted: list[str]) -> dict:
 # Evaluation
 # ---------------------------------------------------------------------------
 
-def evaluate_baselines(labels: list) -> dict[str, dict]:
+def evaluate_baselines(labels: list, prediction_records: list | None = None) -> dict[str, dict]:
     gold = extract_gold_labels(labels)
     results = {}
     for strategy in STRATEGIES:
-        predicted = predict_baseline(labels, strategy)
+        predicted = predict_baseline(labels, strategy, prediction_records)
         results[strategy] = compute_metrics(gold, predicted)
     return results
 
 
-def load_current_metrics(path: Path) -> dict | None:
+def load_current_metrics(path: Path) -> tuple[dict | None, list | None]:
+    """Return (summary_metrics, prediction_records) from a results JSON file.
+
+    prediction_records will be None if the file is missing or unreadable.
+    """
     try:
         data = load_json(path)
         metrics = data.get("metrics", {})
-        return {
+        summary = {
             "accuracy": metrics.get("accuracy"),
             "macro_f1": metrics.get("macro_f1"),
         }
+        prediction_records = data.get("predictions") or None
+        return summary, prediction_records
     except Exception:
-        return None
+        return None, None
 
 
 # ---------------------------------------------------------------------------
@@ -171,6 +254,21 @@ def format_markdown_report(summary: dict) -> str:
         lines.append(
             f"| **current_matcher** | {_fmt(current['accuracy'])} | {_fmt(current['macro_f1'])} |"
         )
+
+    lines += [
+        "",
+        "## Note on Missing-Information Policy Baselines",
+        "",
+        "> `strict_missing_unclear`, `optimistic_missing_eligible`, and "
+        "`conservative_missing_unclear_or_not_eligible` are **diagnostic policy baselines**.  ",
+        "> They test how different strategies for handling incomplete clinical information "
+        "affect benchmark scores.  ",
+        "> They are **not clinical recommendations** and do not represent valid decision rules "
+        "for real patient eligibility assessment.  ",
+        "> When structured prediction records (with `unknown_fields`, `blocking_criteria`, etc.) "
+        "are unavailable, these baselines fall back to predicting `eligible` for all records.  ",
+        "",
+    ]
 
     for strategy, metrics in baselines.items():
         lines += [
@@ -231,8 +329,8 @@ def main() -> None:
     gold = extract_gold_labels(labels_data)
     gold_dist = dict(Counter(gold))
 
-    baselines = evaluate_baselines(labels_data)
-    current = load_current_metrics(RESULTS_PATH)
+    current, prediction_records = load_current_metrics(RESULTS_PATH)
+    baselines = evaluate_baselines(labels_data, prediction_records)
 
     summary = {
         "baselines": baselines,

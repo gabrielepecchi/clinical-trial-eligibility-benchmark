@@ -180,3 +180,163 @@ def test_mismatched_lengths_gold_longer_raises():
 def test_mismatched_lengths_pred_longer_raises():
     with pytest.raises(ValueError):
         compute_metrics(["eligible"], ["eligible", "not_eligible"])
+
+
+# ---------------------------------------------------------------------------
+# Missing-policy baseline helpers
+# ---------------------------------------------------------------------------
+
+from baselines import (
+    predict_missing_policy,
+    predict_baseline,
+    _has_structured_missingness,
+    _has_blocking_evidence,
+    extract_gold_labels,
+)
+
+
+def test_strict_missing_unclear_with_unknown_fields():
+    """strict_missing_unclear → unclear when unknown_fields is non-empty."""
+    record = {"unknown_fields": ["cognitive_score"], "blocking_criteria": []}
+    assert predict_missing_policy(record, "strict_missing_unclear") == "unclear"
+
+
+def test_strict_missing_unclear_with_missing_information():
+    """strict_missing_unclear → unclear when missing_information is non-empty."""
+    record = {"missing_information": ["medication_details"], "unknown_fields": []}
+    assert predict_missing_policy(record, "strict_missing_unclear") == "unclear"
+
+
+def test_strict_missing_unclear_with_uncertain_criteria():
+    """strict_missing_unclear → unclear when uncertain_criteria is non-empty."""
+    record = {"uncertain_criteria": ["medication stability unclear"], "unknown_fields": []}
+    assert predict_missing_policy(record, "strict_missing_unclear") == "unclear"
+
+
+def test_strict_missing_unclear_with_missing_reason_type():
+    """strict_missing_unclear → unclear when missing_reason_type is set."""
+    record = {"missing_reason_type": "not_documented", "unknown_fields": []}
+    assert predict_missing_policy(record, "strict_missing_unclear") == "unclear"
+
+
+def test_strict_missing_unclear_with_unknown_detail_status():
+    """strict_missing_unclear → unclear when missing_information_details has unknown status."""
+    record = {
+        "missing_information_details": [{"field": "age", "status": "unknown"}],
+        "unknown_fields": [],
+    }
+    assert predict_missing_policy(record, "strict_missing_unclear") == "unclear"
+
+
+def test_strict_missing_unclear_no_missingness_returns_eligible():
+    """strict_missing_unclear → eligible when no missingness signals present."""
+    record = {"unknown_fields": [], "missing_information": [], "uncertain_criteria": []}
+    assert predict_missing_policy(record, "strict_missing_unclear") == "eligible"
+
+
+def test_optimistic_missing_eligible_no_blocking():
+    """optimistic_missing_eligible → eligible when missingness exists but no blocking criteria."""
+    record = {
+        "unknown_fields": ["cognitive_score"],
+        "blocking_criteria": [],
+        "blocked_by": None,
+    }
+    assert predict_missing_policy(record, "optimistic_missing_eligible") == "eligible"
+
+
+def test_optimistic_missing_eligible_with_blocking():
+    """optimistic_missing_eligible → not_eligible when blocking_criteria is non-empty."""
+    record = {"blocking_criteria": ["DBS implant present"], "unknown_fields": ["age"]}
+    assert predict_missing_policy(record, "optimistic_missing_eligible") == "not_eligible"
+
+
+def test_optimistic_missing_eligible_blocked_by():
+    """optimistic_missing_eligible → not_eligible when blocked_by is set."""
+    record = {"blocked_by": "age out of range", "unknown_fields": []}
+    assert predict_missing_policy(record, "optimistic_missing_eligible") == "not_eligible"
+
+
+def test_conservative_not_eligible_when_blocking():
+    """conservative_missing_unclear_or_not_eligible → not_eligible when blocking_criteria present."""
+    record = {
+        "blocking_criteria": ["patient age 45 out of range"],
+        "unknown_fields": ["medication_details"],
+    }
+    assert predict_missing_policy(record, "conservative_missing_unclear_or_not_eligible") == "not_eligible"
+
+
+def test_conservative_unclear_when_missing_no_blocking():
+    """conservative_missing_unclear_or_not_eligible → unclear when missingness present but no blocking."""
+    record = {
+        "blocking_criteria": [],
+        "unknown_fields": ["disease_stage"],
+    }
+    assert predict_missing_policy(record, "conservative_missing_unclear_or_not_eligible") == "unclear"
+
+
+def test_conservative_eligible_when_no_missingness_no_blocking():
+    """conservative_missing_unclear_or_not_eligible → eligible when nothing missing and no blocking."""
+    record = {
+        "blocking_criteria": [],
+        "unknown_fields": [],
+        "missing_information": [],
+        "uncertain_criteria": [],
+        "missing_reason_type": "",
+        "missing_information_details": [],
+    }
+    assert predict_missing_policy(record, "conservative_missing_unclear_or_not_eligible") == "eligible"
+
+
+def test_has_structured_missingness_true_for_unknown_fields():
+    assert _has_structured_missingness({"unknown_fields": ["age"]}) is True
+
+
+def test_has_structured_missingness_false_for_empty():
+    assert _has_structured_missingness({
+        "unknown_fields": [],
+        "missing_information": [],
+        "missing_information_details": [],
+        "uncertain_criteria": [],
+        "missing_reason_type": "",
+    }) is False
+
+
+def test_has_blocking_evidence_true():
+    assert _has_blocking_evidence({"blocking_criteria": ["age out of range"]}) is True
+
+
+def test_has_blocking_evidence_false():
+    assert _has_blocking_evidence({"blocking_criteria": [], "blocked_by": None}) is False
+
+
+def test_existing_always_unclear_still_works():
+    """Existing always_unclear strategy unchanged."""
+    labels = [{"label": "eligible"}, {"label": "not_eligible"}]
+    result = predict_baseline(labels, "always_unclear")
+    assert result == ["unclear", "unclear"]
+
+
+def test_existing_majority_class_still_works():
+    """Existing majority_class strategy unchanged."""
+    labels = [{"label": "eligible"}, {"label": "eligible"}, {"label": "not_eligible"}]
+    result = predict_baseline(labels, "majority_class")
+    assert result == ["eligible", "eligible", "eligible"]
+
+
+def test_missing_policy_fallback_when_no_prediction_records():
+    """Missing-policy strategy falls back to eligible list when no prediction_records provided."""
+    labels = [{"label": "eligible"}, {"label": "unclear"}]
+    result = predict_baseline(labels, "strict_missing_unclear", prediction_records=None)
+    assert result == ["eligible", "eligible"]
+
+
+def test_missing_policy_uses_prediction_records_when_provided():
+    """Missing-policy strategy uses structured records when provided."""
+    labels = [{"label": "eligible"}, {"label": "unclear"}]
+    pred_records = [
+        {"unknown_fields": ["age"], "blocking_criteria": []},
+        {"unknown_fields": [], "blocking_criteria": [], "missing_information": []},
+    ]
+    result = predict_baseline(labels, "strict_missing_unclear", prediction_records=pred_records)
+    assert result[0] == "unclear"
+    assert result[1] == "eligible"
