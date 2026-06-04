@@ -476,6 +476,13 @@ def main() -> None:
                 "gold_evidence": record.get("evidence", {}),
                 "criterion_results": criterion_results,
                 "reasoning_trace": reasoning_trace,
+                "missing_information": result.get("missing_information", []),
+                "unknown_fields": result.get("unknown_fields", []),
+                "present_evidence": result.get("present_evidence", []),
+                "absent_evidence": result.get("absent_evidence", []),
+                "unclear_reason": result.get("unclear_reason", ""),
+                "missing_reason_type": result.get("missing_reason_type", ""),
+                "missing_information_details": result.get("missing_information_details", []),
             }
         )
 

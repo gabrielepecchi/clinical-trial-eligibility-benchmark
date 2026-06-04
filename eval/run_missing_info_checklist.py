@@ -386,6 +386,7 @@ def analyze_missing_info(
 ) -> dict[str, Any]:
     """Analyze predictions and return summary of missing-info cases."""
     cases: list[dict[str, Any]] = []
+    missing_reason_type_counts: dict[str, int] = defaultdict(int)
 
     for pred in predictions:
         key = pair_key(pred)
@@ -397,7 +398,36 @@ def analyze_missing_info(
         if not should_include_record(pred, collected):
             continue
 
-        missing_items = infer_missing_info_items(collected)
+        # Use structured missingness fields when available
+        unknown_fields: list[str] = pred.get("unknown_fields") or []
+        absent_evidence: list[str] = pred.get("absent_evidence") or []
+        present_evidence_list: list[str] = pred.get("present_evidence") or []
+        missing_info_details: list[dict] = pred.get("missing_information_details") or []
+        missing_reason_type: str = pred.get("missing_reason_type") or ""
+        unclear_reason: str = pred.get("unclear_reason") or ""
+
+        # Count missing_reason_type
+        if missing_reason_type:
+            missing_reason_type_counts[missing_reason_type] += 1
+        for detail in missing_info_details:
+            rt = detail.get("missing_reason_type") or ""
+            if rt and rt != missing_reason_type:
+                missing_reason_type_counts[rt] += 1
+
+        # Fall back to text-based inference when structured fields are absent
+        if unknown_fields or missing_info_details:
+            # Structured path: use unknown_fields directly as missing items
+            missing_items = list(unknown_fields)
+            # Also add fields from details that are unknown but not already listed
+            for detail in missing_info_details:
+                if detail.get("status") == "unknown" and detail["field"] not in missing_items:
+                    missing_items.append(detail["field"])
+            if not missing_items:
+                # All known present/absent — still record for unknown-field breakdown
+                missing_items = infer_missing_info_items(collected)
+        else:
+            missing_items = infer_missing_info_items(collected)
+
         confidence = pred.get("confidence", pred.get("confidence_score"))
 
         case = {
@@ -416,6 +446,13 @@ def analyze_missing_info(
             "rationale_preview": preview_text(
                 label_rec.get("rationale", label_rec.get("explanation", ""))
             ),
+            # Structured fields
+            "unknown_fields": unknown_fields,
+            "absent_evidence": absent_evidence,
+            "present_evidence": present_evidence_list,
+            "missing_reason_type": missing_reason_type,
+            "unclear_reason": unclear_reason,
+            "missing_information_details": missing_info_details,
         }
         cases.append(case)
 
@@ -440,6 +477,7 @@ def analyze_missing_info(
         "cases": cases,
         "item_counts": dict(sorted(item_counts.items(), key=lambda x: -x[1])),
         "cases_by_item": dict(cases_by_item),
+        "missing_reason_type_counts": dict(missing_reason_type_counts),
     }
 
 
@@ -472,13 +510,19 @@ def format_markdown_report(summary: dict[str, Any]) -> str:
     lines.append(f"Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
     lines.append("")
     lines.append(
-        "> This report identifies cases marked as unclear or with uncertain criteria,  "
+        "> This report identifies structured unknown/missing information fields for cases  "
     )
     lines.append(
-        "> and generates conservative checklists of patient information that would be  "
+        "> marked as unclear or with uncertain criteria. It reports what data is absent  "
     )
     lines.append(
-        "> needed to resolve eligibility. Inferences are based on existing text fields only."
+        "> or not documented — **not** proof of ineligibility. When structured missingness  "
+    )
+    lines.append(
+        "> fields are available (unknown_fields, missing_information_details), they are  "
+    )
+    lines.append(
+        "> used directly; otherwise inference falls back to keyword matching on text fields.  "
     )
     lines.append("")
 
@@ -487,16 +531,29 @@ def format_markdown_report(summary: dict[str, Any]) -> str:
     lines.append("| Metric | Value |")
     lines.append("|--------|-------|")
     lines.append(f"| Total records | {total_records} |")
-    lines.append(f"| Cases needing missing-info checklist | {total_cases} |")
+    lines.append(f"| Cases with unknown/missing information | {total_cases} |")
     lines.append("")
 
     if total_cases == 0:
-        lines.append("**No cases require missing-information checklists.**")
+        lines.append("**No cases have unknown or missing structured information.**")
         lines.append("")
         return "\n".join(lines)
 
+    # Missing reason type counts if available
+    reason_type_counts: dict[str, int] = summary.get("missing_reason_type_counts", {})
+    if reason_type_counts:
+        lines.append("## Missing Reason Type Counts")
+        lines.append("")
+        lines.append("| Reason Type | Count |")
+        lines.append("|-------------|-------|")
+        for rt, cnt in sorted(reason_type_counts.items(), key=lambda x: -x[1]):
+            lines.append(f"| {rt} | {cnt} |")
+        lines.append("")
+
     # Item counts
-    lines.append("## Missing Information Item Counts")
+    lines.append("## Unknown / Missing Information Item Counts")
+    lines.append("")
+    lines.append("_(Items are unknown fields — not documented and not negated. This is not a list of ineligibility reasons.)_")
     lines.append("")
     lines.append("| Information Type | Case Count |")
     lines.append("|------------------|-----------|")
@@ -505,19 +562,26 @@ def format_markdown_report(summary: dict[str, Any]) -> str:
     lines.append("")
 
     # Top 25 cases
-    lines.append("## Top 25 Cases by Checklist Length")
+    lines.append("## Top 25 Cases by Unknown Field Count")
     lines.append("")
     for i, case in enumerate(cases[:25], 1):
         rid = _display_id(case)
-        missing = ", ".join(f"`{m}`" for m in case["missing_info_items"])
+        # Prefer structured unknown_fields label if available
+        uf = case.get("unknown_fields") or []
+        if uf:
+            missing_label = ", ".join(f"`{m}`" for m in uf)
+            structured_note = " _(structured)_"
+        else:
+            missing_label = ", ".join(f"`{m}`" for m in case["missing_info_items"])
+            structured_note = " _(inferred)_"
         lines.append(
-            f"{i}. **{rid}** ({len(case['missing_info_items'])} items) — "
-            f"{missing}"
+            f"{i}. **{rid}** ({len(case['missing_info_items'])} items{structured_note}) — "
+            f"{missing_label}"
         )
     lines.append("")
 
     # Examples by item
-    lines.append("## Missing Information Examples by Type")
+    lines.append("## Unknown / Missing Information Examples by Type")
     lines.append("")
     for item in sorted(item_counts.keys()):
         item_cases = cases_by_item[item][:5]
@@ -531,10 +595,18 @@ def format_markdown_report(summary: dict[str, Any]) -> str:
             rid = _display_id(case)
             lines.append(f"- **{rid}**: gold=`{case['gold_label']}`, "
                         f"predicted=`{case['predicted_label']}`")
-            if case["explanation_preview"]:
+            # Show unclear_reason if available (structured), else fall back to preview
+            ur = case.get("unclear_reason") or ""
+            if ur:
+                lines.append(f"  - unclear reason: _{ur}_")
+            elif case["explanation_preview"]:
                 lines.append(f"  - _{case['explanation_preview']}_")
             if case["uncertain_preview"]:
                 lines.append(f"  - uncertain: _{case['uncertain_preview']}_")
+            # Show absent evidence if available
+            aev = case.get("absent_evidence") or []
+            if aev:
+                lines.append(f"  - absent evidence: _{'; '.join(aev[:3])}_")
         lines.append("")
 
     return "\n".join(lines)

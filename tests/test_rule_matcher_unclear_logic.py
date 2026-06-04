@@ -683,3 +683,301 @@ def test_negated_investigational_drug_does_not_flag_unclear():
     }
     result = match_patient_to_trial(patient, trial)
     assert not any("investigational" in u.lower() for u in result["uncertain_criteria"])
+
+
+# ---------------------------------------------------------------------------
+# Priority 3: Structured missingness fields
+# ---------------------------------------------------------------------------
+
+def test_structured_missingness_fields_present_in_result():
+    """match_patient_to_trial() always returns all structured missingness keys."""
+    patient = {
+        "diagnosis": "Parkinson disease",
+        "age": 62,
+        "key_features": [],
+        "medications": ["levodopa"],
+    }
+    trial = {
+        "inclusion_criteria": ["Parkinson disease", "age 40 to 80 years"],
+        "exclusion_criteria": [],
+    }
+    result = match_patient_to_trial(patient, trial)
+    assert "unknown_fields" in result
+    assert "present_evidence" in result
+    assert "absent_evidence" in result
+    assert "unclear_reason" in result
+    assert "missing_reason_type" in result
+    assert "missing_information_details" in result
+    assert isinstance(result["unknown_fields"], list)
+    assert isinstance(result["present_evidence"], list)
+    assert isinstance(result["absent_evidence"], list)
+    assert isinstance(result["missing_information_details"], list)
+
+
+def test_missing_medication_produces_unknown_not_absent():
+    """Missing medication list → field appears in unknown_fields, not absent_evidence."""
+    patient = {
+        "diagnosis": "Parkinson disease",
+        "age": 60,
+        "key_features": ["medication history not available"],
+        "medications": [],
+    }
+    trial = {
+        "inclusion_criteria": ["patients receiving rotigotine patch for at least 3 months"],
+        "exclusion_criteria": [],
+    }
+    result = match_patient_to_trial(patient, trial)
+    # medication should be in unknown, not in absent_evidence
+    assert any("medication" in f for f in result["unknown_fields"])
+    assert not any("medication" in e.lower() and "no" in e.lower() for e in result["absent_evidence"])
+
+
+def test_missing_disease_stage_produces_unknown_field():
+    """Absent disease_stage → disease_stage_or_duration appears in unknown_fields."""
+    patient = {
+        "diagnosis": "Parkinson disease",
+        "age": 66,
+        "disease_stage": None,
+        "key_features": [],
+        "medications": [],
+    }
+    trial = {
+        "inclusion_criteria": ["Hoehn and Yahr stage 2 to 4"],
+        "exclusion_criteria": [],
+    }
+    result = match_patient_to_trial(patient, trial)
+    assert any("stage" in f or "duration" in f for f in result["unknown_fields"])
+
+
+def test_missing_cognitive_score_produces_unknown_field():
+    """MMSE required by trial but absent from patient → cognitive_score in unknown_fields."""
+    patient = {
+        "diagnosis": "Parkinson disease",
+        "age": 68,
+        "key_features": [],
+        "medications": [],
+    }
+    trial = {
+        "inclusion_criteria": ["Parkinson disease"],
+        "exclusion_criteria": ["MMSE < 24 excluded"],
+    }
+    result = match_patient_to_trial(patient, trial)
+    assert "cognitive_score" in result["missing_information"]
+    # cognitive_score should be unknown (no score present, none negated)
+    cog_detail = next((d for d in result["missing_information_details"] if d["field"] == "cognitive_score"), None)
+    assert cog_detail is not None
+    assert cog_detail["status"] == "unknown"
+    assert cog_detail["present_evidence"] == ""
+
+
+def test_negated_dbs_produces_absent_evidence():
+    """Explicit 'no DBS history' → absent_evidence contains dbs entry."""
+    patient = {
+        "diagnosis": "Parkinson disease",
+        "age": 65,
+        "key_features": ["no history of DBS"],
+        "medications": ["levodopa"],
+    }
+    trial = {
+        "inclusion_criteria": ["Parkinson disease"],
+        "exclusion_criteria": ["prior DBS implantation excluded"],
+    }
+    result = match_patient_to_trial(patient, trial)
+    assert any("dbs" in e.lower() for e in result["absent_evidence"])
+    # DBS should NOT appear in unknown_fields since it is explicitly negated
+    assert "dbs" not in result["unknown_fields"]
+
+
+def test_missing_information_details_structure():
+    """missing_information_details records have required keys."""
+    patient = {
+        "diagnosis": "Parkinson disease",
+        "age": 60,
+        "key_features": ["dose and frequency unclear"],
+        "medications": [],
+    }
+    trial = {
+        "inclusion_criteria": ["stable levodopa regimen for at least 4 weeks"],
+        "exclusion_criteria": [],
+    }
+    result = match_patient_to_trial(patient, trial)
+    for detail in result["missing_information_details"]:
+        assert "field" in detail
+        assert "status" in detail
+        assert "missing_reason_type" in detail
+        assert "unclear_reason" in detail
+        assert "present_evidence" in detail
+        assert "absent_evidence" in detail
+        assert detail["status"] in ("unknown", "present", "absent")
+
+
+def test_eligible_case_has_empty_unknown_fields():
+    """Clear eligible patient → unknown_fields is empty."""
+    patient = {
+        "diagnosis": "Parkinson disease",
+        "age": 62,
+        "key_features": ["Hoehn and Yahr stage 2", "stable on levodopa 4 weeks"],
+        "medications": ["levodopa 100mg three times daily"],
+    }
+    trial = {
+        "inclusion_criteria": ["Parkinson disease", "age 40 to 80 years"],
+        "exclusion_criteria": [],
+    }
+    result = match_patient_to_trial(patient, trial)
+    assert result["prediction"] == "eligible"
+    assert result["unknown_fields"] == []
+    assert result["missing_information_details"] == []
+
+
+def test_run_sample_benchmark_prediction_record_has_structured_fields():
+    """Simulate a prediction record like run_sample_benchmark would build; verify fields present."""
+    from app.eligibility.rule_matcher import match_patient_to_trial
+
+    patient = {
+        "patient_id": "P_TEST",
+        "diagnosis": "Parkinson disease",
+        "age": 65,
+        "key_features": ["dose and frequency unclear"],
+        "medications": [],
+    }
+    trial = {
+        "trial_id": "T_TEST",
+        "inclusion_criteria": ["stable levodopa regimen for at least 4 weeks"],
+        "exclusion_criteria": [],
+    }
+    result = match_patient_to_trial(patient, trial)
+    record = {
+        "patient_id": patient["patient_id"],
+        "trial_id": trial["trial_id"],
+        "gold_label": "unclear",
+        "predicted_label": result["prediction"],
+        "confidence": result["confidence"],
+        "matched_facts": result["matched_facts"],
+        "blocking_criteria": result["blocking_criteria"],
+        "uncertain_criteria": result["uncertain_criteria"],
+        "explanation": result["explanation"],
+        "missing_information": result.get("missing_information", []),
+        "unknown_fields": result.get("unknown_fields", []),
+        "present_evidence": result.get("present_evidence", []),
+        "absent_evidence": result.get("absent_evidence", []),
+        "unclear_reason": result.get("unclear_reason", ""),
+        "missing_reason_type": result.get("missing_reason_type", ""),
+        "missing_information_details": result.get("missing_information_details", []),
+        "criterion_results": [],
+    }
+    assert "unknown_fields" in record
+    assert "present_evidence" in record
+    assert "absent_evidence" in record
+    assert "unclear_reason" in record
+    assert "missing_reason_type" in record
+    assert "missing_information_details" in record
+
+
+def test_run_llm_reviewed_prediction_record_has_structured_fields():
+    """Simulate a prediction record like run_llm_reviewed_benchmark would build; verify fields present."""
+    from app.eligibility.rule_matcher import match_patient_to_trial
+
+    patient = {
+        "patient_id": "P_LLM",
+        "diagnosis": "Parkinson disease",
+        "age": 70,
+        "key_features": [],
+        "medications": [],
+    }
+    trial = {
+        "trial_id": "T_LLM",
+        "inclusion_criteria": ["Parkinson disease"],
+        "exclusion_criteria": ["MMSE < 24 excluded"],
+    }
+    result = match_patient_to_trial(patient, trial)
+    record = {
+        "patient_id": patient["patient_id"],
+        "trial_id": trial["trial_id"],
+        "gold_label": "unclear",
+        "predicted_label": result["prediction"],
+        "label_status": "",
+        "confidence": result["confidence"],
+        "matched_facts": result["matched_facts"],
+        "blocking_criteria": result["blocking_criteria"],
+        "uncertain_criteria": result["uncertain_criteria"],
+        "matcher_explanation": result["explanation"],
+        "gold_rationale": "",
+        "gold_evidence": {},
+        "criterion_results": [],
+        "reasoning_trace": [],
+        "missing_information": result.get("missing_information", []),
+        "unknown_fields": result.get("unknown_fields", []),
+        "present_evidence": result.get("present_evidence", []),
+        "absent_evidence": result.get("absent_evidence", []),
+        "unclear_reason": result.get("unclear_reason", ""),
+        "missing_reason_type": result.get("missing_reason_type", ""),
+        "missing_information_details": result.get("missing_information_details", []),
+    }
+    assert isinstance(record["unknown_fields"], list)
+    assert isinstance(record["missing_information_details"], list)
+
+
+def test_run_missing_info_checklist_works_with_old_style_records():
+    """analyze_missing_info falls back gracefully for records without structured fields."""
+    import sys, os
+    sys.path.insert(0, os.path.dirname(__file__))
+    from run_missing_info_checklist import analyze_missing_info
+
+    old_record = {
+        "patient_id": "P_OLD",
+        "trial_id": "T_OLD",
+        "predicted_label": "unclear",
+        "gold_label": "unclear",
+        "uncertain_criteria": "medication stability unclear",
+        "explanation": "medication stability cannot be confirmed",
+    }
+    summary = analyze_missing_info([old_record], {}, {})
+    assert summary["total_records"] == 1
+    assert summary["total_cases"] == 1
+    case = summary["cases"][0]
+    assert isinstance(case["missing_info_items"], list)
+
+
+def test_run_missing_info_checklist_works_with_structured_records():
+    """analyze_missing_info uses structured fields when present."""
+    import sys, os
+    sys.path.insert(0, os.path.dirname(__file__))
+    from run_missing_info_checklist import analyze_missing_info
+
+    structured_record = {
+        "patient_id": "P_STRUCT",
+        "trial_id": "T_STRUCT",
+        "predicted_label": "unclear",
+        "gold_label": "unclear",
+        "unknown_fields": ["cognitive_score", "disease_stage"],
+        "absent_evidence": ["no dbs documented"],
+        "present_evidence": [],
+        "missing_reason_type": "not_documented",
+        "unclear_reason": "MoCA/MMSE score required but not documented",
+        "missing_information_details": [
+            {
+                "field": "cognitive_score",
+                "status": "unknown",
+                "missing_reason_type": "not_documented",
+                "unclear_reason": "MoCA/MMSE score required but not documented",
+                "present_evidence": "",
+                "absent_evidence": "",
+            },
+            {
+                "field": "disease_stage",
+                "status": "unknown",
+                "missing_reason_type": "not_documented",
+                "unclear_reason": "disease stage or duration not documented or unclear",
+                "present_evidence": "",
+                "absent_evidence": "",
+            },
+        ],
+        "uncertain_criteria": ["cognitive score not available", "stage unclear"],
+        "explanation": "eligibility cannot be determined",
+    }
+    summary = analyze_missing_info([structured_record], {}, {})
+    assert summary["total_cases"] == 1
+    case = summary["cases"][0]
+    assert "cognitive_score" in case["missing_info_items"] or "cognitive_score" in case["unknown_fields"]
+    assert case["unknown_fields"] == ["cognitive_score", "disease_stage"]
+    assert "not_documented" in summary["missing_reason_type_counts"]

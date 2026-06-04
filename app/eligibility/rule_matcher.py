@@ -300,6 +300,170 @@ def _check_hy_stage(patient: dict, trial: dict) -> tuple[str | None, str | None]
 
 
 # ---------------------------------------------------------------------------
+# Structured missingness layer
+# ---------------------------------------------------------------------------
+
+_NEGATION_PATTERNS = [
+    r"\bno\b", r"\bnot\b", r"\bnever\b", r"\bdenies\b", r"\bdenied\b",
+    r"\bnegative\b", r"\bno history of\b", r"\bwithout\b", r"\babsent\b",
+]
+
+_FIELD_NEGATION_MARKERS: dict[str, list[str]] = {
+    "dbs": [r"no\s+(?:history\s+of\s+)?dbs", r"no\s+deep\s+brain", r"dbs.*(?:absent|not\s+present|not\s+implanted)"],
+    "maob_inhibitor": [r"no\s+mao.b", r"not\s+taking.*(?:rasagiline|selegiline|safinamide)", r"mao.b.*(?:not\s+used|not\s+taken|absent)"],
+    "cognitive_impairment": [r"no\s+cognitive\s+impairment", r"cognition\s+(?:intact|normal)", r"no\s+dementia"],
+    "active_cancer": [r"no\s+(?:active\s+)?cancer", r"no\s+malignancy", r"cancer.*(?:absent|none|not\s+present)"],
+    "investigational_drug": [r"no\s+investigational\s+drug", r"not\s+enrolled.*(?:trial|study)"],
+    "trial_participation": [r"not\s+(?:enrolled|participating)\s+in.*(?:trial|study)", r"no\s+(?:prior|recent|concurrent)\s+(?:trial|study)"],
+}
+
+_FIELD_PRESENT_MARKERS: dict[str, list[str]] = {
+    "dbs": [r"\bdbs\b", r"deep\s+brain\s+stimulation", r"dbs\s+implant"],
+    "maob_inhibitor": [r"\brasagiline\b", r"\bselegiline\b", r"\bsafinamide\b", r"mao.b\s+inhibitor"],
+    "cognitive_impairment": [r"\bmmse\b", r"\bmoca\b", r"cognitive\s+impairment", r"\bdementia\b"],
+    "active_cancer": [r"active\s+cancer", r"current\s+chemotherapy", r"ongoing.*malignancy"],
+    "medication_details": [r"levodopa", r"dopamine\s+agonist", r"carbidopa"],
+    "disease_stage": [r"hoehn\s+and\s+yahr", r"\bh&y\b", r"\bupdrs\b", r"stage\s+\d"],
+    "cognitive_score": [r"mmse\s*(?:score\s*)?\d+", r"moca\s*(?:score\s*)?\d+"],
+}
+
+_MISSING_REASON_TYPE_MAP: dict[str, str] = {
+    "age": "not_documented",
+    "medication_details": "not_documented",
+    "medication_stability_duration": "not_documented",
+    "disease_stage_or_duration": "not_documented",
+    "cognitive_score": "not_documented",
+    "trial_participation_history": "ambiguous_documentation",
+    "unverifiable_inclusion_criteria": "unverifiable",
+}
+
+_FIELD_UNCLEAR_REASON_MAP: dict[str, str] = {
+    "age": "patient age not documented",
+    "medication_details": "medication list absent or details unclear",
+    "medication_stability_duration": "medication stability duration not documented",
+    "disease_stage_or_duration": "disease stage or duration not documented or unclear",
+    "cognitive_score": "MoCA/MMSE score required but not documented",
+    "trial_participation_history": "recent or concurrent trial participation noted; washout eligibility ambiguous",
+    "unverifiable_inclusion_criteria": "multiple inclusion criteria cannot be verified from the patient profile",
+}
+
+
+def _build_structured_missingness(
+    patient: dict,
+    trial: dict,
+    missing_information: list[str],
+    matched_facts: list[str],
+    blocking_criteria: list[str],
+    uncertain_criteria: list[str],
+) -> dict:
+    """Build structured missingness fields from existing rule outputs."""
+    unknown_fields: list[str] = []
+    present_evidence: list[str] = []
+    absent_evidence: list[str] = []
+    missing_information_details: list[dict] = []
+
+    patient_text = _text(
+        patient.get("key_features", [])
+        + patient.get("medications", [])
+        + patient.get("exclusions", [])
+        + [patient.get("summary", "")]
+        + (patient.get("diagnosis", []) if isinstance(patient.get("diagnosis"), list)
+           else [str(patient.get("diagnosis", ""))])
+    )
+
+    # Collect present evidence from matched_facts
+    for fact in matched_facts:
+        f = fact.lower()
+        for field, patterns in _FIELD_PRESENT_MARKERS.items():
+            if _any_match(patterns, f):
+                entry = f"{field}: {fact}"
+                if entry not in present_evidence:
+                    present_evidence.append(entry)
+
+    # Collect absent evidence from negation patterns in patient text or blocking criteria
+    for field, patterns in _FIELD_NEGATION_MARKERS.items():
+        if _any_match(patterns, patient_text):
+            entry = f"no {field.replace('_', ' ')} documented"
+            if entry not in absent_evidence:
+                absent_evidence.append(entry)
+
+    # Also collect from blocking criteria that signal explicit negation/absence
+    for bc in blocking_criteria:
+        bc_lower = bc.lower()
+        for field, patterns in _FIELD_NEGATION_MARKERS.items():
+            if _any_match(patterns, bc_lower):
+                entry = f"no {field.replace('_', ' ')} (from blocking: {bc})"
+                if entry not in absent_evidence:
+                    absent_evidence.append(entry)
+
+    # Build missing_information_details and unknown_fields from missing_information list
+    for field in missing_information:
+        status = "unknown"
+        reason_type = _MISSING_REASON_TYPE_MAP.get(field, "not_documented")
+        unclear_reason = _FIELD_UNCLEAR_REASON_MAP.get(field, f"{field} not documented")
+
+        # Check if there is present or absent evidence for this field
+        field_norm = field.replace("_", " ")
+        pev = next((e for e in present_evidence if field_norm in e.lower()), "")
+        aev = next((e for e in absent_evidence if field_norm in e.lower()), "")
+
+        if pev:
+            status = "present"
+        elif aev:
+            status = "absent"
+        else:
+            status = "unknown"
+            if field not in unknown_fields:
+                unknown_fields.append(field)
+
+        missing_information_details.append({
+            "field": field,
+            "status": status,
+            "missing_reason_type": reason_type,
+            "unclear_reason": unclear_reason,
+            "present_evidence": pev,
+            "absent_evidence": aev,
+        })
+
+    # Also flag unknown from uncertain_criteria that imply data absence without negation
+    _UNCERTAIN_UNKNOWN_SIGNALS = [
+        ("cognitive_score", [r"mmse.*not\s+available", r"moca.*not\s+available", r"cognitive\s+score.*not", r"score.*not\s+documented"]),
+        ("disease_stage", [r"stage.*unclear", r"severity.*unclear", r"stage.*missing", r"stage.*not\s+recorded"]),
+        ("medication_details", [r"medication.*not\s+documented", r"medication.*unclear", r"medication.*unavailable"]),
+    ]
+    for field, patterns in _UNCERTAIN_UNKNOWN_SIGNALS:
+        uc_text = " ".join(uncertain_criteria).lower()
+        if _any_match(patterns, uc_text):
+            if field not in unknown_fields:
+                unknown_fields.append(field)
+
+    # Determine overall unclear_reason and missing_reason_type (summary of the most significant)
+    if missing_information_details:
+        first_unknown = next((d for d in missing_information_details if d["status"] == "unknown"), None)
+        if first_unknown:
+            unclear_reason_summary = first_unknown["unclear_reason"]
+            missing_reason_type_summary = first_unknown["missing_reason_type"]
+        else:
+            unclear_reason_summary = missing_information_details[0]["unclear_reason"]
+            missing_reason_type_summary = missing_information_details[0]["missing_reason_type"]
+    elif uncertain_criteria:
+        unclear_reason_summary = uncertain_criteria[0][:200]
+        missing_reason_type_summary = "ambiguous_documentation"
+    else:
+        unclear_reason_summary = ""
+        missing_reason_type_summary = ""
+
+    return {
+        "unknown_fields": unknown_fields,
+        "present_evidence": present_evidence,
+        "absent_evidence": absent_evidence,
+        "unclear_reason": unclear_reason_summary,
+        "missing_reason_type": missing_reason_type_summary,
+        "missing_information_details": missing_information_details,
+    }
+
+
+# ---------------------------------------------------------------------------
 # Main matcher
 # ---------------------------------------------------------------------------
 
@@ -694,6 +858,11 @@ def match_patient_to_trial(patient: dict, trial: dict) -> dict:
                 if "cognitive_score" not in missing_information:
                     missing_information.append("cognitive_score")
 
+    # --- Build structured missingness layer ---
+    structured = _build_structured_missingness(
+        patient, trial, missing_information, matched_facts, blocking_criteria, uncertain_criteria
+    )
+
     return {
         "prediction": prediction,
         "confidence": confidence,
@@ -702,6 +871,13 @@ def match_patient_to_trial(patient: dict, trial: dict) -> dict:
         "uncertain_criteria": uncertain_criteria,
         "explanation": explanation,
         "missing_information": missing_information,
+        # Structured missingness fields
+        "unknown_fields": structured["unknown_fields"],
+        "present_evidence": structured["present_evidence"],
+        "absent_evidence": structured["absent_evidence"],
+        "unclear_reason": structured["unclear_reason"],
+        "missing_reason_type": structured["missing_reason_type"],
+        "missing_information_details": structured["missing_information_details"],
     }
 
 
