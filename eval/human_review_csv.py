@@ -206,7 +206,7 @@ def compute_review_priority(row: dict[str, Any]) -> str:
         return "high"
 
     # --- medium ---
-    if correct is False or str(correct).lower() in ("false", "0", "no"):
+    if correct is False:
         return "medium"
     if predicted == "unclear" and gold in ("eligible", "not_eligible"):
         return "medium"
@@ -243,7 +243,9 @@ def build_review_rows(
         predicted_label = pred.get(
             "predicted_label", pred.get("prediction", pred.get("predicted", ""))
         )
-        correct = pred.get("correct", "")
+        correct = (
+            str(gold_label).strip().lower() == str(predicted_label).strip().lower()
+        )
         confidence = pred.get("confidence", pred.get("confidence_score", ""))
 
         # error fields (from error_analysis if present, else from prediction)

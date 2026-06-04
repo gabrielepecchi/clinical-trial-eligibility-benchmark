@@ -374,8 +374,8 @@ def build_tagged_rows(
     for pred in predictions:
         gold = get_gold_label(pred)
         predicted = get_predicted_label(pred)
-        correct_raw = pred.get("correct", "")
-        correct = str(correct_raw).lower() not in ("false", "0", "no") and correct_raw is not False
+        correct = gold == predicted
+        _incorrect = not correct
 
         tagging_text = collect_tagging_text(pred, trial_index, criterion_index)
         tags = assign_capability_tags(tagging_text)
@@ -393,7 +393,7 @@ def build_tagged_rows(
                 "source_text_preview": preview_text(tagging_text),
                 # Keep raw tags for analysis
                 "_tags": tags,
-                "_incorrect": str(correct_raw).lower() in ("false", "0", "no") or correct_raw is False,
+                "_incorrect": _incorrect,
             }
         )
     return rows

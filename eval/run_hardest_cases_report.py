@@ -174,8 +174,7 @@ def compute_difficulty_score(
 
     gold = get_gold_label(record)
     predicted = get_predicted_label(record)
-    correct_raw = record.get("correct", "")
-    incorrect = str(correct_raw).lower() in ("false", "0", "no") or correct_raw is False
+    incorrect = gold != predicted
 
     conf_value = record.get("confidence", record.get("confidence_score"))
     confidence = parse_confidence(conf_value)
@@ -261,10 +260,7 @@ def analyze_hardest_cases(
 
         gold = get_gold_label(pred)
         predicted = get_predicted_label(pred)
-        correct_raw = pred.get("correct", "")
-        incorrect = (
-            str(correct_raw).lower() in ("false", "0", "no") or correct_raw is False
-        )
+        incorrect = gold != predicted
 
         conf_value = pred.get("confidence", pred.get("confidence_score"))
         confidence = parse_confidence(conf_value)
