@@ -453,3 +453,350 @@ def test_write_report_stress_creates_directory(tmp_path):
     target = tmp_path / "reports" / "stress.md"
     write_report("# Stress", target)
     assert target.exists()
+
+
+# ---------------------------------------------------------------------------
+# analyze_criterion_lengths — complexity helpers
+# ---------------------------------------------------------------------------
+
+
+def test_complexity_score_zero_for_simple_short_text():
+    from eval.analyze_criterion_lengths import (
+        compute_criterion_complexity_score,
+        detect_complexity_signals,
+    )
+    text = "No prior surgery"
+    signals = detect_complexity_signals(text)
+    score = compute_criterion_complexity_score(len(text), signals)
+    assert score >= 0
+
+
+def test_complexity_score_increases_with_signals():
+    from eval.analyze_criterion_lengths import (
+        compute_criterion_complexity_score,
+        detect_complexity_signals,
+    )
+    text_plain = "Diagnosis confirmed"
+    signals_plain = detect_complexity_signals(text_plain)
+    score_plain = compute_criterion_complexity_score(len(text_plain), signals_plain)
+
+    text_rich = (
+        "Patient must have been on levodopa for at least 4 weeks "
+        "with a dose of 300mg or more per day"
+    )
+    signals_rich = detect_complexity_signals(text_rich)
+    score_rich = compute_criterion_complexity_score(len(text_rich), signals_rich)
+
+    assert score_rich > score_plain
+
+
+def test_complexity_score_numeric_signal():
+    from eval.analyze_criterion_lengths import (
+        compute_criterion_complexity_score,
+        detect_complexity_signals,
+    )
+    text = "Age >= 18 years"
+    signals = detect_complexity_signals(text)
+    assert signals["numeric_threshold"] is True
+    score = compute_criterion_complexity_score(len(text), signals)
+    assert score >= 1
+
+
+def test_complexity_score_temporal_signal():
+    from eval.analyze_criterion_lengths import (
+        compute_criterion_complexity_score,
+        detect_complexity_signals,
+    )
+    text = "Symptom onset within the last 6 months"
+    signals = detect_complexity_signals(text)
+    assert signals["temporal_keyword"] is True
+    score = compute_criterion_complexity_score(len(text), signals)
+    assert score >= 1
+
+
+def test_complexity_score_medication_signal():
+    from eval.analyze_criterion_lengths import (
+        compute_criterion_complexity_score,
+        detect_complexity_signals,
+    )
+    text = "Currently on levodopa therapy"
+    signals = detect_complexity_signals(text)
+    assert signals["medication_keyword"] is True
+    score = compute_criterion_complexity_score(len(text), signals)
+    assert score >= 1
+
+
+def test_complexity_score_procedure_device_signal():
+    from eval.analyze_criterion_lengths import (
+        compute_criterion_complexity_score,
+        detect_complexity_signals,
+    )
+    text = "No prior DBS implant"
+    signals = detect_complexity_signals(text)
+    assert signals["procedure_device_keyword"] is True
+    score = compute_criterion_complexity_score(len(text), signals)
+    assert score >= 1
+
+
+def test_complexity_score_cognitive_signal():
+    from eval.analyze_criterion_lengths import (
+        compute_criterion_complexity_score,
+        detect_complexity_signals,
+    )
+    text = "MMSE score >= 24 required"
+    signals = detect_complexity_signals(text)
+    assert signals["cognitive_keyword"] is True
+    score = compute_criterion_complexity_score(len(text), signals)
+    assert score >= 1
+
+
+def test_complexity_score_lab_signal():
+    from eval.analyze_criterion_lengths import (
+        compute_criterion_complexity_score,
+        detect_complexity_signals,
+    )
+    text = "Normal renal function: creatinine < 1.5 mg/dL"
+    signals = detect_complexity_signals(text)
+    assert signals["lab_keyword"] is True
+    score = compute_criterion_complexity_score(len(text), signals)
+    assert score >= 1
+
+
+def test_complexity_score_multiple_clauses_signal():
+    from eval.analyze_criterion_lengths import (
+        compute_criterion_complexity_score,
+        detect_complexity_signals,
+    )
+    text = "No prior surgery, no active cancer, and no severe cardiac disease or renal failure"
+    signals = detect_complexity_signals(text)
+    assert signals["multiple_clauses"] is True
+    score = compute_criterion_complexity_score(len(text), signals)
+    assert score >= 1
+
+
+def test_complexity_bucket_low():
+    from eval.analyze_criterion_lengths import bucket_complexity
+    assert bucket_complexity(0) == "low"
+    assert bucket_complexity(2) == "low"
+
+
+def test_complexity_bucket_medium():
+    from eval.analyze_criterion_lengths import bucket_complexity
+    assert bucket_complexity(3) == "medium"
+    assert bucket_complexity(5) == "medium"
+
+
+def test_complexity_bucket_high():
+    from eval.analyze_criterion_lengths import bucket_complexity
+    assert bucket_complexity(6) == "high"
+    assert bucket_complexity(10) == "high"
+
+
+def test_build_criterion_records_basic():
+    from eval.analyze_criterion_lengths import build_criterion_records
+
+    rows = [
+        {
+            "patient_id": "P1",
+            "trial_id": "T1",
+            "criterion": "Age >= 18 years",
+            "gold_label": "eligible",
+            "predicted_label": "eligible",
+        },
+        {
+            "patient_id": "P2",
+            "trial_id": "T1",
+            "criterion": "No prior levodopa therapy",
+            "gold_label": "not_eligible",
+            "predicted_label": "eligible",
+        },
+    ]
+    records = build_criterion_records(rows)
+    assert len(records) == 2
+    for r in records:
+        assert "complexity_score" in r
+        assert "complexity_bucket" in r
+        assert r["complexity_bucket"] in ("low", "medium", "high")
+        assert isinstance(r["char_length"], int)
+        assert isinstance(r["word_count"], int)
+
+
+def test_aggregate_trial_complexity_basic():
+    from eval.analyze_criterion_lengths import (
+        aggregate_trial_complexity,
+        build_criterion_records,
+    )
+
+    rows = [
+        {"trial_id": "T1", "criterion": "Age >= 18 years"},
+        {"trial_id": "T1", "criterion": "No prior DBS implant within last 6 months"},
+        {"trial_id": "T2", "criterion": "Levodopa therapy for at least 4 weeks"},
+    ]
+    criterion_records = build_criterion_records(rows)
+    trial_records = aggregate_trial_complexity(criterion_records)
+
+    trial_ids = [r["trial_id"] for r in trial_records]
+    assert "T1" in trial_ids
+    assert "T2" in trial_ids
+
+    t1 = next(r for r in trial_records if r["trial_id"] == "T1")
+    assert t1["criteria_count"] == 2
+    assert t1["complexity_bucket"] in ("low", "medium", "high")
+
+
+def test_aggregate_trial_complexity_skips_empty_trial_id():
+    from eval.analyze_criterion_lengths import (
+        aggregate_trial_complexity,
+        build_criterion_records,
+    )
+
+    rows = [
+        {"trial_id": "", "criterion": "Age >= 18"},
+        {"trial_id": "T1", "criterion": "Diagnosis confirmed"},
+    ]
+    criterion_records = build_criterion_records(rows)
+    trial_records = aggregate_trial_complexity(criterion_records)
+    trial_ids = [r["trial_id"] for r in trial_records]
+    assert "T1" in trial_ids
+    assert "" not in trial_ids
+
+
+def test_error_analysis_no_labels():
+    from eval.analyze_criterion_lengths import (
+        aggregate_trial_complexity,
+        build_criterion_records,
+        compute_error_analysis,
+    )
+
+    rows = [
+        {"trial_id": "T1", "criterion": "Age >= 18"},
+        {"trial_id": "T1", "criterion": "No prior DBS"},
+    ]
+    criterion_records = build_criterion_records(rows)
+    trial_records = aggregate_trial_complexity(criterion_records)
+    ea = compute_error_analysis(criterion_records, trial_records)
+    assert "by_length_bucket" in ea
+    assert "by_complexity_bucket" in ea
+    assert "top_error_trials" in ea
+    for bucket_data in ea["by_length_bucket"].values():
+        assert bucket_data["error_rate"] is None or bucket_data["total"] == 0
+
+
+def test_error_analysis_with_labels():
+    from eval.analyze_criterion_lengths import (
+        aggregate_trial_complexity,
+        build_criterion_records,
+        compute_error_analysis,
+    )
+
+    rows = [
+        {
+            "trial_id": "T1",
+            "criterion": "Age >= 18 years",
+            "gold_label": "eligible",
+            "predicted_label": "eligible",
+        },
+        {
+            "trial_id": "T1",
+            "criterion": "No prior levodopa therapy",
+            "gold_label": "eligible",
+            "predicted_label": "not_eligible",
+        },
+        {
+            "trial_id": "T2",
+            "criterion": "MMSE >= 24 required",
+            "gold_label": "not_eligible",
+            "predicted_label": "not_eligible",
+        },
+    ]
+    criterion_records = build_criterion_records(rows)
+    trial_records = aggregate_trial_complexity(criterion_records)
+    ea = compute_error_analysis(criterion_records, trial_records)
+
+    top_trials = ea["top_error_trials"]
+    t1 = next((r for r in top_trials if r["trial_id"] == "T1"), None)
+    assert t1 is not None
+    assert t1["errors"] == 1
+    assert t1["labeled_criteria"] == 2
+
+
+def test_error_analysis_mixed_missing_labels():
+    from eval.analyze_criterion_lengths import (
+        aggregate_trial_complexity,
+        build_criterion_records,
+        compute_error_analysis,
+    )
+
+    rows = [
+        {
+            "trial_id": "T1",
+            "criterion": "Age >= 18",
+            "gold_label": "eligible",
+            "predicted_label": "not_eligible",
+        },
+        {
+            "trial_id": "T1",
+            "criterion": "No prior DBS",
+        },
+    ]
+    criterion_records = build_criterion_records(rows)
+    trial_records = aggregate_trial_complexity(criterion_records)
+    ea = compute_error_analysis(criterion_records, trial_records)
+    top_trials = ea["top_error_trials"]
+    t1 = next((r for r in top_trials if r["trial_id"] == "T1"), None)
+    assert t1 is not None
+    assert t1["labeled_criteria"] == 1
+    assert t1["errors"] == 1
+
+
+def test_is_error_row_none_when_labels_missing():
+    from eval.analyze_criterion_lengths import is_error_row
+
+    assert is_error_row({}) is None
+    assert is_error_row({"gold_label": "eligible"}) is None
+    assert is_error_row({"predicted_label": "eligible"}) is None
+
+
+def test_is_error_row_correct():
+    from eval.analyze_criterion_lengths import is_error_row
+
+    assert is_error_row({"gold_label": "eligible", "predicted_label": "eligible"}) is False
+    assert is_error_row({"gold_label": "eligible", "predicted_label": "not_eligible"}) is True
+    assert is_error_row({"gold_label": " Eligible ", "predicted_label": "eligible"}) is False
+
+
+def test_summarize_criterion_complexity():
+    from eval.analyze_criterion_lengths import (
+        build_criterion_records,
+        summarize_criterion_complexity,
+    )
+
+    rows = [
+        {"trial_id": "T1", "criterion": "Age >= 18"},
+        {"trial_id": "T1", "criterion": "Levodopa therapy for at least 4 weeks with dose >= 300mg"},
+        {"trial_id": "T1", "criterion": "No prior DBS implant, no cognitive impairment (MMSE < 24), and no severe renal or hepatic impairment"},
+    ]
+    records = build_criterion_records(rows)
+    csum = summarize_criterion_complexity(records)
+    assert "stats" in csum
+    assert "bucket_counts" in csum
+    assert csum["stats"]["max"] >= csum["stats"]["min"]
+
+
+def test_summarize_trial_complexity():
+    from eval.analyze_criterion_lengths import (
+        aggregate_trial_complexity,
+        build_criterion_records,
+        summarize_trial_complexity,
+    )
+
+    rows = [
+        {"trial_id": "T1", "criterion": "Age >= 18"},
+        {"trial_id": "T2", "criterion": "No prior DBS implant"},
+    ]
+    criterion_records = build_criterion_records(rows)
+    trial_records = aggregate_trial_complexity(criterion_records)
+    tsum = summarize_trial_complexity(trial_records)
+    assert tsum["total_trials"] == 2
+    assert "stats" in tsum
+    assert "bucket_counts" in tsum
