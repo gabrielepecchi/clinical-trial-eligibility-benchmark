@@ -6,6 +6,7 @@ from app.eligibility.evidence_span import (
     find_keyword_span,
     find_any_keyword_span,
     extract_evidence_spans,
+    extract_criterion_evidence,
 )
 
 TEXT = (
@@ -127,3 +128,142 @@ def test_extract_evidence_spans_empty_text():
 
 def test_extract_evidence_spans_empty_keywords():
     assert extract_evidence_spans(TEXT, []) == []
+
+
+# ---------------------------------------------------------------------------
+# extract_criterion_evidence
+# ---------------------------------------------------------------------------
+
+_PATIENT = (
+    "Patient is a 62-year-old male with idiopathic Parkinson Disease. "
+    "Current medications include Levodopa and Rasagiline. "
+    "No history of Deep Brain Stimulation."
+)
+
+_TRIAL = (
+    "Inclusion criteria: Diagnosis of Parkinson Disease confirmed. "
+    "Age between 30 and 80 years. "
+    "Exclusion criteria: Prior Deep Brain Stimulation surgery."
+)
+
+
+def test_extract_criterion_evidence_returns_dict():
+    result = extract_criterion_evidence(_PATIENT, _TRIAL, "Parkinson Disease diagnosis")
+    assert isinstance(result, dict)
+
+
+def test_extract_criterion_evidence_has_all_keys():
+    result = extract_criterion_evidence(_PATIENT, _TRIAL, "Parkinson Disease")
+    assert {"patient_evidence", "trial_evidence",
+            "patient_span_start", "patient_span_end",
+            "trial_span_start", "trial_span_end"} <= set(result)
+
+
+def test_extract_criterion_evidence_patient_evidence_string():
+    result = extract_criterion_evidence(_PATIENT, _TRIAL, "Parkinson Disease")
+    assert isinstance(result["patient_evidence"], str)
+
+
+def test_extract_criterion_evidence_trial_evidence_string():
+    result = extract_criterion_evidence(_PATIENT, _TRIAL, "Parkinson Disease")
+    assert isinstance(result["trial_evidence"], str)
+
+
+def test_extract_criterion_evidence_patient_evidence_nonempty_on_match():
+    result = extract_criterion_evidence(_PATIENT, _TRIAL, "Parkinson Disease")
+    assert result["patient_evidence"] != ""
+
+
+def test_extract_criterion_evidence_trial_evidence_nonempty_on_match():
+    result = extract_criterion_evidence(_PATIENT, _TRIAL, "Parkinson Disease")
+    assert result["trial_evidence"] != ""
+
+
+def test_extract_criterion_evidence_patient_span_offsets_int_on_match():
+    result = extract_criterion_evidence(_PATIENT, _TRIAL, "Parkinson Disease")
+    assert isinstance(result["patient_span_start"], int)
+    assert isinstance(result["patient_span_end"], int)
+
+
+def test_extract_criterion_evidence_trial_span_offsets_int_on_match():
+    result = extract_criterion_evidence(_PATIENT, _TRIAL, "Parkinson Disease")
+    assert isinstance(result["trial_span_start"], int)
+    assert isinstance(result["trial_span_end"], int)
+
+
+def test_extract_criterion_evidence_offsets_ordered():
+    result = extract_criterion_evidence(_PATIENT, _TRIAL, "Parkinson Disease")
+    assert result["patient_span_start"] < result["patient_span_end"]
+    assert result["trial_span_start"] < result["trial_span_end"]
+
+
+def test_extract_criterion_evidence_missing_patient_returns_empty_evidence():
+    result = extract_criterion_evidence("", _TRIAL, "Parkinson Disease")
+    assert result["patient_evidence"] == ""
+
+
+def test_extract_criterion_evidence_missing_patient_returns_empty_offsets():
+    result = extract_criterion_evidence("", _TRIAL, "Parkinson Disease")
+    assert result["patient_span_start"] == ""
+    assert result["patient_span_end"] == ""
+
+
+def test_extract_criterion_evidence_missing_trial_returns_empty_evidence():
+    result = extract_criterion_evidence(_PATIENT, "", "Parkinson Disease")
+    assert result["trial_evidence"] == ""
+
+
+def test_extract_criterion_evidence_missing_trial_returns_empty_offsets():
+    result = extract_criterion_evidence(_PATIENT, "", "Parkinson Disease")
+    assert result["trial_span_start"] == ""
+    assert result["trial_span_end"] == ""
+
+
+def test_extract_criterion_evidence_empty_criterion_text():
+    result = extract_criterion_evidence(_PATIENT, _TRIAL, "")
+    assert result["patient_evidence"] == ""
+    assert result["trial_evidence"] == ""
+    assert result["patient_span_start"] == ""
+    assert result["trial_span_start"] == ""
+
+
+def test_extract_criterion_evidence_no_keyword_match_returns_empty_evidence():
+    result = extract_criterion_evidence(_PATIENT, _TRIAL, "chemotherapy insulin")
+    assert result["patient_evidence"] == ""
+    assert result["trial_evidence"] == ""
+
+
+def test_extract_criterion_evidence_no_keyword_match_returns_empty_offsets():
+    result = extract_criterion_evidence(_PATIENT, _TRIAL, "chemotherapy insulin")
+    assert result["patient_span_start"] == ""
+    assert result["patient_span_end"] == ""
+    assert result["trial_span_start"] == ""
+    assert result["trial_span_end"] == ""
+
+
+def test_extract_criterion_evidence_reason_keywords_used():
+    # keyword only in reason, not criterion_text
+    result = extract_criterion_evidence(_PATIENT, _TRIAL, "eligibility check", reason="Levodopa requirement")
+    assert result["patient_evidence"] != ""
+
+
+def test_extract_criterion_evidence_snippet_contains_context():
+    result = extract_criterion_evidence(_PATIENT, _TRIAL, "Levodopa", window=30)
+    assert len(result["patient_evidence"]) > len("Levodopa")
+
+
+def test_extract_criterion_evidence_patient_text_preserved_casing():
+    result = extract_criterion_evidence(_PATIENT, _TRIAL, "levodopa")
+    assert "Levodopa" in result["patient_evidence"]
+
+
+def test_extract_criterion_evidence_all_empty_inputs():
+    result = extract_criterion_evidence("", "", "")
+    assert result == {
+        "patient_evidence": "",
+        "trial_evidence": "",
+        "patient_span_start": "",
+        "patient_span_end": "",
+        "trial_span_start": "",
+        "trial_span_end": "",
+    }

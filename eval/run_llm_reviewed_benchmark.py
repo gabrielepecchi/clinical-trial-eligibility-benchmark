@@ -10,6 +10,7 @@ from collections import defaultdict
 from pathlib import Path
 
 from app.eligibility.rule_matcher import match_patient_to_trial, match_patient_to_trial_criteria
+from app.eligibility.evidence_span import extract_criterion_evidence
 from eval.evaluate import compute_metrics
 
 PATIENTS_FILE = Path("data/processed/patient_cases.json")
@@ -83,7 +84,44 @@ def write_llm_reviewed_csv_rows(rows: list[dict], output_path: Path) -> None:
 _CRITERION_CSV_FIELDNAMES = [
     "patient_id", "trial_id", "gold_label", "predicted_label",
     "criterion", "criterion_type", "decision", "reason",
+    "patient_evidence", "trial_evidence",
+    "patient_span_start", "patient_span_end",
+    "trial_span_start", "trial_span_end",
 ]
+
+
+_PATIENT_TEXT_FIELDS: list[str] = [
+    "text", "clinical_notes", "notes", "description", "patient_text",
+    "case_text", "history", "clinical_history", "presentation", "summary",
+]
+
+_TRIAL_TEXT_FIELDS: list[str] = [
+    "criteria_text", "eligibility_criteria", "inclusion_criteria",
+    "exclusion_criteria", "criteria", "description", "detailed_description",
+    "brief_summary", "summary",
+]
+
+
+def _get_patient_text(patient: dict) -> str:
+    """Collect patient narrative text from known fields."""
+    parts: list[str] = []
+    for field in _PATIENT_TEXT_FIELDS:
+        val = patient.get(field, "")
+        if val:
+            parts.append(str(val).strip())
+    return " ".join(parts)
+
+
+def _get_trial_text(trial: dict) -> str:
+    """Collect trial eligibility/criteria text from known fields."""
+    parts: list[str] = []
+    for field in _TRIAL_TEXT_FIELDS:
+        val = trial.get(field, "")
+        if isinstance(val, list):
+            parts.extend(str(v).strip() for v in val if v)
+        elif val:
+            parts.append(str(val).strip())
+    return " ".join(parts)
 
 
 def build_criterion_level_csv_rows(prediction_records: list[dict]) -> list[dict]:
@@ -99,6 +137,12 @@ def build_criterion_level_csv_rows(prediction_records: list[dict]) -> list[dict]
                 "criterion_type": cr.get("criterion_type", ""),
                 "decision": cr.get("decision", ""),
                 "reason": cr.get("reason", ""),
+                "patient_evidence": cr.get("patient_evidence", ""),
+                "trial_evidence": cr.get("trial_evidence", ""),
+                "patient_span_start": cr.get("patient_span_start", ""),
+                "patient_span_end": cr.get("patient_span_end", ""),
+                "trial_span_start": cr.get("trial_span_start", ""),
+                "trial_span_end": cr.get("trial_span_end", ""),
             })
     return rows
 
@@ -386,15 +430,24 @@ def main() -> None:
         predicted_label = result["prediction"]
         gold_label = record["label"]
 
-        criterion_results = [
-            {
+        patient_text = _get_patient_text(patient)
+        trial_text = _get_trial_text(enriched_trial)
+
+        criterion_results = []
+        for cr in match_patient_to_trial_criteria(patient, enriched_trial):
+            evidence = extract_criterion_evidence(
+                patient_text,
+                trial_text,
+                cr.criterion_text,
+                cr.reason or "",
+            )
+            criterion_results.append({
                 "criterion_text": cr.criterion_text,
                 "criterion_type": cr.criterion_type.value,
                 "decision": cr.decision.value,
                 "reason": cr.reason,
-            }
-            for cr in match_patient_to_trial_criteria(patient, enriched_trial)
-        ]
+                **evidence,
+            })
 
         reasoning_trace = build_reasoning_trace(
             predicted_label,

@@ -858,3 +858,114 @@ def test_write_prediction_csv_rows_empty_creates_header_only(tmp_path):
     lines = out.read_text(encoding="utf-8").splitlines()
     assert len(lines) == 1
     assert "patient_id" in lines[0]
+
+
+# ---------------------------------------------------------------------------
+# criterion_results evidence fields in prediction records
+# ---------------------------------------------------------------------------
+
+_CR_WITH_EVIDENCE = {
+    "criterion_text": "Age >= 18",
+    "criterion_type": "inclusion",
+    "decision": "met",
+    "reason": "Patient is 62.",
+    "patient_evidence": "Patient is a 62-year-old male",
+    "trial_evidence": "Age between 18 and 80 years",
+    "patient_span_start": 0,
+    "patient_span_end": 29,
+    "trial_span_start": 0,
+    "trial_span_end": 27,
+}
+
+_CR_WITHOUT_EVIDENCE = {
+    "criterion_text": "No prior chemotherapy",
+    "criterion_type": "exclusion",
+    "decision": "not_met",
+    "reason": "No chemotherapy found.",
+    "patient_evidence": "",
+    "trial_evidence": "",
+    "patient_span_start": "",
+    "patient_span_end": "",
+    "trial_span_start": "",
+    "trial_span_end": "",
+}
+
+_PRED_EV = {
+    "patient_id": "P001",
+    "trial_id": "T001",
+    "gold_label": "eligible",
+    "predicted_label": "eligible",
+    "missing_information": [],
+    "criterion_results": [_CR_WITH_EVIDENCE, _CR_WITHOUT_EVIDENCE],
+}
+
+
+def test_build_coverage_summary_counts_evidence_criterion_results():
+    result = build_coverage_summary([_PRED_EV])
+    assert result["with_criterion_results"] == 1
+
+
+def test_build_prediction_csv_rows_evidence_criterion_results_counted():
+    rows = build_prediction_csv_rows([_PRED_EV])
+    assert rows[0]["num_criterion_results"] == 2
+
+
+def test_criterion_result_with_evidence_has_patient_evidence_key():
+    assert "patient_evidence" in _CR_WITH_EVIDENCE
+
+
+def test_criterion_result_with_evidence_has_trial_evidence_key():
+    assert "trial_evidence" in _CR_WITH_EVIDENCE
+
+
+def test_criterion_result_with_evidence_has_patient_span_start():
+    assert "patient_span_start" in _CR_WITH_EVIDENCE
+
+
+def test_criterion_result_with_evidence_has_patient_span_end():
+    assert "patient_span_end" in _CR_WITH_EVIDENCE
+
+
+def test_criterion_result_with_evidence_has_trial_span_start():
+    assert "trial_span_start" in _CR_WITH_EVIDENCE
+
+
+def test_criterion_result_with_evidence_has_trial_span_end():
+    assert "trial_span_end" in _CR_WITH_EVIDENCE
+
+
+def test_criterion_result_with_evidence_patient_evidence_string():
+    assert isinstance(_CR_WITH_EVIDENCE["patient_evidence"], str)
+
+
+def test_criterion_result_with_evidence_trial_evidence_string():
+    assert isinstance(_CR_WITH_EVIDENCE["trial_evidence"], str)
+
+
+def test_criterion_result_with_evidence_offsets_int_when_found():
+    assert isinstance(_CR_WITH_EVIDENCE["patient_span_start"], int)
+    assert isinstance(_CR_WITH_EVIDENCE["patient_span_end"], int)
+    assert isinstance(_CR_WITH_EVIDENCE["trial_span_start"], int)
+    assert isinstance(_CR_WITH_EVIDENCE["trial_span_end"], int)
+
+
+def test_criterion_result_missing_evidence_is_empty_string():
+    assert _CR_WITHOUT_EVIDENCE["patient_evidence"] == ""
+    assert _CR_WITHOUT_EVIDENCE["trial_evidence"] == ""
+
+
+def test_criterion_result_missing_offsets_are_empty_string():
+    assert _CR_WITHOUT_EVIDENCE["patient_span_start"] == ""
+    assert _CR_WITHOUT_EVIDENCE["patient_span_end"] == ""
+    assert _CR_WITHOUT_EVIDENCE["trial_span_start"] == ""
+    assert _CR_WITHOUT_EVIDENCE["trial_span_end"] == ""
+
+
+def test_build_error_cases_unaffected_by_evidence_fields():
+    records = [
+        {**_PRED_EV, "gold_label": "eligible", "predicted_label": "eligible"},
+        {**_PRED_EV, "patient_id": "P002", "gold_label": "eligible", "predicted_label": "not_eligible"},
+    ]
+    errors = build_error_cases(records)
+    assert len(errors) == 1
+    assert errors[0]["patient_id"] == "P002"

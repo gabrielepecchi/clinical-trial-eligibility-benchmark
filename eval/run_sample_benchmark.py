@@ -5,6 +5,7 @@ import json
 from pathlib import Path
 
 from app.eligibility.rule_matcher import match_patient_to_trial, match_patient_to_trial_criteria
+from app.eligibility.evidence_span import extract_criterion_evidence
 from eval.evaluate import compute_metrics
 
 # ---------------------------------------------------------------------------
@@ -16,6 +17,39 @@ TRIALS_FILE = Path("data/processed/trial_cases_sample.json")
 LABELS_FILE = Path("data/processed/labels_sample.json")
 RESULTS_FILE = Path("data/processed/results_sample.json")
 SAMPLE_PREDICTIONS_CSV_FILE = Path("data/processed/results_sample_predictions.csv")
+
+_PATIENT_TEXT_FIELDS: list[str] = [
+    "text", "clinical_notes", "notes", "description", "patient_text",
+    "case_text", "history", "clinical_history", "presentation", "summary",
+]
+
+_TRIAL_TEXT_FIELDS: list[str] = [
+    "criteria_text", "eligibility_criteria", "inclusion_criteria",
+    "exclusion_criteria", "criteria", "description", "detailed_description",
+    "brief_summary", "summary",
+]
+
+
+def _get_patient_text(patient: dict) -> str:
+    """Collect patient narrative text from known fields."""
+    parts: list[str] = []
+    for field in _PATIENT_TEXT_FIELDS:
+        val = patient.get(field, "")
+        if val:
+            parts.append(str(val).strip())
+    return " ".join(parts)
+
+
+def _get_trial_text(trial: dict) -> str:
+    """Collect trial eligibility/criteria text from known fields."""
+    parts: list[str] = []
+    for field in _TRIAL_TEXT_FIELDS:
+        val = trial.get(field, "")
+        if isinstance(val, list):
+            parts.extend(str(v).strip() for v in val if v)
+        elif val:
+            parts.append(str(val).strip())
+    return " ".join(parts)
 
 
 def load_json(path: Path) -> list[dict]:
@@ -220,15 +254,24 @@ def main() -> None:
         result = match_patient_to_trial(patient, trial)
         predicted_label = result["prediction"]
 
-        criterion_results = [
-            {
+        patient_text = _get_patient_text(patient)
+        trial_text = _get_trial_text(trial)
+
+        criterion_results = []
+        for cr in match_patient_to_trial_criteria(patient, trial):
+            evidence = extract_criterion_evidence(
+                patient_text,
+                trial_text,
+                cr.criterion_text,
+                cr.reason or "",
+            )
+            criterion_results.append({
                 "criterion_text": cr.criterion_text,
                 "criterion_type": cr.criterion_type.value,
                 "decision": cr.decision.value,
                 "reason": cr.reason,
-            }
-            for cr in match_patient_to_trial_criteria(patient, trial)
-        ]
+                **evidence,
+            })
 
         gold_labels.append(gold_label)
         predictions.append(predicted_label)

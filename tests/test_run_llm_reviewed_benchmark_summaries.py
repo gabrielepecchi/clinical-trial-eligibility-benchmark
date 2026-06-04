@@ -117,8 +117,12 @@ from run_llm_reviewed_benchmark import (
     write_criterion_level_csv_rows,
 )
 
-_CR1 = {"criterion_text": "Age >= 18", "criterion_type": "inclusion", "decision": "met", "reason": "Patient is 25."}
-_CR2 = {"criterion_text": "No prior chemo", "criterion_type": "exclusion", "decision": "not_met", "reason": "No chemo history."}
+_CR1 = {"criterion_text": "Age >= 18", "criterion_type": "inclusion", "decision": "met", "reason": "Patient is 25.",
+        "patient_evidence": "Patient is a 25-year-old", "trial_evidence": "Age >= 18 required",
+        "patient_span_start": 0, "patient_span_end": 23, "trial_span_start": 0, "trial_span_end": 10}
+_CR2 = {"criterion_text": "No prior chemo", "criterion_type": "exclusion", "decision": "not_met", "reason": "No chemo history.",
+        "patient_evidence": "", "trial_evidence": "",
+        "patient_span_start": "", "patient_span_end": "", "trial_span_start": "", "trial_span_end": ""}
 
 _PRED_WITH_CRITERIA = {
     "patient_id": "P001",
@@ -205,6 +209,161 @@ def test_write_criterion_level_csv_rows_empty_creates_header_only(tmp_path):
     lines = out.read_text(encoding="utf-8").splitlines()
     assert len(lines) == 1
     assert "patient_id" in lines[0]
+
+
+# --- evidence fields in criterion-level rows ---
+
+_CR1_NO_EV = {"criterion_text": "Age >= 18", "criterion_type": "inclusion", "decision": "met", "reason": "Patient is 25."}
+_CR2_NO_EV = {"criterion_text": "No prior chemo", "criterion_type": "exclusion", "decision": "not_met", "reason": "No chemo history."}
+
+_PRED_WITH_CRITERIA_EV = {
+    "patient_id": "P001",
+    "trial_id": "T001",
+    "gold_label": "eligible",
+    "predicted_label": "eligible",
+    "criterion_results": [
+        {
+            "criterion_text": "Age >= 18",
+            "criterion_type": "inclusion",
+            "decision": "met",
+            "reason": "Patient is 25.",
+            "patient_evidence": "Patient is a 25-year-old male",
+            "trial_evidence": "Age >= 18 years required",
+            "patient_span_start": 0,
+            "patient_span_end": 29,
+            "trial_span_start": 0,
+            "trial_span_end": 8,
+        },
+        {
+            "criterion_text": "No prior chemotherapy",
+            "criterion_type": "exclusion",
+            "decision": "not_met",
+            "reason": "No chemo history found.",
+            "patient_evidence": "",
+            "trial_evidence": "",
+            "patient_span_start": "",
+            "patient_span_end": "",
+            "trial_span_start": "",
+            "trial_span_end": "",
+        },
+    ],
+}
+
+_PRED_NO_EVIDENCE = {
+    "patient_id": "P003",
+    "trial_id": "T003",
+    "gold_label": "not_eligible",
+    "predicted_label": "not_eligible",
+    "criterion_results": [_CR1_NO_EV],
+}
+
+
+def test_build_criterion_level_csv_rows_has_patient_evidence_key():
+    row = build_criterion_level_csv_rows([_PRED_WITH_CRITERIA_EV])[0]
+    assert "patient_evidence" in row
+
+
+def test_build_criterion_level_csv_rows_has_trial_evidence_key():
+    row = build_criterion_level_csv_rows([_PRED_WITH_CRITERIA_EV])[0]
+    assert "trial_evidence" in row
+
+
+def test_build_criterion_level_csv_rows_has_patient_span_start():
+    row = build_criterion_level_csv_rows([_PRED_WITH_CRITERIA_EV])[0]
+    assert "patient_span_start" in row
+
+
+def test_build_criterion_level_csv_rows_has_patient_span_end():
+    row = build_criterion_level_csv_rows([_PRED_WITH_CRITERIA_EV])[0]
+    assert "patient_span_end" in row
+
+
+def test_build_criterion_level_csv_rows_has_trial_span_start():
+    row = build_criterion_level_csv_rows([_PRED_WITH_CRITERIA_EV])[0]
+    assert "trial_span_start" in row
+
+
+def test_build_criterion_level_csv_rows_has_trial_span_end():
+    row = build_criterion_level_csv_rows([_PRED_WITH_CRITERIA_EV])[0]
+    assert "trial_span_end" in row
+
+
+def test_build_criterion_level_csv_rows_patient_evidence_value():
+    row = build_criterion_level_csv_rows([_PRED_WITH_CRITERIA_EV])[0]
+    assert row["patient_evidence"] == "Patient is a 25-year-old male"
+
+
+def test_build_criterion_level_csv_rows_trial_evidence_value():
+    row = build_criterion_level_csv_rows([_PRED_WITH_CRITERIA_EV])[0]
+    assert row["trial_evidence"] == "Age >= 18 years required"
+
+
+def test_build_criterion_level_csv_rows_patient_span_start_value():
+    row = build_criterion_level_csv_rows([_PRED_WITH_CRITERIA_EV])[0]
+    assert row["patient_span_start"] == 0
+
+
+def test_build_criterion_level_csv_rows_patient_span_end_value():
+    row = build_criterion_level_csv_rows([_PRED_WITH_CRITERIA_EV])[0]
+    assert row["patient_span_end"] == 29
+
+
+def test_build_criterion_level_csv_rows_trial_span_start_value():
+    row = build_criterion_level_csv_rows([_PRED_WITH_CRITERIA_EV])[0]
+    assert row["trial_span_start"] == 0
+
+
+def test_build_criterion_level_csv_rows_trial_span_end_value():
+    row = build_criterion_level_csv_rows([_PRED_WITH_CRITERIA_EV])[0]
+    assert row["trial_span_end"] == 8
+
+
+def test_build_criterion_level_csv_rows_missing_evidence_is_empty_string():
+    rows = build_criterion_level_csv_rows([_PRED_WITH_CRITERIA_EV])
+    row_no_ev = rows[1]
+    assert row_no_ev["patient_evidence"] == ""
+    assert row_no_ev["trial_evidence"] == ""
+
+
+def test_build_criterion_level_csv_rows_missing_offsets_are_empty_string():
+    rows = build_criterion_level_csv_rows([_PRED_WITH_CRITERIA_EV])
+    row_no_ev = rows[1]
+    assert row_no_ev["patient_span_start"] == ""
+    assert row_no_ev["patient_span_end"] == ""
+    assert row_no_ev["trial_span_start"] == ""
+    assert row_no_ev["trial_span_end"] == ""
+
+
+def test_build_criterion_level_csv_rows_no_evidence_fields_defaults_empty():
+    row = build_criterion_level_csv_rows([_PRED_NO_EVIDENCE])[0]
+    assert row["patient_evidence"] == ""
+    assert row["trial_evidence"] == ""
+    assert row["patient_span_start"] == ""
+    assert row["trial_span_start"] == ""
+
+
+def test_write_criterion_level_csv_rows_header_contains_patient_evidence(tmp_path):
+    out = tmp_path / "criterion_ev.csv"
+    write_criterion_level_csv_rows(build_criterion_level_csv_rows([_PRED_WITH_CRITERIA_EV]), out)
+    first_line = out.read_text(encoding="utf-8").splitlines()[0]
+    assert "patient_evidence" in first_line
+
+
+def test_write_criterion_level_csv_rows_header_contains_trial_evidence(tmp_path):
+    out = tmp_path / "criterion_ev.csv"
+    write_criterion_level_csv_rows(build_criterion_level_csv_rows([_PRED_WITH_CRITERIA_EV]), out)
+    first_line = out.read_text(encoding="utf-8").splitlines()[0]
+    assert "trial_evidence" in first_line
+
+
+def test_write_criterion_level_csv_rows_header_contains_span_columns(tmp_path):
+    out = tmp_path / "criterion_ev.csv"
+    write_criterion_level_csv_rows(build_criterion_level_csv_rows([_PRED_WITH_CRITERIA_EV]), out)
+    first_line = out.read_text(encoding="utf-8").splitlines()[0]
+    assert "patient_span_start" in first_line
+    assert "patient_span_end" in first_line
+    assert "trial_span_start" in first_line
+    assert "trial_span_end" in first_line
 
 
 # --- build_safety_uncertainty_summary ---
