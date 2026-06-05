@@ -4,7 +4,9 @@ This script fetches a fixed maximum number of studies and saves them as a local 
 It does NOT download all trials from ClinicalTrials.gov — only a reproducible small snapshot.
 """
 
+import argparse
 import json
+import sys
 from pathlib import Path
 
 import requests
@@ -62,7 +64,44 @@ def save_trials(trials: list[dict], output_file: Path) -> None:
     print(f"Saved {len(trials)} trials to {output_file}")
 
 
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(
+        description="Download a Parkinson disease trial snapshot from ClinicalTrials.gov."
+    )
+    parser.add_argument(
+        "--offline",
+        action="store_true",
+        help="Skip network requests and reuse an existing output file.",
+    )
+    parser.add_argument(
+        "--output",
+        type=Path,
+        default=OUTPUT_FILE,
+        help=f"Path to the output JSON file (default: {OUTPUT_FILE}).",
+    )
+    parser.add_argument(
+        "--max-trials",
+        type=int,
+        default=MAX_TRIALS,
+        help=f"Maximum number of trials to fetch (default: {MAX_TRIALS}).",
+    )
+    return parser.parse_args()
+
+
 if __name__ == "__main__":
-    print(f"Fetching up to {MAX_TRIALS} trials for: {SEARCH_CONDITION}")
-    trials = fetch_trials(MAX_TRIALS)
-    save_trials(trials, OUTPUT_FILE)
+    args = parse_args()
+    output_path: Path = args.output
+
+    if args.offline:
+        if output_path.exists():
+            print(f"Offline mode: reusing existing raw trials file at {output_path}")
+        else:
+            print(
+                f"Error: offline mode requested but output file does not exist: {output_path}",
+                file=sys.stderr,
+            )
+            sys.exit(1)
+    else:
+        print(f"Fetching up to {args.max_trials} trials for: {SEARCH_CONDITION}")
+        trials = fetch_trials(args.max_trials)
+        save_trials(trials, output_path)
