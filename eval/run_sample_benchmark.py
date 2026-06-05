@@ -1,5 +1,6 @@
 """Run the sample benchmark: match patients to trials and evaluate predictions."""
 
+import argparse
 import csv
 import json
 from pathlib import Path
@@ -221,11 +222,47 @@ def build_benchmark_output(
     }
 
 
+QUICK_DEMO_DEFAULT_LIMIT = 3
+
+
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(
+        description="Run the sample benchmark: match patients to trials and evaluate predictions."
+    )
+    parser.add_argument(
+        "--quick-demo",
+        action="store_true",
+        help=f"Run a small deterministic subset (default: first {QUICK_DEMO_DEFAULT_LIMIT} pairs) to verify the pipeline quickly.",
+    )
+    parser.add_argument(
+        "--limit",
+        type=int,
+        default=None,
+        metavar="N",
+        help="Limit evaluation to the first N label records deterministically.",
+    )
+    return parser.parse_args()
+
+
 def main() -> None:
+    args = parse_args()
+
+    limit: int | None = None
+    if args.quick_demo:
+        limit = args.limit if args.limit is not None else QUICK_DEMO_DEFAULT_LIMIT
+    elif args.limit is not None:
+        limit = args.limit
     # Load data
     patients = load_json(PATIENTS_FILE)
     trials = load_json(TRIALS_FILE)
     labels = load_json(LABELS_FILE)
+
+    if limit is not None:
+        labels = labels[:limit]
+        if args.quick_demo:
+            print(f"[quick-demo] Running on first {len(labels)} label record(s).")
+        else:
+            print(f"[limit] Running on first {len(labels)} label record(s).")
 
     # Index patients and trials by ID for quick lookup
     patient_index = {p["patient_id"]: p for p in patients}

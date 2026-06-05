@@ -251,6 +251,21 @@ python -m eval.run_sample_benchmark
 python -m eval.summarize_error_analysis
 ```
 
+### Quick demo
+
+Run a small deterministic subset (first 3 pairs) to verify the pipeline works without waiting for the full benchmark:
+
+```
+PYTHONPATH=. python eval/run_sample_benchmark.py --quick-demo
+```
+
+To control the subset size:
+
+```
+PYTHONPATH=. python eval/run_sample_benchmark.py --quick-demo --limit 5
+PYTHONPATH=. python eval/run_sample_benchmark.py --limit 10
+```
+
 ## Data Sources
 
 - [ClinicalTrials.gov](https://clinicaltrials.gov) — public data only
