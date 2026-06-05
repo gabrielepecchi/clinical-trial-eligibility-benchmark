@@ -74,8 +74,32 @@ This document describes the local benchmark pipeline for evaluating AI-assisted 
 
 ---
 
+## Stage 8 — Tag Hard-Case Subsets
+
+| | |
+|---|---|
+| **Input** | Benchmark result records |
+| **Output** | Records tagged with difficulty labels (`hard_negative`, `hard_positive`, `ambiguous_clinical_severity`); per-tag classification metrics |
+| **Script** | `PYTHONPATH=. python eval/tag_hard_cases.py` |
+| **Output files** | `data/processed/hard_case_subsets.json`, `data/processed/hard_case_subsets.csv`, `data/processed/hard_case_metrics.json`, `data/processed/hard_case_metrics.csv` |
+| **Purpose** | Identify which failure modes cluster in structurally difficult cases; enable targeted metric analysis without model inference |
+
+---
+
+## Stage 9 — Generate HTML Benchmark Report
+
+| | |
+|---|---|
+| **Input** | All benchmark result files; hard-case files (optional) |
+| **Output** | Self-contained local HTML report |
+| **Script** | `PYTHONPATH=. python eval/generate_benchmark_report.py` |
+| **Output file** | `reports/benchmark_report.html` |
+| **Purpose** | Produce a readable summary of global metrics, confusion matrix, error analysis, criterion-type breakdown, and — when hard-case files are present — hard-case subset summaries and per-tag metrics |
+
+---
+
 ## Notes
 
-- **No clinical validation** — this pipeline benchmarks AI reasoning on synthetic data only.
+- **No clinical validation** — this pipeline benchmarks AI reasoning on synthetic data only. It is a local draft benchmark, not a clinical tool.
 - **Fully local** — no data leaves the local environment during evaluation.
 - **Reproducible** — fixed synthetic generation parameters and public trial data allow exact benchmark reruns.

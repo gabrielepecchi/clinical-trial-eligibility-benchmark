@@ -13,6 +13,8 @@ Build a local benchmark that evaluates how accurately a system can match synthet
 - Define expected eligibility labels (`eligible` / `not_eligible` / `unclear`) per patient-trial pair
 - Run and score matching logic against expected labels
 - Produce benchmark metrics (accuracy, precision, recall, F1)
+- Tag hard-case subsets and compute per-tag metrics
+- Generate a self-contained local HTML benchmark report
 
 ### Out of scope
 - Real patient data
@@ -54,6 +56,11 @@ Parkinson disease — ICD-10 G20, search term `"Parkinson disease"` on ClinicalT
 | `data/processed/labels_llm_reviewed.json` | LLM-reviewed draft benchmark labels |
 | `data/processed/results_llm_reviewed.json` | Benchmark results |
 | `data/processed/error_analysis_llm_reviewed.json` | Error analysis output |
+| `data/processed/hard_case_subsets.json` | Hard-case tagged records with per-tag metrics |
+| `data/processed/hard_case_subsets.csv` | Hard-case tagged records (flat CSV) |
+| `data/processed/hard_case_metrics.json` | Per-tag classification metrics |
+| `data/processed/hard_case_metrics.csv` | Per-tag classification metrics (flat CSV) |
+| `reports/benchmark_report.html` | Self-contained local HTML benchmark report |
 
 > **Note:** `labels_llm_reviewed.json` contains LLM-reviewed draft benchmark labels. These are not clinical gold truth and have not been clinically validated.
 
@@ -72,8 +79,11 @@ Rule-based deterministic matcher implemented in `app/eligibility/rule_matcher.py
 Covers:
 - Age range inclusion/exclusion
 - Parkinson disease diagnosis requirements
-- DBS (deep brain stimulation) criteria
-- Cognitive exclusion criteria
+- MAO-B inhibitor detection and exclusion
+- DBS (deep brain stimulation) and prior DBS criteria
+- Cognitive exclusion criteria (MoCA, MMSE thresholds)
+- Pacemaker and implanted device exclusions
+- Medication stability and regimen uncertainty
 - Medication uncertainty (unclear regimen, missing pharmacy records)
 - Disease-stage and severity uncertainty (missing UPDRS, unclear Hoehn and Yahr stage, unknown duration)
 - Atypical or unclear parkinsonism vs. idiopathic PD requirements
@@ -92,13 +102,14 @@ Covers:
 
 ## Tests
 
-267 tests passing.
+579 tests passing.
 
 ## Metrics
 
 - Per-criterion accuracy
 - Per-trial eligibility accuracy
 - Overall benchmark score (accuracy, precision, recall, F1)
+- Per-tag hard-case subset metrics (accuracy, macro F1, per-class scores)
 
 ## Limitations
 
@@ -107,3 +118,4 @@ Covers:
 - Synthetic patients do not represent any real individuals.
 - Benchmark labels are LLM-reviewed drafts and do not constitute clinical ground truth.
 - Benchmark scores reflect system performance only, not clinical accuracy.
+- This remains a local draft benchmark; no clinical validation has been performed at any stage.

@@ -55,6 +55,11 @@
 ## Phase 5 — Rule Matcher Improvements ✅
 
 - [x] Age parsing fix — stage ranges like `1-3` are no longer misread as age ranges
+- [x] MAO-B inhibitor detection and exclusion handling
+- [x] DBS and prior DBS criteria handling
+- [x] Cognitive exclusion criteria (MoCA and MMSE threshold handling)
+- [x] Pacemaker and implanted device exclusions
+- [x] Medication stability and regimen uncertainty
 - [x] Uncertainty logic for medication history (unclear regimen, missing pharmacy records)
 - [x] Uncertainty logic for disease severity and stage (missing UPDRS, unclear Hoehn and Yahr, unknown duration)
 - [x] Uncertainty logic for atypical or unclear parkinsonism vs. idiopathic PD requirements
@@ -64,7 +69,20 @@
 
 ---
 
-## Phase 6 — Testing ✅
+## Phase 6 — Hard-Case Tagging and HTML Report ✅
+
+- [x] `eval/tag_hard_cases.py` — tags records with `hard_negative`, `hard_positive`, `ambiguous_clinical_severity` using deterministic rules; computes per-tag metrics → `data/processed/hard_case_subsets.json`, `data/processed/hard_case_subsets.csv`, `data/processed/hard_case_metrics.json`, `data/processed/hard_case_metrics.csv`
+- [x] `eval/generate_benchmark_report.py` — generates self-contained local HTML report → `reports/benchmark_report.html`; includes hard-case subset summaries and per-tag metrics when hard-case files are present
+
+---
+
+## Phase 7 — Local Demo Runner ✅
+
+- [x] `scripts/run_local_demo.py` — offline/local demo runner; reuses existing raw trials file; supports `--full-sample` and `--online` flags
+
+---
+
+## Phase 8 — Testing ✅
 
 - [x] Unit tests for schema validation
 - [x] Unit tests for parser on example criteria strings
@@ -74,7 +92,7 @@
 - [x] LLM-reviewed labels tests
 - [x] Unclear matcher logic tests
 
-**Current status: 267 tests passing.**
+**Current status: 579 tests passing.**
 
 ---
 
@@ -94,3 +112,4 @@
 - No real patient data at any phase.
 - No medical advice or clinical decision support at any phase.
 - Keep the baseline simple and deterministic before adding complexity.
+- This remains a local draft benchmark; no clinical validation has been performed.

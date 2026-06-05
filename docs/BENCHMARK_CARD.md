@@ -83,6 +83,17 @@ No real patient records, EHRs, or clinical databases are used. The pipeline runs
 
 ---
 
+## Hard-Case Subset Analysis
+
+Each benchmark record is tagged with one or more difficulty labels — `hard_negative`, `hard_positive`, `ambiguous_clinical_severity` — using deterministic text and metadata rules. Per-tag classification metrics (accuracy, macro F1, per-class scores) are computed separately for each subset and stored in:
+
+- `data/processed/hard_case_subsets.json` — full tagged records with summary counts and per-tag metrics
+- `data/processed/hard_case_metrics.json` — per-tag classification metrics
+
+The HTML benchmark report (`reports/benchmark_report.html`) includes hard-case subset summaries and per-tag metrics when these files are present.
+
+---
+
 ## Known Limitations
 
 - Labels are LLM-generated drafts; no clinician review has occurred
@@ -90,6 +101,7 @@ No real patient records, EHRs, or clinical databases are used. The pipeline runs
 - Eligibility criteria text from ClinicalTrials.gov is often ambiguous or inconsistently structured
 - Benchmark size is currently small; results may not generalize
 - No multi-model comparison has been run yet
+- This remains a local draft benchmark; no clinical validation has been performed
 
 ---
 

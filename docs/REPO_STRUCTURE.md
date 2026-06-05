@@ -17,8 +17,19 @@ clinical-trial-eligibility-benchmark/
 │       ├── labels.json                      # Merged/final labels
 │       ├── results_sample.json              # Sample benchmark results
 │       ├── results_llm_reviewed.json        # Real benchmark results
+│       ├── results_llm_reviewed.csv         # Benchmark predictions (CSV)
+│       ├── criterion_level_results.csv      # Criterion-level results (CSV)
+│       ├── results_sample_predictions.csv   # Sample benchmark predictions (CSV)
 │       ├── error_analysis_sample.json       # Sample benchmark error analysis
-│       └── error_analysis_llm_reviewed.json # Real benchmark error analysis
+│       ├── error_analysis_llm_reviewed.json # Real benchmark error analysis
+│       ├── error_analysis_llm_reviewed.csv  # Real benchmark error analysis (CSV)
+│       ├── hard_case_subsets.json           # Hard-case tagged records with per-tag metrics
+│       ├── hard_case_subsets.csv            # Hard-case tagged records (flat CSV)
+│       ├── hard_case_metrics.json           # Per-tag classification metrics
+│       └── hard_case_metrics.csv            # Per-tag classification metrics (flat CSV)
+│
+├── reports/
+│   └── benchmark_report.html               # Self-contained local HTML benchmark report
 │
 ├── app/
 │   ├── models.py                            # Core Pydantic models
@@ -31,7 +42,9 @@ clinical-trial-eligibility-benchmark/
 │   ├── run_sample_benchmark.py              # Sample benchmark runner
 │   ├── summarize_error_analysis.py          # Sample error analysis
 │   ├── run_llm_reviewed_benchmark.py        # Real benchmark runner
-│   └── summarize_llm_reviewed_errors.py     # Real benchmark error analysis
+│   ├── summarize_llm_reviewed_errors.py     # Real benchmark error analysis
+│   ├── tag_hard_cases.py                    # Hard-case subset tagger
+│   └── generate_benchmark_report.py         # HTML benchmark report generator
 │
 ├── scripts/
 │   ├── download_trials.py                   # Fetch raw trials from ClinicalTrials.gov
@@ -43,9 +56,10 @@ clinical-trial-eligibility-benchmark/
 │   ├── generate_labels_seed.py              # Generate seed labels
 │   ├── audit_labels_seed.py                 # Audit seed labels
 │   ├── export_labels_seed_review.py         # Export seed labels to CSV for review
-│   └── import_reviewed_labels.py            # Import reviewed labels back
+│   ├── import_reviewed_labels.py            # Import reviewed labels back
+│   └── run_local_demo.py                    # Offline/local demo runner
 │
-├── tests/                                   # pytest unit tests (267 passing)
+├── tests/                                   # pytest unit tests (579 passing)
 │   ├── parser, model, matcher tests
 │   ├── data validation tests
 │   ├── pipeline script tests
@@ -66,6 +80,7 @@ clinical-trial-eligibility-benchmark/
 - `app/eligibility/` contains all importable Python modules.
 - `eval/` contains benchmark scoring logic, separate from app code.
 - `scripts/` contains standalone pipeline scripts not meant to be imported.
+- `reports/` contains generated HTML reports (gitignored).
 - No UI code.
 - `__pycache__/` and `.pytest_cache/` are not committed.
 

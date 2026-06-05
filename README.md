@@ -210,6 +210,11 @@ The full pipeline produces the following files:
 | Error analysis | `data/processed/error_analysis_llm_reviewed.json` |
 | Error analysis CSV | `data/processed/error_analysis_llm_reviewed.csv` |
 | Sample benchmark predictions CSV | `data/processed/results_sample_predictions.csv` |
+| Hard-case subsets (tagged records) | `data/processed/hard_case_subsets.json` |
+| Hard-case subsets CSV | `data/processed/hard_case_subsets.csv` |
+| Hard-case per-tag metrics | `data/processed/hard_case_metrics.json` |
+| Hard-case per-tag metrics CSV | `data/processed/hard_case_metrics.csv` |
+| HTML benchmark report | `reports/benchmark_report.html` |
 
 ## Local demo (offline, fast)
 
