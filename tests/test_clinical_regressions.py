@@ -252,3 +252,93 @@ def test_result_always_has_required_keys():
     assert result["prediction"] in {"eligible", "not_eligible", "unclear"}
     assert "confidence" in result
     assert "explanation" in result
+
+
+# ---------------------------------------------------------------------------
+# Cognitive regression tests (Priority 7C-2)
+# ---------------------------------------------------------------------------
+
+def test_dementia_patient_blocked_by_dementia_exclusion():
+    """Patient with dementia should be not_eligible when trial excludes dementia/cognitive impairment."""
+    patient = _patient(
+        key_features=["dementia", "significant cognitive impairment"],
+        cognitive_status="dementia",
+        moca_score=14,
+    )
+    trial = _trial(
+        "Inclusion: Idiopathic Parkinson disease. Age >= 40. "
+        "Exclusion: Dementia or significant cognitive impairment."
+    )
+    result = match_patient_to_trial(patient, trial)
+    assert result["prediction"] in {"not_eligible", "unclear"}, (
+        "Patient with dementia should be not_eligible or unclear when trial excludes dementia"
+    )
+
+
+def test_moca_below_threshold_blocks_eligibility():
+    """Patient MoCA below trial threshold should produce not_eligible."""
+    patient = _patient(
+        key_features=["MoCA score 20"],
+        moca_score=20,
+    )
+    trial = _trial(
+        "Inclusion: Parkinson disease. Age >= 40. MoCA score >= 24 required."
+    )
+    result = match_patient_to_trial(patient, trial)
+    assert result["prediction"] in {"not_eligible", "unclear"}, (
+        "Patient MoCA 20 should be not_eligible or unclear when trial requires MoCA >= 24"
+    )
+
+
+def test_moca_meets_threshold_not_blocked():
+    """Patient MoCA meeting trial threshold should not be blocked for cognitive reasons."""
+    patient = _patient(
+        key_features=["MoCA score 26"],
+        moca_score=26,
+    )
+    trial = _trial(
+        "Inclusion: Parkinson disease. Age >= 40. MoCA score >= 24 required."
+    )
+    result = match_patient_to_trial(patient, trial)
+    # Must not be blocked specifically for cognitive reasons
+    cognitive_blocking = [
+        c for c in result.get("blocking_criteria", [])
+        if "cogn" in c.lower() or "moca" in c.lower() or "mmse" in c.lower()
+    ]
+    assert not cognitive_blocking, (
+        f"Patient MoCA 26 should not be blocked by cognitive criterion when threshold is 24; "
+        f"blocking_criteria={result.get('blocking_criteria')}"
+    )
+
+
+def test_normal_cognitive_status_not_blocked_by_cognitive_exclusion():
+    """Patient with explicitly normal cognitive_status should not be blocked by a cognitive exclusion."""
+    patient = _patient(
+        cognitive_status="normal",
+        key_features=[],
+    )
+    trial = _trial(
+        "Inclusion: Parkinson disease. Age >= 40. "
+        "Exclusion: Dementia or cognitive impairment."
+    )
+    result = match_patient_to_trial(patient, trial)
+    cognitive_blocking = [
+        c for c in result.get("blocking_criteria", [])
+        if "cogn" in c.lower() or "dementia" in c.lower() or "moca" in c.lower() or "mmse" in c.lower()
+    ]
+    assert not cognitive_blocking, (
+        "Patient with normal cognitive_status should not be blocked by cognitive exclusion"
+    )
+
+
+def test_missing_moca_moca_required_trial_does_not_produce_eligible():
+    """Missing MoCA when trial requires MoCA >= threshold should not produce confident eligible."""
+    patient = _patient()  # no moca_score, no cognitive key_features
+    trial = _trial(
+        "Inclusion: Parkinson disease. Age >= 40. MoCA score >= 24 required."
+    )
+    result = match_patient_to_trial(patient, trial)
+    # Should be unclear or not_eligible — not confidently eligible
+    assert result["prediction"] in {"unclear", "not_eligible"}, (
+        "Missing MoCA score when trial requires MoCA >= 24 should not return eligible"
+    )

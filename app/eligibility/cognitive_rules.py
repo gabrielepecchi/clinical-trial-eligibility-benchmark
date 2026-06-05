@@ -21,6 +21,18 @@ from app.eligibility.clinical_terms import (
 
 import re
 
+# Inline fallback patterns for inclusion criteria phrased with >= / ≥ operators.
+# These supplement _MMSE_INCLUSION_MIN_PATTERN / _MOCA_INCLUSION_MIN_PATTERN from
+# clinical_terms, which may not cover all >= operator variants.
+_MMSE_MIN_GTE_PATTERN = re.compile(
+    r"\bmmse\b(?:\s+score)?\s*[≥>]=?\s*(\d+)",
+    re.IGNORECASE,
+)
+_MOCA_MIN_GTE_PATTERN = re.compile(
+    r"\bmoca\b(?:\s+score)?\s*[≥>]=?\s*(\d+)",
+    re.IGNORECASE,
+)
+
 
 def _text(value) -> str:
     """Coerce a value to a lowercase stripped string for pattern matching."""
@@ -301,7 +313,7 @@ def _check_cognitive_inclusion_minimum(
         c = criterion.lower()
 
         # Numeric MMSE minimum
-        m = _MMSE_INCLUSION_MIN_PATTERN.search(c)
+        m = _MMSE_INCLUSION_MIN_PATTERN.search(c) or _MMSE_MIN_GTE_PATTERN.search(c)
         if m:
             required = int(m.group(1))
             # Use dedicated field first
@@ -327,10 +339,14 @@ def _check_cognitive_inclusion_minimum(
                     f"cognitive inclusion minimum: MMSE >= {required} required; patient has documented cognitive impairment",
                     "cognitive impairment documented; MMSE score not available",
                 )
-            continue
+            else:
+                return (
+                    "__unclear__:MMSE score required but not documented",
+                    None,
+                )
 
         # Numeric MoCA minimum
-        m = _MOCA_INCLUSION_MIN_PATTERN.search(c)
+        m = _MOCA_INCLUSION_MIN_PATTERN.search(c) or _MOCA_MIN_GTE_PATTERN.search(c)
         if m:
             required = int(m.group(1))
             effective_moca = moca_score
@@ -355,7 +371,11 @@ def _check_cognitive_inclusion_minimum(
                     f"cognitive inclusion minimum: MoCA >= {required} required; patient has documented cognitive impairment",
                     "cognitive impairment documented; MoCA score not available",
                 )
-            continue
+            else:
+                return (
+                    "__unclear__:MoCA score required but not documented",
+                    None,
+                )
 
         # Non-numeric intact-cognition requirement — require clear impairment, not just MCI
         if _any_match(_TRIAL_COGNITIVE_INCLUSION_MIN_PATTERNS, c):

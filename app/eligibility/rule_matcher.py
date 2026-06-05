@@ -485,6 +485,17 @@ def match_patient_to_trial(patient: dict, trial: dict) -> dict:
             explanation        – human-readable summary string
             missing_information – list of missing data categories (e.g. 'age', 'cognitive_score')
     """
+    # Normalise free-text eligibility_criteria so downstream rules can use it.
+    # Work on a shallow copy to avoid mutating the caller's dict.
+    _ec_raw = trial.get("eligibility_criteria")
+    if _ec_raw is not None:
+        trial = dict(trial)
+        _ec_text = _ec_raw if isinstance(_ec_raw, str) else " ".join(str(x) for x in _ec_raw)
+        if not trial.get("inclusion_criteria"):
+            trial["inclusion_criteria"] = [_ec_text]
+        if not trial.get("exclusion_criteria"):
+            trial["exclusion_criteria"] = [_ec_text]
+
     matched_facts: list[str] = []
     blocking_criteria: list[str] = []
     uncertain_criteria: list[str] = []
@@ -559,10 +570,15 @@ def match_patient_to_trial(patient: dict, trial: dict) -> dict:
 
     # --- Cognitive inclusion minimum ---
     cog_min_block, cog_min_fact = _check_cognitive_inclusion_minimum(patient, trial)
-    if cog_min_block and cog_min_block not in blocking_criteria:
-        blocking_criteria.append(cog_min_block)
-        if cog_min_fact:
-            matched_facts.append(cog_min_fact)
+    if cog_min_block:
+        if cog_min_block.startswith("__unclear__:"):
+            uncertain_criteria.append(cog_min_block[len("__unclear__:"):])
+            if cog_min_fact:
+                matched_facts.append(cog_min_fact)
+        elif cog_min_block not in blocking_criteria:
+            blocking_criteria.append(cog_min_block)
+            if cog_min_fact:
+                matched_facts.append(cog_min_fact)
 
     # --- MCI-only + DBS/neuropsychiatric/facial-expression/imaging outcome trial:
     #     prefer unclear over not_eligible when no numeric cutoff or explicit dementia exclusion ---
