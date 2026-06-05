@@ -25,6 +25,8 @@ DEFAULT_TRIALS = Path("data/processed/trial_cases.json")
 DEFAULT_RESULTS = Path("data/processed/results_llm_reviewed.json")
 DEFAULT_OUTPUT_JSON = Path("data/processed/hard_case_subsets.json")
 DEFAULT_OUTPUT_CSV = Path("data/processed/hard_case_subsets.csv")
+DEFAULT_OUTPUT_METRICS_JSON = Path("data/processed/hard_case_metrics.json")
+DEFAULT_OUTPUT_METRICS_CSV = Path("data/processed/hard_case_metrics.csv")
 
 ALL_TAGS = ["hard_negative", "hard_positive", "ambiguous_clinical_severity"]
 
@@ -307,6 +309,96 @@ def write_csv(records: list[dict], path: Path) -> None:
 
 
 # ---------------------------------------------------------------------------
+# Per-tag metrics
+# ---------------------------------------------------------------------------
+
+_LABEL_CLASSES = ["eligible", "not_eligible", "unclear"]
+
+
+def compute_classification_metrics(
+    gold_labels: list[str], predicted_labels: list[str]
+) -> dict:
+    """Compute accuracy, macro F1, and per-class precision/recall/F1/support."""
+    classes = _LABEL_CLASSES
+    n = len(gold_labels)
+
+    if n == 0:
+        empty_per_class = {c: {"precision": 0.0, "recall": 0.0, "f1": 0.0, "support": 0} for c in classes}
+        return {"accuracy": 0.0, "macro_f1": 0.0, "per_class": empty_per_class}
+
+    correct = sum(g == p for g, p in zip(gold_labels, predicted_labels))
+    accuracy = correct / n
+
+    per_class: dict[str, dict] = {}
+    f1_scores: list[float] = []
+    for cls in classes:
+        tp = sum(g == cls and p == cls for g, p in zip(gold_labels, predicted_labels))
+        fp = sum(g != cls and p == cls for g, p in zip(gold_labels, predicted_labels))
+        fn = sum(g == cls and p != cls for g, p in zip(gold_labels, predicted_labels))
+        support = sum(g == cls for g in gold_labels)
+        precision = tp / (tp + fp) if (tp + fp) > 0 else 0.0
+        recall = tp / (tp + fn) if (tp + fn) > 0 else 0.0
+        f1 = (2 * precision * recall / (precision + recall)) if (precision + recall) > 0 else 0.0
+        per_class[cls] = {"precision": precision, "recall": recall, "f1": f1, "support": support}
+        f1_scores.append(f1)
+
+    macro_f1 = sum(f1_scores) / len(f1_scores)
+    return {"accuracy": accuracy, "macro_f1": macro_f1, "per_class": per_class}
+
+
+def build_metrics_by_tag(records: list[dict]) -> dict[str, dict]:
+    """Compute classification metrics separately for each hard-case tag."""
+    tag_records: dict[str, list[dict]] = {t: [] for t in ALL_TAGS}
+    for rec in records:
+        for tag in rec["hard_case_tags"]:
+            if tag in tag_records:
+                tag_records[tag].append(rec)
+
+    metrics_by_tag: dict[str, dict] = {}
+    for tag, recs in tag_records.items():
+        total = len(recs)
+        evaluated = [r for r in recs if r.get("predicted_label", "").strip()]
+        gold = [r["gold_label"] for r in evaluated]
+        pred = [r["predicted_label"] for r in evaluated]
+        m = compute_classification_metrics(gold, pred)
+        metrics_by_tag[tag] = {
+            "total_records": total,
+            "evaluated_records": len(evaluated),
+            **m,
+        }
+    return metrics_by_tag
+
+
+_METRICS_CSV_FIELDS = [
+    "tag", "total_records", "evaluated_records", "accuracy", "macro_f1",
+    "eligible_precision", "eligible_recall", "eligible_f1", "eligible_support",
+    "not_eligible_precision", "not_eligible_recall", "not_eligible_f1", "not_eligible_support",
+    "unclear_precision", "unclear_recall", "unclear_f1", "unclear_support",
+]
+
+
+def write_metrics_csv(metrics_by_tag: dict[str, dict], path: Path) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("w", newline="", encoding="utf-8") as f:
+        writer = csv.DictWriter(f, fieldnames=_METRICS_CSV_FIELDS)
+        writer.writeheader()
+        for tag in ALL_TAGS:
+            m = metrics_by_tag.get(tag, {})
+            pc = m.get("per_class", {})
+            row: dict = {"tag": tag, "total_records": m.get("total_records", 0),
+                         "evaluated_records": m.get("evaluated_records", 0),
+                         "accuracy": m.get("accuracy", 0.0),
+                         "macro_f1": m.get("macro_f1", 0.0)}
+            for cls in _LABEL_CLASSES:
+                cls_m = pc.get(cls, {})
+                row[f"{cls}_precision"] = cls_m.get("precision", 0.0)
+                row[f"{cls}_recall"] = cls_m.get("recall", 0.0)
+                row[f"{cls}_f1"] = cls_m.get("f1", 0.0)
+                row[f"{cls}_support"] = cls_m.get("support", 0)
+            writer.writerow(row)
+
+
+# ---------------------------------------------------------------------------
 # CLI
 # ---------------------------------------------------------------------------
 
@@ -321,6 +413,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--results", type=Path, default=DEFAULT_RESULTS)
     parser.add_argument("--output-json", type=Path, default=DEFAULT_OUTPUT_JSON)
     parser.add_argument("--output-csv", type=Path, default=DEFAULT_OUTPUT_CSV)
+    parser.add_argument("--output-metrics-json", type=Path, default=DEFAULT_OUTPUT_METRICS_JSON)
+    parser.add_argument("--output-metrics-csv", type=Path, default=DEFAULT_OUTPUT_METRICS_CSV)
     return parser.parse_args()
 
 
@@ -346,14 +440,21 @@ def main() -> None:
     print("Tagging records …")
     records = build_hard_case_records(labels, patients, trials, results_payload)
     summary = build_summary(records)
+    metrics_by_tag = build_metrics_by_tag(records)
 
-    payload = {"summary": summary, "records": records}
+    payload = {"summary": summary, "metrics_by_tag": metrics_by_tag, "records": records}
 
     write_json(payload, args.output_json)
     print(f"JSON written to : {args.output_json}")
 
     write_csv(records, args.output_csv)
     print(f"CSV  written to : {args.output_csv}")
+
+    write_json(metrics_by_tag, args.output_metrics_json)
+    print(f"Metrics JSON    : {args.output_metrics_json}")
+
+    write_metrics_csv(metrics_by_tag, args.output_metrics_csv)
+    print(f"Metrics CSV     : {args.output_metrics_csv}")
 
     print("\n=== Hard-case tag summary ===")
     print(f"Total records   : {summary['total_records']}")

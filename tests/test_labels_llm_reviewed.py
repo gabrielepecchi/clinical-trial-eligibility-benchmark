@@ -84,10 +84,12 @@ def test_contains_at_least_one_record_per_label(labels):
 from eval.tag_hard_cases import (
     assign_hard_case_tags,
     build_hard_case_records,
+    build_metrics_by_tag,
     build_patient_index,
     build_result_index,
     build_summary,
     build_trial_index,
+    compute_classification_metrics,
 )
 
 
@@ -316,3 +318,108 @@ def test_build_trial_index():
     idx = build_trial_index(trials)
     assert "T001" in idx and "T002" in idx
 
+
+# ---------------------------------------------------------------------------
+# compute_classification_metrics tests
+# ---------------------------------------------------------------------------
+
+def test_compute_classification_metrics_perfect_accuracy():
+    gold = ["eligible", "not_eligible", "unclear"]
+    pred = ["eligible", "not_eligible", "unclear"]
+    m = compute_classification_metrics(gold, pred)
+    assert m["accuracy"] == 1.0
+
+
+def test_compute_classification_metrics_zero_accuracy():
+    gold = ["eligible", "eligible"]
+    pred = ["not_eligible", "not_eligible"]
+    m = compute_classification_metrics(gold, pred)
+    assert m["accuracy"] == 0.0
+
+
+def test_compute_classification_metrics_macro_f1_perfect():
+    gold = ["eligible", "not_eligible", "unclear"]
+    pred = ["eligible", "not_eligible", "unclear"]
+    m = compute_classification_metrics(gold, pred)
+    assert abs(m["macro_f1"] - 1.0) < 1e-9
+
+
+def test_compute_classification_metrics_per_class_support():
+    gold = ["eligible", "eligible", "not_eligible"]
+    pred = ["eligible", "not_eligible", "not_eligible"]
+    m = compute_classification_metrics(gold, pred)
+    assert m["per_class"]["eligible"]["support"] == 2
+    assert m["per_class"]["not_eligible"]["support"] == 1
+
+
+def test_compute_classification_metrics_empty():
+    m = compute_classification_metrics([], [])
+    assert m["accuracy"] == 0.0
+    assert m["macro_f1"] == 0.0
+    for cls in ["eligible", "not_eligible", "unclear"]:
+        assert m["per_class"][cls]["f1"] == 0.0
+        assert m["per_class"][cls]["support"] == 0
+
+
+# ---------------------------------------------------------------------------
+# build_metrics_by_tag tests
+# ---------------------------------------------------------------------------
+
+def _make_record(patient_id, trial_id, gold, predicted, tags):
+    return {
+        "patient_id": patient_id,
+        "trial_id": trial_id,
+        "gold_label": gold,
+        "predicted_label": predicted,
+        "hard_case_tags": tags,
+        "tag_reasons": [],
+    }
+
+
+def test_build_metrics_by_tag_returns_all_tags():
+    records = [_make_record("P001", "T001", "not_eligible", "not_eligible", ["hard_negative"])]
+    m = build_metrics_by_tag(records)
+    for tag in ["hard_negative", "hard_positive", "ambiguous_clinical_severity"]:
+        assert tag in m
+
+
+def test_build_metrics_by_tag_total_records():
+    records = [
+        _make_record("P001", "T001", "not_eligible", "not_eligible", ["hard_negative"]),
+        _make_record("P002", "T001", "not_eligible", "eligible", ["hard_negative"]),
+    ]
+    m = build_metrics_by_tag(records)
+    assert m["hard_negative"]["total_records"] == 2
+
+
+def test_build_metrics_by_tag_evaluated_excludes_empty_predicted():
+    records = [
+        _make_record("P001", "T001", "not_eligible", "not_eligible", ["hard_negative"]),
+        _make_record("P002", "T001", "not_eligible", "", ["hard_negative"]),
+    ]
+    m = build_metrics_by_tag(records)
+    assert m["hard_negative"]["evaluated_records"] == 1
+
+
+def test_build_metrics_by_tag_zero_evaluated_returns_zero_metrics():
+    records = [_make_record("P001", "T001", "not_eligible", "", ["hard_negative"])]
+    m = build_metrics_by_tag(records)
+    assert m["hard_negative"]["evaluated_records"] == 0
+    assert m["hard_negative"]["accuracy"] == 0.0
+    assert m["hard_negative"]["macro_f1"] == 0.0
+
+
+def test_build_metrics_by_tag_accuracy_correct():
+    records = [
+        _make_record("P001", "T001", "eligible", "eligible", ["hard_positive"]),
+        _make_record("P002", "T001", "eligible", "not_eligible", ["hard_positive"]),
+    ]
+    m = build_metrics_by_tag(records)
+    assert abs(m["hard_positive"]["accuracy"] - 0.5) < 1e-9
+
+
+def test_build_metrics_by_tag_empty_tag_has_zero_total():
+    records = [_make_record("P001", "T001", "not_eligible", "not_eligible", ["hard_negative"])]
+    m = build_metrics_by_tag(records)
+    assert m["hard_positive"]["total_records"] == 0
+    assert m["hard_positive"]["evaluated_records"] == 0

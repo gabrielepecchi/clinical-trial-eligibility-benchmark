@@ -294,8 +294,10 @@ PYTHONPATH=. python eval/tag_hard_cases.py
 
 Generated files:
 
-- `data/processed/hard_case_subsets.json` — full tagged records with summary counts
+- `data/processed/hard_case_subsets.json` — full tagged records with summary counts and per-tag metrics
 - `data/processed/hard_case_subsets.csv` — flat CSV for inspection
+- `data/processed/hard_case_metrics.json` — classification metrics (accuracy, macro F1, per-class scores) computed separately for each hard-case tag
+- `data/processed/hard_case_metrics.csv` — flat CSV version of per-tag metrics
 
 ## Data Sources
 
