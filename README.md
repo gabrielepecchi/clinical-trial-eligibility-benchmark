@@ -284,6 +284,19 @@ PYTHONPATH=. python eval/run_sample_benchmark.py --quick-demo --limit 5
 PYTHONPATH=. python eval/run_sample_benchmark.py --limit 10
 ```
 
+## Hard-case subset tagging
+
+Tags each benchmark record with one or more difficulty labels — `hard_negative`, `hard_positive`, `ambiguous_clinical_severity` — using deterministic text and metadata rules. No model inference required.
+
+```
+PYTHONPATH=. python eval/tag_hard_cases.py
+```
+
+Generated files:
+
+- `data/processed/hard_case_subsets.json` — full tagged records with summary counts
+- `data/processed/hard_case_subsets.csv` — flat CSV for inspection
+
 ## Data Sources
 
 - [ClinicalTrials.gov](https://clinicaltrials.gov) — public data only
