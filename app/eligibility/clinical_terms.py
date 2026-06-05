@@ -32,6 +32,19 @@ def _has_negated_dbs(text: str) -> bool:
     return bool(_DBS_NEGATION_PATTERN.search(text))
 
 
+_PACEMAKER_NEGATION_PATTERN = re.compile(
+    r"(?:\bno\b|\bdenies?\b|\bwithout\b|\bno\s+history\s+of|\bno\s+prior|\bno\s+evidence\s+of)"
+    r".{0,40}(?:pacemaker|cardiac\s+(?:device|implant|pacemaker|defibrillator)"
+    r"|\bicd\b|implanted\s+cardiac|implantable\s+cardioverter)",
+    re.IGNORECASE,
+)
+
+
+def _has_negated_pacemaker(text: str) -> bool:
+    """Return True when text explicitly negates the presence of a pacemaker or implanted cardiac device."""
+    return bool(_PACEMAKER_NEGATION_PATTERN.search(text))
+
+
 def _has_maob_inhibitor(text: str) -> bool:
     if _has_negated_maob(text):
         return False
@@ -986,9 +999,11 @@ _PROCEDURE_SYNONYMS: dict[str, list[str]] = {
 def _patient_has_procedure(patient_text: str, canonical: str) -> bool:
     """Return True if patient text contains any synonym for the given procedure/device.
 
-    Respects existing negation helpers where available (e.g. DBS).
+    Respects existing negation helpers where available (e.g. DBS, pacemaker).
     """
     if canonical == "dbs" and _has_negated_dbs(patient_text):
+        return False
+    if canonical == "pacemaker" and _has_negated_pacemaker(patient_text):
         return False
     patterns = _PROCEDURE_SYNONYMS.get(canonical, [])
     return any(re.search(p, patient_text, re.IGNORECASE) for p in patterns)

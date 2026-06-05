@@ -8,6 +8,7 @@ to the original implementations in rule_matcher.py.
 from app.eligibility.clinical_terms import (
     _any_match,
     _has_negated_dbs,
+    _has_negated_pacemaker,
     has_contradiction,
     _patient_has_procedure,
     _DBS_PATTERNS,
@@ -94,11 +95,23 @@ _PACEMAKER_PATTERNS = [
 ]
 
 _EXPLICIT_PACEMAKER_EXCLUSION_PATTERNS = [
+    # Legacy specific patterns (kept for precision)
     r"(?:metal.*implants?.*and.*)?cardiac\s+pacemaker",
     r"pacemaker.*(?:exclusion|excluded|contraindicated|not permitted)",
     r"(?:exclusion|excluded|contraindicated).*pacemaker",
     r"metal.*implants?.*pacemaker",
     r"pacemaker.*metal.*implants?",
+    # General: any of these in exclusion criteria text means the device type is excluded
+    r"\bpacemaker\b",
+    r"\bicd\b",
+    r"implantable\s+cardioverter",
+    r"implanted\s+cardiac\s+(?:device|pacemaker|defibrillator)",
+    r"cardiac\s+(?:defibrillator|implanted\s+device)",
+    r"implanted\s+(?:electrical|electronic)\s+(?:device|stimulator)",
+    r"mri.incompatible\s+(?:device|implant|hardware)",
+    r"(?:device|implant|hardware)\s+(?:not\s+)?mri.compatible",
+    r"active\s+implanted\s+(?:device|medical\s+device)",
+    r"implanted\s+(?:metal|metallic)\s+(?:device|hardware|object)",
 ]
 
 _MRI_CONDITIONAL_PATTERNS = [
@@ -301,13 +314,26 @@ def _check_dbs_required(patient: dict, trial: dict) -> tuple[str | None, str | N
 def _check_device_contraindication_stimulation(
     patient: dict, trial: dict
 ) -> tuple[str | None, str | None]:
-    """Block when patient has implanted cardiac device and trial involves transcranial/electrical stimulation."""
-    patient_text = _text(
-        patient.get("key_features", [])
-        + patient.get("medications", [])
-        + patient.get("exclusions", [])
-        + [patient.get("summary", "")]
-    )
+    """Block when patient has implanted cardiac device and trial involves transcranial/electrical stimulation
+    or explicitly excludes implanted cardiac devices."""
+    _pacemaker_parts: list[str] = []
+    for _f in ("key_features", "medications", "exclusions", "procedures",
+               "procedure_history", "surgical_history", "devices", "comorbidities"):
+        _v = patient.get(_f, [])
+        if isinstance(_v, list):
+            _pacemaker_parts.extend(str(x) for x in _v)
+        elif _v:
+            _pacemaker_parts.append(str(_v))
+    _summary = patient.get("summary", "")
+    if _summary:
+        _pacemaker_parts.append(str(_summary))
+    if patient.get("pacemaker") is True:
+        _pacemaker_parts.append("pacemaker implanted")
+    patient_text = " ".join(_pacemaker_parts).lower()
+
+    if _has_negated_pacemaker(patient_text):
+        return None, None
+
     if not _any_match(_PACEMAKER_PATTERNS, patient_text):
         return None, None
 
