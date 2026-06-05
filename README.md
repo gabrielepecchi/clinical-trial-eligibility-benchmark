@@ -211,6 +211,24 @@ The full pipeline produces the following files:
 | Error analysis CSV | `data/processed/error_analysis_llm_reviewed.csv` |
 | Sample benchmark predictions CSV | `data/processed/results_sample_predictions.csv` |
 
+## Local demo (offline, fast)
+
+Run the full local demo pipeline without a network connection (reuses an existing raw trials file):
+
+```
+PYTHONPATH=. python scripts/run_local_demo.py
+```
+
+Optional variants:
+
+```
+# Run the full sample benchmark instead of the quick subset
+PYTHONPATH=. python scripts/run_local_demo.py --full-sample
+
+# Download fresh trial data (requires network) and run the quick demo
+PYTHONPATH=. python scripts/run_local_demo.py --online --max-trials 20
+```
+
 ## Running the pipeline
 
 ```
