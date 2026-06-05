@@ -299,6 +299,16 @@ Generated files:
 - `data/processed/hard_case_metrics.json` — classification metrics (accuracy, macro F1, per-class scores) computed separately for each hard-case tag
 - `data/processed/hard_case_metrics.csv` — flat CSV version of per-tag metrics
 
+## HTML benchmark report
+
+Generates a self-contained local HTML report from all benchmark result files:
+
+```
+PYTHONPATH=. python eval/generate_benchmark_report.py
+```
+
+The report is written to `reports/benchmark_report.html` and includes global metrics, confusion matrix, error analysis, criterion-type summary, and — when the hard-case files are present — hard-case subset summaries and per-tag classification metrics.
+
 ## Data Sources
 
 - [ClinicalTrials.gov](https://clinicaltrials.gov) — public data only

@@ -6,6 +6,8 @@ from pathlib import Path
 RESULTS_FILE = Path("data/processed/results_llm_reviewed.json")
 ERROR_ANALYSIS_FILE = Path("data/processed/error_analysis_llm_reviewed.json")
 CRITERION_TYPE_FILE = Path("data/processed/criterion_type_summary.json")
+HARD_CASE_SUBSETS_FILE = Path("data/processed/hard_case_subsets.json")
+HARD_CASE_METRICS_FILE = Path("data/processed/hard_case_metrics.json")
 REPORT_FILE = Path("reports/benchmark_report.html")
 
 LABELS = ["eligible", "not_eligible", "unclear"]
@@ -338,6 +340,9 @@ def render_report_navigation() -> str:
         "Error Severity Summary",
         "Criterion Type Summary",
         "Criterion-Level Examples",
+        "Hard-Case Summary",
+        "Hard-Case Metrics",
+        "Hard-Case Examples",
         "Generated Files",
         "Error Analysis (from error_analysis_llm_reviewed.json)",
         "Errors by Type",
@@ -487,7 +492,88 @@ def render_error_examples(predictions: list[dict], n: int = 15) -> str:
     return section(f"Error Examples (first {n})", "\n".join(cards))
 
 
+_HARD_CASE_TAGS = ["hard_negative", "hard_positive", "ambiguous_clinical_severity"]
+
+
+def render_hard_case_summary(hard_case_payload: dict | None) -> str:
+    if not hard_case_payload:
+        return section("Hard-Case Summary", "<p>No hard-case subset data available.</p>")
+    summary = hard_case_payload.get("summary", {})
+    if not summary:
+        return section("Hard-Case Summary", "<p>No hard-case subset data available.</p>")
+    total = summary.get("total_records", 0)
+    tag_counts = summary.get("tag_counts", {})
+    rows: list[tuple[str, str]] = [("Total records", str(total))]
+    for tag in _HARD_CASE_TAGS:
+        rows.append((tag, str(tag_counts.get(tag, 0))))
+    body = kv_table(rows)
+    label_dist = summary.get("label_distribution_by_tag")
+    if label_dist:
+        headers = ["tag", "eligible", "not_eligible", "unclear"]
+        table_rows = [
+            [tag] + [str(label_dist.get(tag, {}).get(lbl, 0)) for lbl in ["eligible", "not_eligible", "unclear"]]
+            for tag in _HARD_CASE_TAGS
+        ]
+        body += "<h3>Label distribution by tag</h3>" + generic_table(headers, table_rows)
+    return section("Hard-Case Summary", body)
+
+
+def render_hard_case_metrics(hard_case_metrics: dict | None) -> str:
+    if not hard_case_metrics:
+        return section("Hard-Case Metrics", "<p>No hard-case metrics available.</p>")
+    headers = ["tag", "total", "evaluated", "accuracy", "macro_f1",
+               "eligible_f1", "not_eligible_f1", "unclear_f1",
+               "eligible_sup", "not_eligible_sup", "unclear_sup"]
+    rows = []
+    for tag in _HARD_CASE_TAGS:
+        m = hard_case_metrics.get(tag, {})
+        pc = m.get("per_class", {})
+        row = [
+            esc(tag),
+            str(m.get("total_records", 0)),
+            str(m.get("evaluated_records", 0)),
+            fmt(m.get("accuracy", 0.0)),
+            fmt(m.get("macro_f1", 0.0)),
+            fmt(pc.get("eligible", {}).get("f1", 0.0)),
+            fmt(pc.get("not_eligible", {}).get("f1", 0.0)),
+            fmt(pc.get("unclear", {}).get("f1", 0.0)),
+            str(pc.get("eligible", {}).get("support", 0)),
+            str(pc.get("not_eligible", {}).get("support", 0)),
+            str(pc.get("unclear", {}).get("support", 0)),
+        ]
+        rows.append(row)
+    return section("Hard-Case Metrics", generic_table(headers, rows))
+
+
+def render_hard_case_examples(hard_case_payload: dict | None, n: int = 10) -> str:
+    if not hard_case_payload:
+        return section("Hard-Case Examples", "<p>No hard-case examples available.</p>")
+    records = hard_case_payload.get("records", [])
+    tagged = [r for r in records if r.get("hard_case_tags")][:n]
+    if not tagged:
+        return section("Hard-Case Examples", "<p>No tagged hard-case records found.</p>")
+    cards = []
+    for i, r in enumerate(tagged, 1):
+        pid = esc(r.get("patient_id", ""))
+        tid = esc(r.get("trial_id", ""))
+        gold = esc(r.get("gold_label", ""))
+        pred = esc(r.get("predicted_label", ""))
+        tags = esc(", ".join(r.get("hard_case_tags", [])))
+        reasons = esc(" | ".join(r.get("tag_reasons", [])))
+        anchor = f"hard-case-{esc(r.get('patient_id', ''))}-{esc(r.get('trial_id', ''))}"
+        cards.append(
+            f"<details id='{anchor}'>"
+            f"<summary><strong>#{i}</strong> patient={pid} trial={tid} "
+            f"— gold=<span class='good'>{gold}</span> predicted=<span class='bad'>{pred}</span> "
+            f"[{tags}]</summary>"
+            f"<pre>Tags   : {tags}\nReasons: {reasons}</pre>"
+            f"</details>"
+        )
+    return section(f"Hard-Case Examples (top {n})", "\n".join(cards))
+
+
 _GENERATED_FILES = [
+    "reports/benchmark_report.html",
     "data/processed/results_llm_reviewed.json",
     "data/processed/results_llm_reviewed.csv",
     "data/processed/criterion_level_results.csv",
@@ -495,7 +581,10 @@ _GENERATED_FILES = [
     "data/processed/criterion_type_summary.csv",
     "data/processed/error_analysis_llm_reviewed.json",
     "data/processed/error_analysis_llm_reviewed.csv",
-    "reports/benchmark_report.html",
+    "data/processed/hard_case_subsets.json",
+    "data/processed/hard_case_subsets.csv",
+    "data/processed/hard_case_metrics.json",
+    "data/processed/hard_case_metrics.csv",
 ]
 
 
@@ -618,6 +707,16 @@ def main() -> None:
 
     error_analysis = load_json(ERROR_ANALYSIS_FILE)
     criterion_type_summary = load_json(CRITERION_TYPE_FILE)
+    hard_case_subsets = load_json(HARD_CASE_SUBSETS_FILE)
+    hard_case_metrics_raw = load_json(HARD_CASE_METRICS_FILE)
+
+    # Resolve hard-case metrics: prefer standalone file, fall back to embedded
+    if hard_case_metrics_raw is not None:
+        hard_case_metrics: dict | None = hard_case_metrics_raw
+    elif hard_case_subsets is not None:
+        hard_case_metrics = hard_case_subsets.get("metrics_by_tag")
+    else:
+        hard_case_metrics = None
 
     metadata = results.get("metadata", {})
     metrics = results.get("metrics", {})
@@ -645,6 +744,9 @@ def main() -> None:
     body += render_error_severity(error_severity)
     body += render_criterion_type_summary(criterion_type_summary or [])
     body += render_criterion_level_examples(predictions)
+    body += render_hard_case_summary(hard_case_subsets)
+    body += render_hard_case_metrics(hard_case_metrics)
+    body += render_hard_case_examples(hard_case_subsets)
     body += render_generated_files()
     body += render_error_analysis(error_analysis)
     body += render_errors_by_type(error_analysis if isinstance(error_analysis, list) else None, predictions)

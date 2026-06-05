@@ -15,6 +15,9 @@ from eval.generate_benchmark_report import (
     render_error_examples,
     render_errors_by_type,
     render_generated_files,
+    render_hard_case_examples,
+    render_hard_case_metrics,
+    render_hard_case_summary,
     render_key_takeaways,
     render_label_distribution,
     render_model_behavior_summary,
@@ -1064,6 +1067,8 @@ def test_main_generates_html_report(tmp_path, monkeypatch):
     monkeypatch.setattr(gbr, "RESULTS_FILE", results_file)
     monkeypatch.setattr(gbr, "ERROR_ANALYSIS_FILE", error_file)
     monkeypatch.setattr(gbr, "CRITERION_TYPE_FILE", criterion_file)
+    monkeypatch.setattr(gbr, "HARD_CASE_SUBSETS_FILE", tmp_path / "hard_case_subsets.json")
+    monkeypatch.setattr(gbr, "HARD_CASE_METRICS_FILE", tmp_path / "hard_case_metrics.json")
     monkeypatch.setattr(gbr, "REPORT_FILE", report_file)
 
     gbr.main()
@@ -1079,6 +1084,227 @@ def test_main_generates_html_report(tmp_path, monkeypatch):
     assert "Criterion-Level Examples" in html
     assert "href='#global-metrics'" in html or 'href="#global-metrics"' in html
     assert "generated locally" in html
+
+
+# ── render_hard_case_summary ──────────────────────────────────────────────────
+
+_HC_PAYLOAD = {
+    "summary": {
+        "total_records": 12,
+        "tag_counts": {"hard_negative": 5, "hard_positive": 4, "ambiguous_clinical_severity": 3},
+        "label_distribution_by_tag": {
+            "hard_negative": {"not_eligible": 5},
+            "hard_positive": {"eligible": 4},
+            "ambiguous_clinical_severity": {"unclear": 3},
+        },
+    },
+    "records": [
+        {"patient_id": "p1", "trial_id": "t1", "gold_label": "not_eligible",
+         "predicted_label": "eligible", "hard_case_tags": ["hard_negative"],
+         "tag_reasons": ["hard_negative: exclusion signals (2 match(es))"]},
+        {"patient_id": "p2", "trial_id": "t2", "gold_label": "eligible",
+         "predicted_label": "eligible", "hard_case_tags": ["hard_positive"],
+         "tag_reasons": ["hard_positive: complexity signals (3 match(es))"]},
+        {"patient_id": "p3", "trial_id": "t3", "gold_label": "unclear",
+         "predicted_label": "", "hard_case_tags": [],
+         "tag_reasons": []},
+    ],
+}
+
+
+def test_render_hard_case_summary_includes_tag_counts():
+    html = render_hard_case_summary(_HC_PAYLOAD)
+    assert "hard_negative" in html
+    assert ">5<" in html
+
+
+def test_render_hard_case_summary_includes_total():
+    html = render_hard_case_summary(_HC_PAYLOAD)
+    assert "Total records" in html
+    assert ">12<" in html
+
+
+def test_render_hard_case_summary_all_tags_present():
+    html = render_hard_case_summary(_HC_PAYLOAD)
+    for tag in ["hard_negative", "hard_positive", "ambiguous_clinical_severity"]:
+        assert tag in html
+
+
+def test_render_hard_case_summary_none_payload():
+    html = render_hard_case_summary(None)
+    assert "No hard-case subset data available" in html
+
+
+def test_render_hard_case_summary_empty_payload():
+    html = render_hard_case_summary({})
+    assert "No hard-case subset data available" in html
+
+
+def test_render_hard_case_summary_label_distribution():
+    html = render_hard_case_summary(_HC_PAYLOAD)
+    assert "label_distribution_by_tag" in html or "Label distribution by tag" in html
+
+
+# ── render_hard_case_metrics ──────────────────────────────────────────────────
+
+_HC_METRICS = {
+    "hard_negative": {
+        "total_records": 5,
+        "evaluated_records": 5,
+        "accuracy": 0.6,
+        "macro_f1": 0.55,
+        "per_class": {
+            "eligible": {"precision": 0.6, "recall": 0.5, "f1": 0.545, "support": 2},
+            "not_eligible": {"precision": 0.7, "recall": 0.8, "f1": 0.747, "support": 3},
+            "unclear": {"precision": 0.0, "recall": 0.0, "f1": 0.0, "support": 0},
+        },
+    },
+    "hard_positive": {
+        "total_records": 4,
+        "evaluated_records": 4,
+        "accuracy": 0.75,
+        "macro_f1": 0.70,
+        "per_class": {
+            "eligible": {"precision": 0.8, "recall": 0.9, "f1": 0.847, "support": 4},
+            "not_eligible": {"precision": 0.0, "recall": 0.0, "f1": 0.0, "support": 0},
+            "unclear": {"precision": 0.0, "recall": 0.0, "f1": 0.0, "support": 0},
+        },
+    },
+    "ambiguous_clinical_severity": {
+        "total_records": 3,
+        "evaluated_records": 0,
+        "accuracy": 0.0,
+        "macro_f1": 0.0,
+        "per_class": {
+            "eligible": {"precision": 0.0, "recall": 0.0, "f1": 0.0, "support": 0},
+            "not_eligible": {"precision": 0.0, "recall": 0.0, "f1": 0.0, "support": 0},
+            "unclear": {"precision": 0.0, "recall": 0.0, "f1": 0.0, "support": 0},
+        },
+    },
+}
+
+
+def test_render_hard_case_metrics_standalone_dict():
+    html = render_hard_case_metrics(_HC_METRICS)
+    assert "hard_negative" in html
+    assert "hard_positive" in html
+    assert "ambiguous_clinical_severity" in html
+
+
+def test_render_hard_case_metrics_accuracy_shown():
+    html = render_hard_case_metrics(_HC_METRICS)
+    assert "0.600" in html
+
+
+def test_render_hard_case_metrics_macro_f1_shown():
+    html = render_hard_case_metrics(_HC_METRICS)
+    assert "0.550" in html
+
+
+def test_render_hard_case_metrics_per_class_f1_shown():
+    html = render_hard_case_metrics(_HC_METRICS)
+    assert "0.545" in html or "0.847" in html
+
+
+def test_render_hard_case_metrics_none_input():
+    html = render_hard_case_metrics(None)
+    assert "No hard-case metrics available" in html
+
+
+def test_render_hard_case_metrics_empty_dict():
+    html = render_hard_case_metrics({})
+    assert "No hard-case metrics available" in html
+
+
+def test_render_hard_case_metrics_zero_evaluated_no_crash():
+    html = render_hard_case_metrics(_HC_METRICS)
+    assert "ambiguous_clinical_severity" in html
+    assert "0.000" in html
+
+
+# ── render_hard_case_examples ─────────────────────────────────────────────────
+
+def test_render_hard_case_examples_shows_tagged_records():
+    html = render_hard_case_examples(_HC_PAYLOAD)
+    assert "p1" in html
+    assert "p2" in html
+
+
+def test_render_hard_case_examples_skips_untagged():
+    html = render_hard_case_examples(_HC_PAYLOAD)
+    # p3 has no tags; it should not appear
+    assert "p3" not in html
+
+
+def test_render_hard_case_examples_escapes_html():
+    payload = {
+        "records": [
+            {"patient_id": "<evil>", "trial_id": "t1", "gold_label": "not_eligible",
+             "predicted_label": "eligible", "hard_case_tags": ["hard_negative"],
+             "tag_reasons": ["<script>xss</script>"]},
+        ]
+    }
+    html = render_hard_case_examples(payload)
+    assert "<evil>" not in html
+    assert "&lt;evil&gt;" in html
+    assert "<script>" not in html
+
+
+def test_render_hard_case_examples_none_payload():
+    html = render_hard_case_examples(None)
+    assert "No hard-case examples available" in html
+
+
+def test_render_hard_case_examples_empty_records():
+    html = render_hard_case_examples({"records": []})
+    assert "No tagged hard-case records found" in html
+
+
+def test_render_hard_case_examples_caps_at_n():
+    records = [
+        {"patient_id": f"p{i}", "trial_id": "t1", "gold_label": "not_eligible",
+         "predicted_label": "eligible", "hard_case_tags": ["hard_negative"], "tag_reasons": []}
+        for i in range(20)
+    ]
+    html = render_hard_case_examples({"records": records}, n=5)
+    assert "p0" in html
+    assert "p4" in html
+    assert "p5" not in html
+
+
+# ── render_report_navigation hard-case sections ───────────────────────────────
+
+@pytest.mark.parametrize("title,anchor", [
+    ("Hard-Case Summary", "hard-case-summary"),
+    ("Hard-Case Metrics", "hard-case-metrics"),
+    ("Hard-Case Examples", "hard-case-examples"),
+])
+def test_report_navigation_hard_case_sections(title, anchor):
+    html = render_report_navigation()
+    assert title in html
+    assert f"href='#{anchor}'" in html or f'href="#{anchor}"' in html
+
+
+# ── render_generated_files hard-case paths ────────────────────────────────────
+
+def test_generated_files_hard_case_subsets_json():
+    html = render_generated_files()
+    assert "data/processed/hard_case_subsets.json" in html
+
+
+def test_generated_files_hard_case_subsets_csv():
+    html = render_generated_files()
+    assert "data/processed/hard_case_subsets.csv" in html
+
+
+def test_generated_files_hard_case_metrics_json():
+    html = render_generated_files()
+    assert "data/processed/hard_case_metrics.json" in html
+
+
+def test_generated_files_hard_case_metrics_csv():
+    html = render_generated_files()
+    assert "data/processed/hard_case_metrics.csv" in html
 
 
 # ── aggregate_criterion_type_summary ──────────────────────────────────────────
