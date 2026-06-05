@@ -94,7 +94,27 @@ def _check_medication_stability(patient: dict, trial: dict) -> tuple[str | None,
         return None, None
 
     patient_med_text = _collect_patient_med_text(patient)
+
+    # If patient explicitly documents a stability duration that meets the requirement,
+    # do not mark unclear solely because medication details are otherwise missing/unclear.
+    def _patient_meets_stability_req() -> bool:
+        for criterion in inclusion_list:
+            req = _required_weeks_extended(criterion)
+            if req is None:
+                continue
+            patient_weeks = _patient_stable_weeks(patient_med_text)
+            changed_ago = _patient_changed_weeks_ago(patient_med_text)
+            if (
+                patient_weeks is not None
+                and patient_weeks >= req
+                and (changed_ago is None or changed_ago >= req)
+            ):
+                return True
+        return False
+
     if _any_match(_UNCLEAR_MED_PATTERNS, patient_med_text):
+        if _patient_meets_stability_req():
+            return None, None
         return (
             "stable medication regimen required but cannot be confirmed",
             "medication dose, frequency, or compliance unclear",
@@ -142,6 +162,19 @@ def _check_medication_details_unclear(
     patient_med_text = _collect_patient_med_text(patient)
 
     if _any_match(_PATIENT_UNCLEAR_MED_PATTERNS, patient_med_text):
+        # Suppress if patient explicitly documents a stability duration that meets the requirement.
+        for criterion in trial.get("inclusion_criteria", []):
+            req = _required_weeks_extended(criterion)
+            if req is None:
+                continue
+            patient_weeks = _patient_stable_weeks(patient_med_text)
+            changed_ago = _patient_changed_weeks_ago(patient_med_text)
+            if (
+                patient_weeks is not None
+                and patient_weeks >= req
+                and (changed_ago is None or changed_ago >= req)
+            ):
+                return None, None
         return (
             "trial requires specific medication details but patient medication data is unclear or missing",
             "medication details unclear or missing",
