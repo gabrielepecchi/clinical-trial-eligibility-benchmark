@@ -91,6 +91,9 @@ _PACEMAKER_PATTERNS = [
     r"cardiac.*device",
     r"implanted.*pacemaker",
     r"implantable.*cardioverter",
+    r"cardioverter.defibrillator",
+    r"cardiac.*defibrillator",
+    r"implanted.*defibrillator",
     r"\bicd\b",
 ]
 
@@ -359,6 +362,23 @@ def _check_device_contraindication_stimulation(
         return (
             "hard safety contraindication: implanted cardiac device is incompatible with transcranial/electrical stimulation",
             "implanted cardiac device present; stimulation trial",
+        )
+
+    # Also block for MRI/fMRI trials — pacemakers/ICDs are an MRI safety contraindication
+    _MRI_TRIAL_PATTERNS = [
+        r"\bfmri\b",
+        r"\bmri\b",
+        r"magnetic resonance imaging",
+        r"magnetic resonance",
+        r"neuroimaging.*(?:session|scan|protocol)",
+        r"mri.*(?:session|scan|protocol|acquisition)",
+        r"(?:session|scan|protocol|acquisition).*mri",
+        r"functional.*magnetic.*resonance",
+    ]
+    if _any_match(_MRI_TRIAL_PATTERNS, all_trial_fields):
+        return (
+            "hard safety contraindication: implanted cardiac device is incompatible with MRI/fMRI",
+            "implanted cardiac device present; MRI trial",
         )
 
     # Also block if exclusion criteria explicitly list pacemaker as an exclusion

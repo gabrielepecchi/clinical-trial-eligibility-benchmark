@@ -24,8 +24,15 @@ _DBS_NEGATION_PATTERN = re.compile(
 )
 
 _MAOB_CRITERION_PATTERN = re.compile(r"mao.?b inhibitor", re.IGNORECASE)
-_MAOB_DRUGS = [r"\brasagiline\b", r"\bselegiline\b", r"\bsafinamide\b"]
-_MAOB_NEGATION_PATTERN = re.compile(r"\bno\b.{0,40}mao.?b", re.IGNORECASE)
+_MAOB_DRUGS = [
+    r"\brasagiline\b", r"\bazilect\b",
+    r"\bselegiline\b", r"\bdeprenyl\b", r"\beldepryl\b", r"\bzelapar\b",
+    r"\bsafinamide\b", r"\bxadago\b",
+]
+_MAOB_NEGATION_PATTERN = re.compile(
+    r"\bno\b.{0,40}(?:mao.?b|rasagiline|azilect|selegiline|deprenyl|eldepryl|safinamide|xadago)",
+    re.IGNORECASE,
+)
 
 
 def _has_negated_dbs(text: str) -> bool:
@@ -33,9 +40,10 @@ def _has_negated_dbs(text: str) -> bool:
 
 
 _PACEMAKER_NEGATION_PATTERN = re.compile(
-    r"(?:\bno\b|\bdenies?\b|\bwithout\b|\bno\s+history\s+of|\bno\s+prior|\bno\s+evidence\s+of)"
+    r"(?:\bno\b|\bdenies?\b|\bwithout\b|\bno\s+history\s+of|\bno\s+prior|\bno\s+evidence\s+of|\bnot\b|\babsent\b)"
     r".{0,40}(?:pacemaker|cardiac\s+(?:device|implant|pacemaker|defibrillator)"
-    r"|\bicd\b|implanted\s+cardiac|implantable\s+cardioverter)",
+    r"|\bicd\b|implanted\s+cardiac|implantable\s+cardioverter"
+    r"|cardioverter.defibrillator|cardiac.*implant|implanted.*defibrillator)",
     re.IGNORECASE,
 )
 
@@ -52,6 +60,11 @@ def _has_maob_inhibitor(text: str) -> bool:
 
 
 def _has_negated_maob(text: str) -> bool:
+    # Use the broader negation pattern from _NEGATION_PATTERNS which handles
+    # "no", "denies", "not", "without", "no history of", "no prior", etc.
+    broad_pat = _NEGATION_PATTERNS.get("maob_inhibitor")
+    if broad_pat is not None and broad_pat.search(text):
+        return True
     return bool(_MAOB_NEGATION_PATTERN.search(text))
 
 _COGNITIVE_EXCLUSION_PATTERNS = [
@@ -72,6 +85,17 @@ _UNCLEAR_MED_PATTERNS = [
     r"uncertain.*levodopa",
     r"uncertain.*compliance",
     r"dose and frequency unclear",
+    r"medication.*history.*unclear",
+    r"unclear.*medication.*history",
+    r"medication.*stability.*unclear",
+    r"unclear.*medication.*stability",
+    r"medication.*stability.*not.*documented",
+    r"stability.*not.*documented",
+    r"duration.*not.*documented",
+    r"medication.*duration.*unclear",
+    r"unclear.*medication.*duration",
+    r"history.*unclear",
+    r"unclear.*history",
 ]
 
 _PARKINSON_PATTERNS = [
@@ -152,6 +176,17 @@ _PATIENT_UNCLEAR_MED_PATTERNS = [
     r"no.*medication.*record",
     r"medication.*details.*unavailable",
     r"incomplete.*medication",
+    r"medication.*history.*unclear",
+    r"unclear.*medication.*history",
+    r"medication.*stability.*unclear",
+    r"unclear.*medication.*stability",
+    r"medication.*stability.*not.*documented",
+    r"stability.*not.*documented",
+    r"duration.*not.*documented",
+    r"medication.*duration.*unclear",
+    r"unclear.*medication.*duration",
+    r"history.*unclear",
+    r"unclear.*history",
 ]
 
 _TRIAL_STAGE_SEVERITY_PATTERNS = [
@@ -975,7 +1010,12 @@ _PROCEDURE_SYNONYM_GROUPS: list[tuple[str, list[str]]] = [
             r"implanted.*pacemaker",
             r"\bicd\b",
             r"implantable cardioverter",
+            r"implantable.*cardioverter.defibrillator",
+            r"cardioverter.defibrillator",
             r"cardiac.*implant",
+            r"implanted.*cardiac",
+            r"cardiac.*defibrillator",
+            r"implanted.*defibrillator",
         ],
     ),
     (
@@ -1032,7 +1072,7 @@ _NEGATION_PATTERNS: dict[str, re.Pattern] = {
         re.IGNORECASE,
     ),
     "maob_inhibitor": re.compile(
-        rf"{_NEGATION_PREFIX}{_NO_CLAUSE_BREAK}{{0,40}}(?:mao.?b|rasagiline|selegiline|safinamide|azilect|deprenyl)",
+        rf"{_NEGATION_PREFIX}{_NO_CLAUSE_BREAK}{{0,40}}(?:mao.?b|rasagiline|azilect|selegiline|deprenyl|eldepryl|zelapar|safinamide|xadago)",
         re.IGNORECASE,
     ),
     "cognitive_impairment": re.compile(
@@ -1057,7 +1097,7 @@ _NEGATION_PATTERNS: dict[str, re.Pattern] = {
 # Per-topic positive (affirmative) patterns — presence of topic
 _POSITIVE_PATTERNS: dict[str, list[str]] = {
     "dbs": [r"\bdbs\b", r"deep\s+brain\s+stimulation", r"subthalamic\s+(?:nucleus\s+)?stimulation", r"\bstn\b"],
-    "maob_inhibitor": [r"\brasagiline\b", r"\bselegiline\b", r"\bsafinamide\b", r"mao.?b\s+inhibitor"],
+    "maob_inhibitor": [r"\brasagiline\b", r"\bazilect\b", r"\bselegiline\b", r"\bdeprenyl\b", r"\beldepryl\b", r"\bzelapar\b", r"\bsafinamide\b", r"\bxadago\b", r"mao.?b\s+inhibitor"],
     "cognitive_impairment": [r"cognitive\s+impairment", r"\bdementia\b", r"\bmci\b", r"memory\s+impairment", r"cognitive\s+decline"],
     "active_cancer": [r"active\s+cancer", r"active\s+malignancy", r"current\s+chemotherapy", r"currently\s+receiving\s+chemotherapy", r"ongoing\s+chemotherapy", r"active\s+tumor", r"receiving\s+chemotherapy"],
     "investigational_drug": [r"investigational\s+drug", r"experimental\s+drug", r"investigational\s+agent"],

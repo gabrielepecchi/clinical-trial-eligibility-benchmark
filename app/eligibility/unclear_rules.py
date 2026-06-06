@@ -307,12 +307,36 @@ def _check_missing_specific_inclusion_details(
     # 4. Medication-specific requirement
     # Suppress for broad PD cohort / observational studies where med history is background info
     if _any_match(_MED_SPECIFIC_TRIAL_PATTERNS, inclusion_text):
-        patient_meds_empty = not patient.get("medications")
-        if patient_meds_empty or not _any_match(_MED_DOCUMENTED_PATIENT_PATTERNS, patient_all):
+        # Include current_medications alongside medications for completeness
+        _med_list = list(patient.get("medications") or []) + list(patient.get("current_medications") or [])
+        patient_meds_empty = not _med_list
+        _patient_all_with_meds = patient_all + " " + _text(_med_list)
+
+        if patient_meds_empty or not _any_match(_MED_DOCUMENTED_PATIENT_PATTERNS, _patient_all_with_meds):
             if not _any_match(_BROAD_PD_TRIAL_SUPPRESS, trial_full):
-                uncertain.append(
-                    "trial requires specific medication details not documented in patient profile"
-                )
+                # When the trial requires stable medication/levodopa, suppress this generic signal
+                # if the patient has explicit stability documentation (structured or textual).
+                # The detailed duration adequacy check is handled by medication_rules.
+                _STABLE_MED_TRIAL_PATS = [
+                    r"stable.*levodopa", r"stable.*medication",
+                    r"stable.*regimen", r"stable.*dose",
+                ]
+                _STABLE_MED_PATIENT_PATS = [
+                    r"stable.*(?:levodopa|medication|regimen|dose).*(?:for|since|\d)",
+                    r"(?:levodopa|medication|regimen|dose).*stable.*(?:for|since|\d)",
+                    r"unchanged.*(?:medication|dose|regimen)",
+                    r"medication stable for",
+                ]
+                _has_stable_trial = _any_match(_STABLE_MED_TRIAL_PATS, inclusion_text)
+                _stable_weeks_val = patient.get("medication_stable_weeks")
+                _has_structured_stability = _stable_weeks_val is not None
+                _has_textual_stability = _any_match(_STABLE_MED_PATIENT_PATS, _patient_all_with_meds)
+                if _has_stable_trial and (_has_structured_stability or _has_textual_stability):
+                    pass  # stability documented — detailed check handled by medication_rules
+                else:
+                    uncertain.append(
+                        "trial requires specific medication details not documented in patient profile"
+                    )
 
     # 5. Language/scale-validation requirement
     if _any_match(_LANG_SCALE_TRIAL_PATTERNS, trial_full):

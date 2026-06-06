@@ -52,14 +52,6 @@ def test_no_dbs_history_does_not_block_eligibility():
     )
 
 
-@pytest.mark.xfail(
-    reason=(
-        "Matcher does not yet detect prior DBS history from the patient record "
-        "and apply it against a DBS exclusion criterion in the trial. "
-        "Implement DBS history detection before removing xfail."
-    ),
-    strict=False,
-)
 def test_prior_dbs_blocks_eligibility_for_drug_trial():
     """Patient with prior DBS should be blocked or flagged for a drug trial that excludes DBS."""
     patient = _patient(dbs_history=True)
@@ -77,14 +69,6 @@ def test_prior_dbs_blocks_eligibility_for_drug_trial():
 # MAO-B inhibitor exclusion
 # ---------------------------------------------------------------------------
 
-@pytest.mark.xfail(
-    reason=(
-        "Matcher does not yet cross-reference patient medication list against "
-        "MAO-B inhibitor exclusion criteria in the trial text. "
-        "Implement medication exclusion detection before removing xfail."
-    ),
-    strict=False,
-)
 def test_maob_inhibitor_triggers_blocking_for_excluding_trial():
     """Current MAO-B inhibitor use should produce not_eligible when the trial excludes it."""
     patient = _patient(medications=["levodopa/carbidopa", "rasagiline"])
@@ -127,14 +111,6 @@ def test_age_at_lower_boundary_is_accepted():
     )
 
 
-@pytest.mark.xfail(
-    reason=(
-        "Matcher does not yet parse age range criteria from free-text eligibility "
-        "and enforce a lower boundary block when patient age is below it. "
-        "Implement age boundary enforcement before removing xfail."
-    ),
-    strict=False,
-)
 def test_age_below_lower_boundary_is_not_eligible():
     """Patient aged 39 should be not_eligible when criteria require age 40 to 80."""
     patient = _patient(age=39)
@@ -147,14 +123,6 @@ def test_age_below_lower_boundary_is_not_eligible():
     )
 
 
-@pytest.mark.xfail(
-    reason=(
-        "Matcher does not yet parse age range criteria from free-text eligibility "
-        "and enforce an upper boundary block when patient age exceeds it. "
-        "Implement age boundary enforcement before removing xfail."
-    ),
-    strict=False,
-)
 def test_age_above_upper_boundary_is_not_eligible():
     """Patient aged 81 should be not_eligible when criteria require age 40 to 80."""
     patient = _patient(age=81)
@@ -171,14 +139,6 @@ def test_age_above_upper_boundary_is_not_eligible():
 # Cognitive score / MoCA
 # ---------------------------------------------------------------------------
 
-@pytest.mark.xfail(
-    reason=(
-        "Matcher does not yet flag missing MoCA score as unclear "
-        "when the trial explicitly requires a minimum MoCA. "
-        "Implement missing-cognitive-score uncertainty detection before removing xfail."
-    ),
-    strict=False,
-)
 def test_missing_moca_score_returns_unclear_for_moca_required_trial():
     """Missing MoCA score should produce unclear when the trial requires MoCA >= 24."""
     patient = _patient()  # no moca_score field
@@ -191,15 +151,6 @@ def test_missing_moca_score_returns_unclear_for_moca_required_trial():
     )
 
 
-@pytest.mark.xfail(
-    reason=(
-        "Matcher does not yet detect cognitive impairment from patient fields "
-        "(cognitive_status, moca_score) and apply it against a cognitive exclusion "
-        "criterion in free-text trial eligibility. "
-        "Implement cognitive status detection before removing xfail."
-    ),
-    strict=False,
-)
 def test_documented_cognitive_impairment_blocks_cognitive_trial():
     """Patient with documented cognitive impairment should be blocked from a cognitively demanding trial."""
     patient = _patient(cognitive_status="dementia", moca_score=14)

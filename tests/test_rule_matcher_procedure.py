@@ -2,7 +2,7 @@
 
 from app.eligibility.rule_matcher import match_patient_to_trial, match_patient_to_trial_criteria
 from app.models import CriterionDecision
-from tests.helpers import make_patient, excl_trial
+from tests.helpers import make_patient, excl_trial, incl_trial
 
 
 def test_dbs_synonym_history_predicts_not_eligible():
@@ -110,3 +110,53 @@ def test_positive_dbs_patient_procedure_helper_returns_true():
     assert _patient_has_procedure("STN DBS implanted", "dbs")
     assert _patient_has_procedure("deep brain stimulation surgery", "dbs")
 
+
+# ---------------------------------------------------------------------------
+# DBS-specific trial context: patient with DBS should not be blocked
+# ---------------------------------------------------------------------------
+
+def test_dbs_patient_not_blocked_in_dbs_outcomes_study():
+    """A patient with DBS history should remain eligible for a trial studying DBS outcomes.
+
+    The trial requires prior DBS implantation as an inclusion criterion and has no
+    exclusion criteria that mention DBS. A patient with DBS history satisfies the
+    inclusion and should not be blocked.
+    """
+    patient = make_patient(key_features=["history of DBS surgery"])
+    trial = incl_trial("Prior DBS implantation")
+    result = match_patient_to_trial(patient, trial)
+    assert result["prediction"] != "not_eligible"
+
+
+def test_dbs_patient_eligible_for_dbs_required_trial():
+    """A patient with DBS history should be eligible (or potentially eligible) for a
+    trial that explicitly requires prior DBS implantation as an inclusion criterion.
+    """
+    patient = make_patient(key_features=["DBS implanted 3 years ago"])
+    trial = incl_trial("Prior DBS implantation required")
+    result = match_patient_to_trial(patient, trial)
+    assert result["prediction"] in {"eligible", "unclear"}
+
+
+def test_dbs_patient_inclusion_criterion_met_for_dbs_required_trial():
+    """At criterion level, a patient with DBS should satisfy a 'prior DBS' inclusion criterion."""
+    patient = make_patient(key_features=["deep brain stimulation implanted"])
+    results = match_patient_to_trial_criteria(patient, incl_trial("Prior DBS implantation"))
+    assert results[0].decision == CriterionDecision.met
+
+
+def test_no_dbs_patient_not_eligible_for_dbs_required_trial():
+    """A patient without DBS history should not be marked eligible for a trial
+    that requires prior DBS implantation; result should be not_eligible or unclear.
+    """
+    patient = make_patient(key_features=["no history of DBS", "medication-managed Parkinson's"])
+    trial = incl_trial("Prior DBS implantation required")
+    result = match_patient_to_trial(patient, trial)
+    assert result["prediction"] in {"not_eligible", "unclear"}
+
+
+def test_no_dbs_patient_inclusion_criterion_not_met_for_dbs_required_trial():
+    """At criterion level, a patient without DBS should not satisfy a 'prior DBS' inclusion."""
+    patient = make_patient(key_features=["no history of DBS"])
+    results = match_patient_to_trial_criteria(patient, incl_trial("Prior DBS implantation"))
+    assert results[0].decision == CriterionDecision.not_met

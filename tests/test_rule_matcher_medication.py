@@ -176,6 +176,55 @@ def test_co_careldopa_synonym_recognized():
     assert _patient_has_med_class("co-careldopa 25/100 mg three times daily", "levodopa")
 
 
-def test_unknown_med_class_returns_false():
+def test_maob_eldepryl_brand_predicts_not_eligible():
+    """Eldepryl is a brand name for selegiline (MAO-B inhibitor)."""
+    patient = make_patient(medications=["Eldepryl 5 mg daily"])
+    result = match_patient_to_trial(patient, excl_trial("Current MAO-B inhibitor use"))
+    assert result["prediction"] == "not_eligible"
+
+
+def test_maob_zelapar_brand_predicts_not_eligible():
+    """Zelapar is a brand name for selegiline (MAO-B inhibitor)."""
+    patient = make_patient(medications=["Zelapar 1.25 mg daily"])
+    result = match_patient_to_trial(patient, excl_trial("Current MAO-B inhibitor use"))
+    assert result["prediction"] == "not_eligible"
+
+
+def test_maob_not_taking_rasagiline_criterion_level_not_met():
+    """Explicit 'not taking rasagiline' negation should yield CriterionDecision.not_met."""
+    patient = make_patient(medications=["not taking rasagiline"])
+    results = match_patient_to_trial_criteria(patient, excl_trial("Current MAO-B inhibitor use"))
+    assert results[0].decision == CriterionDecision.not_met
+
+
+def test_maob_denies_selegiline_criterion_level_not_met():
+    """Explicit 'denies selegiline' negation should yield CriterionDecision.not_met."""
+    patient = make_patient(medications=["denies selegiline use"])
+    results = match_patient_to_trial_criteria(patient, excl_trial("Current MAO-B inhibitor use"))
+    assert results[0].decision == CriterionDecision.not_met
+
+
+def test_maob_without_safinamide_criterion_level_not_met():
+    """Explicit 'without safinamide' negation should yield CriterionDecision.not_met."""
+    patient = make_patient(medications=["without safinamide"])
+    results = match_patient_to_trial_criteria(patient, excl_trial("Current MAO-B inhibitor use"))
+    assert results[0].decision == CriterionDecision.not_met
+
+
+def test_maob_not_taking_rasagiline_predicts_not_not_eligible():
+    """'not taking rasagiline' should not produce not_eligible for MAO-B excluding trial."""
+    patient = make_patient(medications=["not taking rasagiline"])
+    result = match_patient_to_trial(patient, excl_trial("Current MAO-B inhibitor use"))
+    assert result["prediction"] != "not_eligible"
+
+
+def test_maob_denies_selegiline_predicts_not_not_eligible():
+    """'denies selegiline' should not produce not_eligible for MAO-B excluding trial."""
+    patient = make_patient(medications=["denies selegiline use"])
+    result = match_patient_to_trial(patient, excl_trial("Current MAO-B inhibitor use"))
+    assert result["prediction"] != "not_eligible"
+
+
+
     from app.eligibility.clinical_terms import _patient_has_med_class
     assert not _patient_has_med_class("metformin 500 mg daily", "maob_inhibitor")

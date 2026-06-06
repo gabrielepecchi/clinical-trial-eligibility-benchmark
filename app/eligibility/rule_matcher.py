@@ -255,6 +255,172 @@ def _age_miss_by_one(patient: dict, trial: dict) -> bool:
 
 
 
+_DBS_EXCLUSION_SIGNAL_PATTERNS = [
+    r"\bprior\b.{0,30}(?:dbs|deep brain stimulation)",
+    r"\bprevious\b.{0,30}(?:dbs|deep brain stimulation)",
+    r"\bhistory\s+of\b.{0,30}(?:dbs|deep brain stimulation)",
+    r"(?:dbs|deep brain stimulation).{0,30}\bimplant",
+    r"(?:dbs|deep brain stimulation).{0,30}\bsurgery",
+    r"(?:dbs|deep brain stimulation).{0,30}\bprocedure",
+    r"exclude.{0,40}(?:dbs|deep brain stimulation)",
+    r"(?:dbs|deep brain stimulation).{0,40}exclu",
+    r"no\s+(?:prior|previous|history\s+of).{0,30}(?:dbs|deep brain stimulation)",
+]
+
+_DBS_STUDY_SIGNAL_PATTERNS = [
+    r"dbs.{0,30}(?:effects?|outcome|programming|parameter|setting|stimulation\s+parameter)",
+    r"(?:effects?|outcome|programming|parameter).{0,30}dbs",
+    r"deep brain stimulation.{0,30}(?:effects?|outcome|programming|parameter)",
+    r"(?:effects?|outcome|programming|parameter).{0,30}deep brain stimulation",
+    r"dbs.{0,30}(?:implanted|recipient|patient|subject)",
+    r"(?:implanted|recipient).{0,30}dbs",
+    r"currently\s+(?:undergoing|receiving).{0,30}dbs",
+    r"dbs\s+(?:on|off)\b",
+    r"stimulation\s+(?:on|off)\b",
+    r"dbs\s+(?:cohort|arm|group|population)",
+    r"with\s+(?:existing|active|current)\s+dbs",
+]
+
+_DBS_REQUIRED_SIGNAL_PATTERNS = [
+    r"(?:must|should|required?|eligible|inclusion).{0,40}(?:dbs|deep brain stimulation)",
+    r"(?:dbs|deep brain stimulation).{0,40}(?:required|implanted|in\s+situ|present|implantation)",
+    r"existing\s+dbs",
+    r"with\s+dbs\b",
+    r"prior\s+dbs\s+(?:required|implant)",
+    r"\bprior\b.{0,30}(?:dbs|deep brain stimulation)",
+    r"\bprevious\b.{0,30}(?:dbs|deep brain stimulation)\b",
+    r"dbs\s+implantation",
+    r"deep brain stimulation\s+implantation",
+]
+
+
+def _trial_excludes_dbs(trial: dict) -> bool:
+    """Return True when the trial's exclusion criteria explicitly exclude prior DBS."""
+    excl_list = trial.get("exclusion_criteria", [])
+    for criterion in excl_list:
+        c = criterion.lower()
+        if _any_match(_DBS_EXCLUSION_SIGNAL_PATTERNS, c):
+            # Check it's not actually a DBS-study or DBS-required trial
+            if not _any_match(_DBS_STUDY_SIGNAL_PATTERNS, c):
+                return True
+    return False
+
+
+def _trial_is_dbs_study(trial: dict) -> bool:
+    """Return True if the trial is specifically studying DBS effects/outcomes/programming."""
+    all_criteria = (
+        trial.get("inclusion_criteria", [])
+        + trial.get("exclusion_criteria", [])
+    )
+    trial_text = " ".join(all_criteria).lower()
+    return _any_match(_DBS_STUDY_SIGNAL_PATTERNS, trial_text)
+
+
+def _inclusion_section_only(text: str) -> str:
+    """Return only the text before any Exclusion section marker.
+
+    When a free-text eligibility_criteria string is copied verbatim into
+    inclusion_criteria, any phrase after "exclusion:" / "exclusions:" must
+    not be treated as an inclusion requirement.
+    """
+    # Split on the first occurrence of an exclusion header
+    m = re.search(r"\bexclusion(?:s)?\s*:", text, re.IGNORECASE)
+    if m:
+        return text[: m.start()]
+    return text
+
+
+def _trial_requires_dbs(trial: dict) -> bool:
+    """Return True when DBS is a genuine inclusion requirement.
+
+    Critically, if the inclusion_criteria list contains a mixed free-text string
+    that has an Exclusion section (e.g. from eligibility_criteria normalisation),
+    only the text *before* that section is considered.
+    """
+    incl_list = trial.get("inclusion_criteria", [])
+    for criterion in incl_list:
+        c = _inclusion_section_only(criterion.lower())
+        if _any_match(_DBS_REQUIRED_SIGNAL_PATTERNS, c):
+            return True
+    return False
+
+
+def _patient_has_dbs_history(patient: dict) -> bool:
+    """Return True if the patient has documented prior DBS."""
+    if patient.get("dbs_history") is True:
+        return True
+    parts: list[str] = []
+    for field in ("key_features", "medications", "exclusions", "procedures",
+                  "procedure_history", "surgical_history"):
+        v = patient.get(field, [])
+        if isinstance(v, list):
+            parts.extend(str(x) for x in v)
+        elif v:
+            parts.append(str(v))
+    summary = patient.get("summary", "")
+    if summary:
+        parts.append(str(summary))
+    patient_text = " ".join(parts).lower()
+    if _has_negated_dbs(patient_text):
+        return False
+    if _patient_has_procedure(patient_text, "dbs"):
+        return True
+    return False
+
+
+def _check_dbs_exclusion_from_history(
+    patient: dict, trial: dict
+) -> tuple[str | None, str | None]:
+    """Block patient if they have prior DBS and the trial excludes prior DBS.
+
+    Returns (blocking_criterion, matched_fact) or (None, None).
+    Does NOT fire for DBS-study or DBS-required trials.
+    """
+    if _trial_is_dbs_study(trial) or _trial_requires_dbs(trial):
+        return None, None
+    if not _trial_excludes_dbs(trial):
+        return None, None
+    if _patient_has_dbs_history(patient):
+        return (
+            "prior deep brain stimulation — excluded by trial criteria",
+            "patient has prior DBS",
+        )
+    return None, None
+
+
+def _check_dbs_required_inclusion(
+    patient: dict, trial: dict
+) -> tuple[str | None, str | None]:
+    """Block when trial requires prior DBS implantation but patient explicitly has no DBS history.
+
+    Returns (blocking_criterion, matched_fact) or (None, None).
+    """
+    if not _trial_requires_dbs(trial):
+        return None, None
+    parts: list[str] = []
+    for field in ("key_features", "medications", "exclusions", "procedures",
+                  "procedure_history", "surgical_history"):
+        v = patient.get(field, [])
+        if isinstance(v, list):
+            parts.extend(str(x) for x in v)
+        elif v:
+            parts.append(str(v))
+    summary = patient.get("summary", "")
+    if summary:
+        parts.append(str(summary))
+    if patient.get("dbs_history") is True:
+        parts.append("dbs history of dbs")
+    patient_text = " ".join(parts).lower()
+    if patient.get("dbs_history") is True or _patient_has_procedure(patient_text, "dbs"):
+        return None, None
+    if _has_negated_dbs(patient_text) or patient.get("dbs_history") is False:
+        return (
+            "trial requires prior DBS implantation; patient has no DBS history",
+            "no DBS history documented",
+        )
+    return None, None
+
+
 def _check_hy_stage(patient: dict, trial: dict) -> tuple[str | None, str | None]:
     """Return (blocking_criterion, matched_fact) if H&Y stage is out of range."""
     inclusion_list = trial.get("inclusion_criteria", [])
@@ -311,7 +477,7 @@ _NEGATION_PATTERNS = [
 
 _FIELD_NEGATION_MARKERS: dict[str, list[str]] = {
     "dbs": [r"no\s+(?:history\s+of\s+)?dbs", r"no\s+deep\s+brain", r"dbs.*(?:absent|not\s+present|not\s+implanted)"],
-    "maob_inhibitor": [r"no\s+mao.b", r"not\s+taking.*(?:rasagiline|selegiline|safinamide)", r"mao.b.*(?:not\s+used|not\s+taken|absent)"],
+    "maob_inhibitor": [r"no\s+mao.b", r"not\s+taking.*(?:rasagiline|azilect|selegiline|deprenyl|eldepryl|safinamide|xadago)", r"mao.b.*(?:not\s+used|not\s+taken|absent)", r"no\s+(?:rasagiline|azilect|selegiline|deprenyl|eldepryl|safinamide|xadago)"],
     "cognitive_impairment": [r"no\s+cognitive\s+impairment", r"cognition\s+(?:intact|normal)", r"no\s+dementia"],
     "active_cancer": [r"no\s+(?:active\s+)?cancer", r"no\s+malignancy", r"cancer.*(?:absent|none|not\s+present)"],
     "investigational_drug": [r"no\s+investigational\s+drug", r"not\s+enrolled.*(?:trial|study)"],
@@ -320,7 +486,7 @@ _FIELD_NEGATION_MARKERS: dict[str, list[str]] = {
 
 _FIELD_PRESENT_MARKERS: dict[str, list[str]] = {
     "dbs": [r"\bdbs\b", r"deep\s+brain\s+stimulation", r"dbs\s+implant"],
-    "maob_inhibitor": [r"\brasagiline\b", r"\bselegiline\b", r"\bsafinamide\b", r"mao.b\s+inhibitor"],
+    "maob_inhibitor": [r"\brasagiline\b", r"\bazilect\b", r"\bselegiline\b", r"\bdeprenyl\b", r"\beldepryl\b", r"\bzelapar\b", r"\bsafinamide\b", r"\bxadago\b", r"mao.b\s+inhibitor"],
     "cognitive_impairment": [r"\bmmse\b", r"\bmoca\b", r"cognitive\s+impairment", r"\bdementia\b"],
     "active_cancer": [r"active\s+cancer", r"current\s+chemotherapy", r"ongoing.*malignancy"],
     "medication_details": [r"levodopa", r"dopamine\s+agonist", r"carbidopa"],
@@ -534,6 +700,20 @@ def match_patient_to_trial(patient: dict, trial: dict) -> dict:
         else:
             blocking_criteria.append(dbs_block)
             matched_facts.append(dbs_fact)
+
+    # --- DBS history exclusion (dbs_history field + explicit exclusion in trial) ---
+    dbs_hist_block, dbs_hist_fact = _check_dbs_exclusion_from_history(patient, trial)
+    if dbs_hist_block and dbs_hist_block not in blocking_criteria:
+        blocking_criteria.append(dbs_hist_block)
+        if dbs_hist_fact:
+            matched_facts.append(dbs_hist_fact)
+
+    # --- DBS required by inclusion: block if patient explicitly has no DBS ---
+    dbs_req_incl_block, dbs_req_incl_fact = _check_dbs_required_inclusion(patient, trial)
+    if dbs_req_incl_block and dbs_req_incl_block not in blocking_criteria:
+        blocking_criteria.append(dbs_req_incl_block)
+        if dbs_req_incl_fact:
+            matched_facts.append(dbs_req_incl_fact)
 
     # --- DBS + MRI/fMRI compatibility ---
     dbs_mri_block, dbs_mri_fact = _check_dbs_mri_compatibility(patient, trial)
@@ -1011,6 +1191,37 @@ def _evaluate_inclusion_criterion(
         if _HY_VALUE_PATTERN.search(patient_text):
             return CriterionDecision.met, "H&Y stage within range"
         return CriterionDecision.unknown, "H&Y stage not available"
+
+    # DBS required (inclusion)
+    _DBS_INCL_DETECT = [
+        r"\bprior\b.{0,30}(?:dbs|deep brain stimulation)",
+        r"\bprevious\b.{0,30}(?:dbs|deep brain stimulation)",
+        r"(?:must|should|required?|eligible|inclusion).{0,40}(?:dbs|deep brain stimulation)",
+        r"(?:dbs|deep brain stimulation).{0,40}(?:required|implanted|in\s+situ|present|implantation)",
+        r"existing\s+dbs",
+        r"dbs\s+implantation",
+        r"deep brain stimulation\s+implantation",
+    ]
+    if _any_match(_DBS_INCL_DETECT, c_lower):
+        _parts: list[str] = []
+        for _f in ("key_features", "medications", "exclusions", "procedures",
+                   "procedure_history", "surgical_history"):
+            _v = patient.get(_f, [])
+            if isinstance(_v, list):
+                _parts.extend(str(x) for x in _v)
+            elif _v:
+                _parts.append(str(_v))
+        _s = patient.get("summary", "")
+        if _s:
+            _parts.append(str(_s))
+        if patient.get("dbs_history") is True:
+            _parts.append("dbs history of dbs")
+        _pt = " ".join(_parts).lower()
+        if patient.get("dbs_history") is True or _patient_has_procedure(_pt, "dbs"):
+            return CriterionDecision.met, "DBS history confirmed — inclusion criterion satisfied"
+        if _has_negated_dbs(_pt) or patient.get("dbs_history") is False:
+            return CriterionDecision.not_met, "no DBS history — inclusion criterion not satisfied"
+        return CriterionDecision.unknown, "DBS history not documented"
 
     return CriterionDecision.unknown, "cannot evaluate from available data"
 

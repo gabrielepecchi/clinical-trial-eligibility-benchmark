@@ -38,16 +38,24 @@ _STABLE_REGIMEN_DURATION_PATTERN = re.compile(
     re.IGNORECASE,
 )
 
+_STABLE_DOSE_DURATION_PATTERN = re.compile(
+    r"stable\s+\w+(?:\s+\w+)?\s+(?:dose|dosage|therapy|treatment)\s+for\s+at\s+least\s+(\d+)\s+(weeks?|months?)",
+    re.IGNORECASE,
+)
+
 
 def _required_weeks_extended(criterion: str) -> int | None:
-    """Like _required_weeks but also matches 'stable <drug> regimen for at least N weeks'."""
+    """Like _required_weeks but also matches 'stable <drug> regimen/dose for at least N weeks'."""
     result = _required_weeks(criterion)
     if result is not None:
         return result
     m = _STABLE_REGIMEN_DURATION_PATTERN.search(criterion)
-    if not m:
-        return None
-    return _to_weeks(int(m.group(1)), m.group(2))
+    if m:
+        return _to_weeks(int(m.group(1)), m.group(2))
+    m = _STABLE_DOSE_DURATION_PATTERN.search(criterion)
+    if m:
+        return _to_weeks(int(m.group(1)), m.group(2))
+    return None
 
 
 # ---------------------------------------------------------------------------
@@ -66,6 +74,21 @@ def _collect_patient_med_text(patient: dict) -> str:
     summary = patient.get("summary", "")
     if summary:
         parts.append(str(summary))
+
+    # Synthesise text signals from structured typed fields so that downstream
+    # pattern matching works uniformly regardless of how data was supplied.
+    stable_weeks = patient.get("medication_stable_weeks")
+    if stable_weeks is not None:
+        try:
+            parts.append(f"medication stable for {int(stable_weeks)} weeks")
+        except (TypeError, ValueError):
+            pass
+    elif patient.get("medication_stable") is True:
+        parts.append("medication stable")
+
+    if patient.get("medication_history_unclear"):
+        parts.append("medication history unclear")
+
     return " ".join(parts).lower()
 
 
@@ -130,19 +153,19 @@ def _check_medication_stability(patient: dict, trial: dict) -> tuple[str | None,
             return (
                 f"stable medication regimen for at least {req} week(s) required; "
                 f"medication changed {changed_ago} week(s) ago",
-                f"medication changed {changed_ago} week(s) ago (required: {req} weeks stable)",
+                "medication_stability_duration",
             )
         patient_weeks = _patient_stable_weeks(patient_med_text)
         if patient_weeks is not None and patient_weeks < req:
             return (
                 f"stable medication regimen for at least {req} week(s) required; "
                 f"patient stable for only {patient_weeks} week(s)",
-                f"medication stable {patient_weeks} week(s) (required: {req} weeks)",
+                "medication_stability_duration",
             )
         if patient_weeks is None and changed_ago is None:
             return (
                 f"stable medication regimen for at least {req} week(s) required but duration not documented",
-                "medication stability duration not documented",
+                "medication_stability_duration",
             )
 
     return None, None
