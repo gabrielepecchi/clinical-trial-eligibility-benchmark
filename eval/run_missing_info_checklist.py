@@ -387,6 +387,8 @@ def analyze_missing_info(
     """Analyze predictions and return summary of missing-info cases."""
     cases: list[dict[str, Any]] = []
     missing_reason_type_counts: dict[str, int] = defaultdict(int)
+    structured_missingness_cases = 0
+    inferred_missingness_cases = 0
 
     for pred in predictions:
         key = pair_key(pred)
@@ -398,8 +400,9 @@ def analyze_missing_info(
         if not should_include_record(pred, collected):
             continue
 
-        # Use structured missingness fields when available
+        # Collect all structured missingness fields
         unknown_fields: list[str] = pred.get("unknown_fields") or []
+        missing_information: list[str] = pred.get("missing_information") or []
         absent_evidence: list[str] = pred.get("absent_evidence") or []
         present_evidence_list: list[str] = pred.get("present_evidence") or []
         missing_info_details: list[dict] = pred.get("missing_information_details") or []
@@ -414,19 +417,42 @@ def analyze_missing_info(
             if rt and rt != missing_reason_type:
                 missing_reason_type_counts[rt] += 1
 
-        # Fall back to text-based inference when structured fields are absent
-        if unknown_fields or missing_info_details:
-            # Structured path: use unknown_fields directly as missing items
-            missing_items = list(unknown_fields)
-            # Also add fields from details that are unknown but not already listed
+        # Check if any structured fields are present and non-empty
+        has_any_structured = bool(
+            unknown_fields or 
+            missing_information or 
+            unclear_reason or 
+            missing_reason_type or 
+            missing_info_details
+        )
+        
+        # Build missing items from structured fields
+        missing_items: list[str] = []
+        is_structured_missingness = False
+        
+        if has_any_structured:
+            # Collect from unknown_fields
+            missing_items.extend(unknown_fields)
+            # Collect from missing_information
+            missing_items.extend(missing_information)
+            # Collect from missing_information_details where status == "unknown"
             for detail in missing_info_details:
-                if detail.get("status") == "unknown" and detail["field"] not in missing_items:
-                    missing_items.append(detail["field"])
+                field_name = detail.get("field", "")
+                status = detail.get("status", "")
+                if status == "unknown" and field_name and field_name not in missing_items:
+                    missing_items.append(field_name)
+
+            # Structured fields present: never fall back to keyword inference
             if not missing_items:
-                # All known present/absent — still record for unknown-field breakdown
-                missing_items = infer_missing_info_items(collected)
+                missing_items = ["structured_uncertainty"]
+
+            is_structured_missingness = True
+            structured_missingness_cases += 1
         else:
+            # No structured fields at all; use keyword inference
             missing_items = infer_missing_info_items(collected)
+            if missing_items:
+                inferred_missingness_cases += 1
 
         confidence = pred.get("confidence", pred.get("confidence_score"))
 
@@ -453,6 +479,7 @@ def analyze_missing_info(
             "missing_reason_type": missing_reason_type,
             "unclear_reason": unclear_reason,
             "missing_information_details": missing_info_details,
+            "is_structured_missingness": is_structured_missingness,
         }
         cases.append(case)
 
@@ -474,6 +501,8 @@ def analyze_missing_info(
     return {
         "total_records": len(predictions),
         "total_cases": len(cases),
+        "structured_missingness_cases": structured_missingness_cases,
+        "inferred_missingness_cases": inferred_missingness_cases,
         "cases": cases,
         "item_counts": dict(sorted(item_counts.items(), key=lambda x: -x[1])),
         "cases_by_item": dict(cases_by_item),
@@ -501,6 +530,8 @@ def format_markdown_report(summary: dict[str, Any]) -> str:
 
     total_records: int = summary["total_records"]
     total_cases: int = summary["total_cases"]
+    structured_cases: int = summary.get("structured_missingness_cases", 0)
+    inferred_cases: int = summary.get("inferred_missingness_cases", 0)
     cases: list[dict[str, Any]] = summary["cases"]
     item_counts: dict[str, int] = summary["item_counts"]
     cases_by_item: dict[str, list[dict[str, Any]]] = summary["cases_by_item"]
@@ -519,10 +550,13 @@ def format_markdown_report(summary: dict[str, Any]) -> str:
         "> or not documented — **not** proof of ineligibility. When structured missingness  "
     )
     lines.append(
-        "> fields are available (unknown_fields, missing_information_details), they are  "
+        "> fields are available (unknown_fields, missing_information, unclear_reason,  "
     )
     lines.append(
-        "> used directly; otherwise inference falls back to keyword matching on text fields.  "
+        "> missing_reason_type, and missing_information_details), they are used directly;  "
+    )
+    lines.append(
+        "> otherwise inference falls back to keyword matching on text fields.  "
     )
     lines.append("")
 
@@ -531,7 +565,9 @@ def format_markdown_report(summary: dict[str, Any]) -> str:
     lines.append("| Metric | Value |")
     lines.append("|--------|-------|")
     lines.append(f"| Total records | {total_records} |")
-    lines.append(f"| Cases with unknown/missing information | {total_cases} |")
+    lines.append(f"| Cases included in checklist | {total_cases} |")
+    lines.append(f"| Cases with structured missingness | {structured_cases} |")
+    lines.append(f"| Cases with inferred checklist items | {inferred_cases} |")
     lines.append("")
 
     if total_cases == 0:
@@ -566,14 +602,9 @@ def format_markdown_report(summary: dict[str, Any]) -> str:
     lines.append("")
     for i, case in enumerate(cases[:25], 1):
         rid = _display_id(case)
-        # Prefer structured unknown_fields label if available
-        uf = case.get("unknown_fields") or []
-        if uf:
-            missing_label = ", ".join(f"`{m}`" for m in uf)
-            structured_note = " _(structured)_"
-        else:
-            missing_label = ", ".join(f"`{m}`" for m in case["missing_info_items"])
-            structured_note = " _(inferred)_"
+        is_structured = case.get("is_structured_missingness", False)
+        missing_label = ", ".join(f"`{m}`" for m in case["missing_info_items"])
+        structured_note = " _(structured)_" if is_structured else " _(inferred)_"
         lines.append(
             f"{i}. **{rid}** ({len(case['missing_info_items'])} items{structured_note}) — "
             f"{missing_label}"
@@ -593,6 +624,7 @@ def format_markdown_report(summary: dict[str, Any]) -> str:
         lines.append("")
         for case in item_cases:
             rid = _display_id(case)
+            is_structured = case.get("is_structured_missingness", False)
             lines.append(f"- **{rid}**: gold=`{case['gold_label']}`, "
                         f"predicted=`{case['predicted_label']}`")
             # Show unclear_reason if available (structured), else fall back to preview
@@ -607,6 +639,9 @@ def format_markdown_report(summary: dict[str, Any]) -> str:
             aev = case.get("absent_evidence") or []
             if aev:
                 lines.append(f"  - absent evidence: _{'; '.join(aev[:3])}_")
+            # Label inferred items clearly
+            if not is_structured:
+                lines.append(f"  - _(inferred from text keyword matching)_")
         lines.append("")
 
     return "\n".join(lines)

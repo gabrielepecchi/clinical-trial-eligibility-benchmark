@@ -28,6 +28,8 @@ _CSV_FIELDNAMES = [
     "correct", "label_status", "confidence",
     "matched_facts", "blocking_criteria", "uncertain_criteria",
     "matcher_explanation", "gold_rationale", "reasoning_trace",
+    "missing_information", "unknown_fields", "present_evidence", "absent_evidence",
+    "unclear_reason", "missing_reason_type", "missing_information_details",
 ]
 
 
@@ -56,6 +58,38 @@ def build_llm_reviewed_csv_rows(prediction_records: list[dict]) -> list[dict]:
     for r in prediction_records:
         gold = r.get("gold_label", "")
         predicted = r.get("predicted_label", "")
+        
+        # Serialize list/dict fields safely as JSON strings
+        missing_information = r.get("missing_information", [])
+        if isinstance(missing_information, (list, dict)):
+            missing_information = json.dumps(missing_information)
+        else:
+            missing_information = str(missing_information)
+        
+        unknown_fields = r.get("unknown_fields", [])
+        if isinstance(unknown_fields, (list, dict)):
+            unknown_fields = json.dumps(unknown_fields)
+        else:
+            unknown_fields = str(unknown_fields)
+        
+        present_evidence = r.get("present_evidence", [])
+        if isinstance(present_evidence, (list, dict)):
+            present_evidence = json.dumps(present_evidence)
+        else:
+            present_evidence = str(present_evidence)
+        
+        absent_evidence = r.get("absent_evidence", [])
+        if isinstance(absent_evidence, (list, dict)):
+            absent_evidence = json.dumps(absent_evidence)
+        else:
+            absent_evidence = str(absent_evidence)
+        
+        missing_information_details = r.get("missing_information_details", [])
+        if isinstance(missing_information_details, (list, dict)):
+            missing_information_details = json.dumps(missing_information_details)
+        else:
+            missing_information_details = str(missing_information_details)
+        
         rows.append({
             "patient_id": r.get("patient_id", ""),
             "trial_id": r.get("trial_id", ""),
@@ -70,6 +104,13 @@ def build_llm_reviewed_csv_rows(prediction_records: list[dict]) -> list[dict]:
             "matcher_explanation": r.get("matcher_explanation", ""),
             "gold_rationale": r.get("gold_rationale", ""),
             "reasoning_trace": " | ".join(r.get("reasoning_trace") or []),
+            "missing_information": missing_information,
+            "unknown_fields": unknown_fields,
+            "present_evidence": present_evidence,
+            "absent_evidence": absent_evidence,
+            "unclear_reason": r.get("unclear_reason", ""),
+            "missing_reason_type": r.get("missing_reason_type", ""),
+            "missing_information_details": missing_information_details,
         })
     return rows
 
