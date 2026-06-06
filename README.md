@@ -88,25 +88,29 @@ Label: `unclear` — arrhythmia type is unspecified; eligibility cannot be deter
 
 ## Current benchmark results (LLM-reviewed labels)
 
+This is a local draft benchmark using synthetic patients, ClinicalTrials.gov trial criteria, and LLM-reviewed draft labels. Results are not clinical gold truth.
+
 - Evaluated pairs: 150
-- Accuracy: 0.440
-- Macro F1: 0.439
-- Eligible F1: 0.484
-- Not-eligible F1: 0.436
-- Unclear F1: 0.397
+- Accuracy: 0.687
+- Macro F1: 0.686
+- Eligible F1: 0.659
+- Not-eligible F1: 0.703
+- Unclear F1: 0.696
 
-**Safety & Uncertainty Summary**
-- Unsafe eligible errors: 9 (critical over-commitment on exclusion criteria)
-- Overly conservative errors: 2
-- Uncertainty errors: 53
-- Unclear recall: 0.312 | Unclear precision: 0.545
-- Overcommitment rate: 0.688
+**Error Pairs (gold → predicted)**
+- not_eligible → eligible: 2
+- eligible → not_eligible: 4
+- unclear → eligible: 18
+- unclear → not_eligible: 12
+- eligible → unclear: 7
+- not_eligible → unclear: 4
+- Total errors: 47
 
-**Error Severity Summary**
-- Total errors: 84 | Critical: 9 | Major: 73 | Minor: 13
-- Critical error rate: 0.060 | Major error rate: 0.487 | Minor error rate: 0.087
+**Robustness checks**
+- Minimal pairs: 8/8 passed
+- Counterfactual pairs: 8/8 passed
 
-These results reflect the genuine difficulty of eligibility reasoning from free-text criteria. Criteria are often verbose, ambiguous, or require multi-step inference. Modest scores indicate room for improvement in clinical NLP, not a flaw in the benchmark design.
+These results reflect the genuine difficulty of eligibility reasoning from free-text criteria. Criteria are often verbose, ambiguous, or require multi-step inference.
 
 ## Example Benchmark Case
 
@@ -115,16 +119,17 @@ Below is an illustrative synthetic benchmark case showing the structure of patie
 **Synthetic Patient Profile:**
 ```json
 {
-  "patient_id": "P_demo_047",
-  "age": 62,
-  "sex": "female",
-  "diagnosis": "idiopathic Parkinson disease",
-  "diagnosis_duration_years": 5,
-  "hoehn_yahr_stage": 2,
-  "updrs_iii_score": 32,
-  "medications": ["levodopa/carbidopa 300mg daily", "rasagiline 1mg daily"],
+  "patient_id": "P_demo_031",
+  "age": 58,
+  "sex": "male",
+  "diagnosis": "Parkinson disease",
+  "diagnosis_duration_years": 3,
+  "hoehn_yahr_stage": null,
+  "updrs_iii_score": null,
+  "medications": ["levodopa/carbidopa 250mg daily"],
+  "cardiac_history": "arrhythmia (type unspecified)",
   "dbs_history": false,
-  "cognitive_status": "normal",
+  "cognitive_status": "not documented",
   "recent_trial_participation": false
 }
 ```
@@ -132,38 +137,37 @@ Below is an illustrative synthetic benchmark case showing the structure of patie
 **Trial Eligibility Criteria (excerpt):**
 ```
 Inclusion:
-  - Age 40–80 years
   - Diagnosis of idiopathic Parkinson disease
-  - UPDRS III score between 20 and 40
+  - Hoehn-Yahr stage 2–4
+  - Stable medication regimen for at least 4 weeks
 
 Exclusion:
-  - Current use of MAO-B inhibitor
-  - Prior deep brain stimulation
-  - Montreal Cognitive Assessment (MoCA) score < 26
+  - Clinically significant cardiac disease
+  - Montreal Cognitive Assessment (MoCA) score < 24
 ```
 
-**Expected Label (Gold):** `not_eligible`  
-**Matcher Prediction:** `eligible`  
-**Correct:** No (false positive)
+**Expected Label (Gold):** `unclear`  
+**Matcher Prediction:** `unclear`  
+**Correct:** Yes
 
 **Criterion-Level Reasoning (illustrative):**
-- ✓ Age 62 — within 40–80 range
-- ✓ Diagnosis — idiopathic Parkinson disease matches
-- ✓ UPDRS III 32 — within 20–40 range
-- ✗ **MAO-B inhibitor exclusion** — rasagiline (a MAO-B inhibitor) is listed in medications → **exclusion violated**
-- ✓ MoCA — not documented in profile, but cognitive_status is "normal" (heuristic pass)
-- ✓ DBS history — false (not prior DBS)
+- ? Hoehn-Yahr stage — not documented in profile → cannot confirm inclusion criterion
+- ? Cardiac exclusion — arrhythmia type is unspecified; whether it constitutes "clinically significant cardiac disease" cannot be determined
+- ? MoCA — cognitive status not documented; cannot confirm exclusion does not apply
+- ✓ Diagnosis — Parkinson disease noted, though idiopathic subtype not confirmed
+- ✓ DBS history — false
 
-**Analysis:** This case illustrates a common failure mode: the matcher may not reliably detect MAO-B inhibitor exclusions when medication names are given in full form. The patient should be marked `not_eligible` due to the explicit exclusion, but the matcher predicted `eligible` — a critical over-commitment error.
+**Analysis:** This case illustrates the dominant remaining challenge: when key fields are absent or ambiguous, the correct label is `unclear`, and the matcher correctly defers rather than over-committing. The largest error category in the current benchmark is `unclear` cases predicted as `eligible` (18 of 47 total errors), driven by incomplete patient profiles where the matcher lacks sufficient signal to block eligibility.
 
 ---
 
 ## How to Read the Results
 
-- **Macro F1 of ~0.44** signals that the task is genuinely difficult across all three labels — no single label dominates and the model cannot succeed by defaulting to a majority class
+- **Accuracy and macro F1 of ~0.69** reflects the matcher's current performance across all three labels; the majority-class baseline scores only 0.51 accuracy / 0.23 macro F1, so the gap is meaningful
 - **Unclear cases matter** — the Uncertain label exists because missing or ambiguous information should not be guessed; a model that over-commits on unclear cases is failing in a meaningful way
+- **Robustness is verified** — minimal pairs (8/8) and counterfactual pairs (8/8) all pass, confirming that single-variable changes to patient profiles produce the expected prediction changes
 - **Future improvements should focus on** parser coverage for complex free-text criteria, uncertainty handling for incomplete patient profiles, and systematic reduction of the failure modes identified in the error taxonomy
-- **Safety/uncertainty metrics and severity counts** distinguish dangerous over-commitment (critical: predicting eligible when not eligible) from conservative errors (minor) and ambiguous cases (major), helping prioritize which failure modes to address first
+- **Results are draft** — labels are LLM-reviewed and not clinical gold truth; this benchmark is a diagnostic tool for model reasoning, not a clinical deployment evaluation
 
 ## Key takeaway
 
